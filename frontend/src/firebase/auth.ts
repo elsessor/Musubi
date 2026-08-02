@@ -10,14 +10,11 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
-  updateProfile,
   type User
 } from "firebase/auth";
 
-import { getFirebaseAuth, getFirebaseDb } from "@/firebase/config";
-import type { LoginCredentials, RegisterCredentials, UserRole } from "@/types/auth";
-
-const DEFAULT_ROLE: UserRole = "Organization Member";
+import { getFirebaseAuth } from "@/firebase/config";
+import type { LoginCredentials, RegisterCredentials } from "@/types/auth";
 
 export async function registerWithEmail(credentials: RegisterCredentials): Promise<User> {
   const auth = getFirebaseAuth();
@@ -30,9 +27,6 @@ export async function registerWithEmail(credentials: RegisterCredentials): Promi
     credentials.password
   );
 
-  await updateProfile(result.user, {
-    displayName: credentials.fullName
-  });
   return result.user;
 }
 

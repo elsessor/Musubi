@@ -12,7 +12,7 @@ import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/Button";
 import { Divider } from "@/components/ui/Divider";
 import { Input } from "@/components/ui/Input";
-import { registerWithEmail, signInWithGoogle } from "@/firebase/auth";
+import { logoutFirebase, registerWithEmail, signInWithGoogle } from "@/firebase/auth";
 import { exchangeFirebaseSession } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
@@ -43,7 +43,7 @@ export function RegisterForm() {
   });
   const termsAccepted = watch("terms");
 
-  async function completeRegistration(user: Awaited<ReturnType<typeof registerWithEmail>>) {
+  async function completeGoogleSignUp(user: Awaited<ReturnType<typeof signInWithGoogle>>) {
     const session = await exchangeFirebaseSession(user);
     authStore.setFirebaseUser(user);
     authStore.setProfile(session.user);
@@ -57,11 +57,23 @@ export function RegisterForm() {
     router.push(getDashboardRoute(session.role));
   }
 
+  async function completeEmailRegistration() {
+    await logoutFirebase();
+
+    showToast({
+      title: "Account created",
+      description: "Your account has been created successfully. Redirecting you to sign in.",
+      tone: "success"
+    });
+
+    router.push("/sign-in");
+  }
+
   async function onSubmit(values: RegisterFormValues) {
     authStore.setLoading(true);
     try {
-      const user = await registerWithEmail(values);
-      await completeRegistration(user);
+      await registerWithEmail(values);
+      await completeEmailRegistration();
     } catch (error) {
       showToast({
         title: "Unable to create account",
@@ -87,7 +99,7 @@ export function RegisterForm() {
     authStore.setLoading(true);
     try {
       const user = await signInWithGoogle();
-      await completeRegistration(user);
+      await completeGoogleSignUp(user);
     } catch (error) {
       showToast({
         title: "Google sign-up failed",
