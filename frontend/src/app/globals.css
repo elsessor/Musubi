@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-height: 100vh;
+    background: #f5f7fa;
+    color: #111827;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .auth-label {
+    @apply mb-2 block text-xs font-bold uppercase tracking-normal text-slate-500;
+  }
+
+  .auth-input {
+    @apply h-12 w-full rounded-card border border-transparent bg-white px-5 text-[15px] text-slate-900 shadow-input outline-none transition placeholder:text-slate-400 focus:border-accent focus:ring-4 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-slate-100;
+  }
+
+  .auth-error {
+    @apply mt-2 text-sm font-medium text-red-600;
+  }
+
+  .auth-link {
+    @apply font-semibold text-accent transition hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2;
+  }
+
+  .auth-button {
+    @apply inline-flex h-12 w-full items-center justify-center rounded-card px-5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70;
+  }
+}
