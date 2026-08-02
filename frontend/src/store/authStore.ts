@@ -2,64 +2,40 @@
 
 import type { User } from "firebase/auth";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
 
-import type { UserRole } from "@/types/auth";
-
-type AuthSession = {
-  token: string;
-  role: UserRole;
-};
+import type { AuthUserProfile } from "@/types/auth";
 
 type AuthState = {
-  user: User | null;
-  token: string | null;
-  role: UserRole | null;
+  firebaseUser: User | null;
+  profile: AuthUserProfile | null;
   loading: boolean;
   isAuthenticated: boolean;
-  login: (session: AuthSession) => void;
+  setFirebaseUser: (user: User | null) => void;
+  setProfile: (profile: AuthUserProfile | null) => void;
   logout: () => void;
-  setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
 };
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      token: null,
-      role: null,
-      loading: true,
-      isAuthenticated: false,
-      login: (session) =>
-        set({
-          token: session.token,
-          role: session.role,
-          isAuthenticated: true
-        }),
-      logout: () =>
-        set({
-          user: null,
-          token: null,
-          role: null,
-          isAuthenticated: false,
-          loading: false
-        }),
-      setUser: (user) =>
-        set((state) => ({
-          user,
-          isAuthenticated: Boolean(user && state.token)
-        })),
-      setLoading: (loading) => set({ loading })
+export const useAuthStore = create<AuthState>()((set) => ({
+  firebaseUser: null,
+  profile: null,
+  loading: true,
+  isAuthenticated: false,
+  setFirebaseUser: (firebaseUser) =>
+    set({
+      firebaseUser,
+      isAuthenticated: Boolean(firebaseUser)
     }),
-    {
-      name: "campus-workflow-auth",
-      storage: createJSONStorage(() => sessionStorage),
-      partialize: (state) => ({
-        token: state.token,
-        role: state.role,
-        isAuthenticated: state.isAuthenticated
-      })
-    }
-  )
-);
+  setProfile: (profile) =>
+    set({
+      profile
+    }),
+  logout: () =>
+    set({
+      firebaseUser: null,
+      profile: null,
+      isAuthenticated: false,
+      loading: false
+    }),
+  setLoading: (loading) => set({ loading })
+}));

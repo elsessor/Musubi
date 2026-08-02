@@ -41,8 +41,8 @@ export function LoginForm() {
 
   async function completeLogin(user: Awaited<ReturnType<typeof loginWithEmail>>) {
     const session = await exchangeFirebaseSession(user);
-    authStore.login(session);
-    authStore.setUser(user);
+    authStore.setFirebaseUser(user);
+    authStore.setProfile(session.user);
 
     showToast({
       title: "Signed in successfully",

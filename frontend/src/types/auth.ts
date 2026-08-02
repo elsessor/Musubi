@@ -5,13 +5,16 @@ export type UserRole = "Admin" | "Student Leader" | "Organization Member";
 
 export type FirebaseUser = User;
 
-export type AuthUserDocument = {
+export type AuthUserProfile = {
   uid: string;
   fullName: string;
   email: string;
   role: UserRole;
   organizationId: string | null;
   profilePicture: string | null;
+};
+
+export type AuthUserDocument = AuthUserProfile & {
   createdAt: Timestamp;
   lastLogin: Timestamp;
 };
@@ -19,6 +22,7 @@ export type AuthUserDocument = {
 export type BackendLoginResponse = {
   token: string;
   role: UserRole;
+  user: AuthUserProfile;
 };
 
 export type LoginCredentials = {

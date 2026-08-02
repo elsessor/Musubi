@@ -45,8 +45,8 @@ export function RegisterForm() {
 
   async function completeRegistration(user: Awaited<ReturnType<typeof registerWithEmail>>) {
     const session = await exchangeFirebaseSession(user);
-    authStore.login(session);
-    authStore.setUser(user);
+    authStore.setFirebaseUser(user);
+    authStore.setProfile(session.user);
 
     showToast({
       title: "Account created",

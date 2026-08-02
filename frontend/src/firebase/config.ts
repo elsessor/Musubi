@@ -11,6 +11,15 @@ const requiredFirebaseEnvKeys = [
   "NEXT_PUBLIC_FIREBASE_APP_ID"
 ] as const;
 
+const fallbackFirebaseConfig = {
+  NEXT_PUBLIC_FIREBASE_API_KEY: "AIzaSyAFXt3hIgoCLjui7AJG2YGAX75APdBg5d8",
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "musubi-1bf94.firebaseapp.com",
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: "musubi-1bf94",
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "musubi-1bf94.firebasestorage.app",
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "938500575093",
+  NEXT_PUBLIC_FIREBASE_APP_ID: "1:938500575093:web:14a5c53389576690d70d3c"
+} as const;
+
 type FirebaseEnvKey = (typeof requiredFirebaseEnvKeys)[number];
 
 type FirebaseConfigStatus = {
@@ -23,7 +32,7 @@ let cachedAuth: Auth | null = null;
 let cachedDb: Firestore | null = null;
 
 function readEnvValue(key: FirebaseEnvKey): string | undefined {
-  const value = process.env[key]?.trim();
+  const value = process.env[key]?.trim() ?? fallbackFirebaseConfig[key];
 
   if (!value || value.startsWith("your-")) {
     return undefined;

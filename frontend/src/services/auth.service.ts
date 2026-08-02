@@ -32,14 +32,38 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
     data === null ||
     !("token" in data) ||
     !("role" in data) ||
+    !("user" in data) ||
     typeof data.token !== "string" ||
-    !isUserRole(data.role)
+    !isUserRole(data.role) ||
+    typeof data.user !== "object" ||
+    data.user === null
+  ) {
+    throw new Error("The authentication server returned an invalid session.");
+  }
+
+  const backendUser = data.user as Record<string, unknown>;
+
+  if (
+    typeof backendUser.uid !== "string" ||
+    typeof backendUser.fullName !== "string" ||
+    typeof backendUser.email !== "string" ||
+    !isUserRole(backendUser.role) ||
+    !(typeof backendUser.organizationId === "string" || backendUser.organizationId === null) ||
+    !(typeof backendUser.profilePicture === "string" || backendUser.profilePicture === null)
   ) {
     throw new Error("The authentication server returned an invalid session.");
   }
 
   return {
     token: data.token,
-    role: data.role
+    role: data.role,
+    user: {
+      uid: backendUser.uid,
+      fullName: backendUser.fullName,
+      email: backendUser.email,
+      role: backendUser.role,
+      organizationId: backendUser.organizationId,
+      profilePicture: backendUser.profilePicture
+    }
   };
 }
