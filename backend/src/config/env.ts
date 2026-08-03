@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const requiredKeys = [
-  "PORT",
   "FIREBASE_SERVICE_ACCOUNT_PATH",
   "JWT_SECRET",
   "JWT_EXPIRES_IN",
@@ -22,8 +21,24 @@ function readEnv(key: EnvKey): string {
   return value;
 }
 
+function readPort(): number {
+  const value = process.env.PORT?.trim();
+
+  if (!value) {
+    return 5000;
+  }
+
+  const port = Number(value);
+
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error("PORT must be a positive integer");
+  }
+
+  return port;
+}
+
 export const env = {
-  port: Number(readEnv("PORT")),
+  port: readPort(),
   firebaseServiceAccountPath: readEnv("FIREBASE_SERVICE_ACCOUNT_PATH"),
   jwtSecret: readEnv("JWT_SECRET"),
   jwtExpiresIn: readEnv("JWT_EXPIRES_IN"),
