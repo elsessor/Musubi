@@ -1,8 +1,11 @@
-import type { ReactNode } from "react";
+"use client";
 
-import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
-import { GoalItem } from "@/components/dashboard/GoalItem";
+import { useState } from "react";
+import { Briefcase, Clock3, Target, UserCheck } from "lucide-react";
+
 import { KPICard } from "@/components/dashboard/KPICard";
+import { RecentActivity } from "@/components/dashboard/RecentActivity";
+import { RecentGoals } from "@/components/dashboard/RecentGoals";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopHeader } from "@/components/dashboard/TopHeader";
 import type {
@@ -22,8 +25,14 @@ type DashboardLayoutProps = {
   activeNavId: string;
   notificationCount: number;
   onLogout: () => void;
-  children?: ReactNode;
 };
+
+const kpiIconMap = {
+  target: Target,
+  briefcase: Briefcase,
+  users: UserCheck,
+  clock: Clock3
+} as const;
 
 export function DashboardLayout({
   user,
@@ -35,59 +44,59 @@ export function DashboardLayout({
   notificationCount,
   onLogout
 }: DashboardLayoutProps) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] text-slate-900">
+    <div className="h-screen overflow-hidden bg-[#eef1f5] text-slate-900">
       <Sidebar
         activeNavId={activeNavId}
-        navItems={navItems}
+        collapsed={sidebarCollapsed}
         onLogout={onLogout}
+        navItems={navItems}
         roleLabel={user.roleLabel}
         userName={user.name}
+        onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className={`flex h-full min-w-0 flex-col overflow-hidden transition-[margin-left] duration-300 ${sidebarCollapsed ? "ml-[84px]" : "ml-[280px]"}`}
+      >
         <TopHeader
           academicYear={user.academicYear}
           greetingDate={user.greetingDate}
           name={user.name}
           notificationCount={notificationCount}
           organizationName={user.organizationName}
+          onLogout={onLogout}
         />
 
-        <main className="flex-1 px-6 py-5 lg:px-8 lg:py-6">
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {kpis.map((kpi) => (
-              <KPICard key={kpi.id} {...kpi} />
-            ))}
-          </section>
+        <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8 lg:py-8">
+          {kpis.length > 0 ? (
+            <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+              {kpis.map((kpi) => (
+                <KPICard
+                  key={kpi.id}
+                  color={kpi.accent === "orange" ? "amber" : kpi.accent}
+                  icon={kpiIconMap[kpi.icon]}
+                  label={kpi.label}
+                  value={kpi.value}
+                />
+              ))}
+            </section>
+          ) : (
+            <section className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm ring-1 ring-slate-200/60">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                KPI Overview
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                KPI data will appear here once it is connected to a live source.
+              </p>
+            </section>
+          )}
 
-          <section className="mt-5 grid gap-5 xl:grid-cols-[2fr_1fr]">
-            <article className="rounded-[20px] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.05)] ring-1 ring-slate-100">
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Recent Goals
-                </h2>
-                <a className="text-sm font-medium text-blue-600 transition hover:text-blue-700" href="#">
-                  View All →
-                </a>
-              </div>
-
-              <div className="mt-3 divide-y divide-slate-100">
-                {goals.map((goal) => (
-                  <GoalItem key={goal.id} {...goal} />
-                ))}
-              </div>
-            </article>
-
-            <article className="rounded-[20px] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.05)] ring-1 ring-slate-100">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Recent Activity
-              </h2>
-
-              <div className="mt-5">
-                <ActivityFeed activities={activities} />
-              </div>
-            </article>
+          <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(340px,1fr)]">
+            <RecentGoals goals={goals} />
+            <RecentActivity activities={activities} />
           </section>
         </main>
       </div>

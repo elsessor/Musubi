@@ -5,7 +5,7 @@ import "./globals.css";
 import { Providers } from "@/app/providers";
 
 export const metadata: Metadata = {
-  title: "AI-Powered Workflow Management",
+  title: "Musubi: Your All-in-One Task Orchestration Platform for Campus Organizations",
   description: "Task Orchestration for Campus Organizations"
 };
 

@@ -32,6 +32,7 @@ export type DashboardActivity = {
 
 export type DashboardUser = {
   name: string;
+  role: import("@/types/auth").UserRole;
   roleLabel: string;
   organizationName: string;
   academicYear: string;
