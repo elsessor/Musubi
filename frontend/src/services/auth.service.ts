@@ -1,6 +1,6 @@
 import type { User } from "firebase/auth";
 
-import type { BackendLoginResponse, UserRole } from "@/types/auth";
+import type { BackendLoginResponse, OnboardingPayload, UserRole } from "@/types/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 const roles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -49,7 +49,10 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
     typeof backendUser.email !== "string" ||
     !isUserRole(backendUser.role) ||
     !(typeof backendUser.organizationId === "string" || backendUser.organizationId === null) ||
-    !(typeof backendUser.profilePicture === "string" || backendUser.profilePicture === null)
+    !(typeof backendUser.profilePicture === "string" || backendUser.profilePicture === null) ||
+    !Array.isArray(backendUser.skills) ||
+    !backendUser.skills.every((skill) => typeof skill === "string") ||
+    typeof backendUser.onboardingCompleted !== "boolean"
   ) {
     throw new Error("The authentication server returned an invalid session.");
   }
@@ -63,7 +66,21 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
       email: backendUser.email,
       role: backendUser.role,
       organizationId: backendUser.organizationId,
-      profilePicture: backendUser.profilePicture
+      profilePicture: backendUser.profilePicture,
+      skills: backendUser.skills,
+      onboardingCompleted: backendUser.onboardingCompleted
     }
   };
+}
+
+export async function completeOnboarding(user: User, payload: OnboardingPayload): Promise<BackendLoginResponse> {
+  const idToken = await user.getIdToken();
+  const response = await fetch(`${API_BASE_URL}/auth/onboarding`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ idToken, ...payload })
+  });
+
+  if (!response.ok) throw new Error("Unable to save your onboarding details. Please try again.");
+  return response.json() as Promise<BackendLoginResponse>;
 }

@@ -12,6 +12,16 @@ export type AuthUserProfile = {
   role: UserRole;
   organizationId: string | null;
   profilePicture: string | null;
+  skills: string[];
+  onboardingCompleted: boolean;
+};
+
+export type OnboardingPayload = {
+  role: Extract<UserRole, "Student Leader" | "Organization Member">;
+  organizationId: string | null;
+  yearLevel: string;
+  program: string;
+  skills: string[];
 };
 
 export type AuthUserDocument = AuthUserProfile & {

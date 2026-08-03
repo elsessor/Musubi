@@ -17,7 +17,7 @@ import { exchangeFirebaseSession } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { getFriendlyAuthError } from "@/utils/firebaseErrors";
-import { getDashboardRoute } from "@/utils/routes";
+import { getPostAuthenticationRoute } from "@/utils/routes";
 import { loginSchema, type LoginFormValues } from "@/utils/validation";
 
 export function LoginForm() {
@@ -46,11 +46,11 @@ export function LoginForm() {
 
     showToast({
       title: "Signed in successfully",
-      description: "Taking you to your dashboard.",
+      description: session.user.onboardingCompleted ? "Taking you to your dashboard." : "Let's finish setting up your account.",
       tone: "success"
     });
 
-    router.push(getDashboardRoute(session.role));
+    router.push(getPostAuthenticationRoute(session.user));
   }
 
   async function onSubmit(values: LoginFormValues) {

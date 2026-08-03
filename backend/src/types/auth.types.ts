@@ -9,6 +9,8 @@ export type FirestoreUser = {
   role: UserRole;
   organizationId: string | null;
   profilePicture: string | null;
+  skills: string[];
+  onboardingCompleted: boolean;
   createdAt: FirebaseFirestore.Timestamp | FirebaseFirestore.FieldValue;
   lastLogin: FirebaseFirestore.Timestamp | FirebaseFirestore.FieldValue;
 };

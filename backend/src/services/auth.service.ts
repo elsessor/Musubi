@@ -14,7 +14,7 @@ function isUserRole(value: unknown): value is UserRole {
 
 function createAppJwt(payload: JwtPayload): string {
   const options: SignOptions = {
-    expiresIn: env.jwtExpiresIn
+    expiresIn: env.jwtExpiresIn as SignOptions["expiresIn"]
   };
 
   return jwt.sign(payload, env.jwtSecret, options);
@@ -30,6 +30,8 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
     role,
     organizationId: typeof data.organizationId === "string" ? data.organizationId : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
+    skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
+    onboardingCompleted: data.onboardingCompleted === true,
     createdAt: data.createdAt ?? firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     lastLogin: data.lastLogin ?? firebaseAdmin.firestore.FieldValue.serverTimestamp()
   };
@@ -55,6 +57,8 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
     role: DEFAULT_ROLE,
     organizationId: null,
     profilePicture: firebaseUser.photoURL ?? null,
+    skills: [],
+    onboardingCompleted: false,
     createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   };
@@ -88,6 +92,8 @@ export async function loginWithFirebaseToken(idToken: string): Promise<LoginResp
       role: user.role,
       organizationId: user.organizationId,
       profilePicture: user.profilePicture
+      ,skills: user.skills
+      ,onboardingCompleted: user.onboardingCompleted
     }
   };
 }
@@ -116,5 +122,30 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     role: user.role,
     organizationId: user.organizationId,
     profilePicture: user.profilePicture
+    ,skills: user.skills
+    ,onboardingCompleted: user.onboardingCompleted
   };
+}
+
+export async function completeUserOnboarding(
+  uid: string,
+  input: { role: Exclude<UserRole, "Admin">; organizationId: string | null; yearLevel: string; program: string; skills: string[] }
+): Promise<LoginResponse> {
+  if (!input.yearLevel || !input.program) {
+    throw new AppError("Complete the required onboarding details.", 400);
+  }
+
+  const userRef = firestore.collection("users").doc(uid);
+  await userRef.set({
+    role: input.role,
+    organizationId: input.organizationId,
+    yearLevel: input.yearLevel,
+    program: input.program,
+    skills: input.skills,
+    onboardingCompleted: true,
+    lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  const user = await getCurrentUser(uid);
+  return { token: createAppJwt({ uid: user.uid, email: user.email, role: user.role, organizationId: user.organizationId }), role: user.role, user };
 }

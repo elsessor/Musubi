@@ -28,7 +28,8 @@ const config: Config = {
         input: "0 2px 8px rgba(31, 58, 104, 0.08)"
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"]
+        sans: ["Nunito", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["DM Mono", "ui-monospace", "SFMono-Regular", "monospace"]
       },
       borderRadius: {
         card: "16px"

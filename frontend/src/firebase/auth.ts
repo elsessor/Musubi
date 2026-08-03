@@ -10,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updateProfile,
   type User
 } from "firebase/auth";
 
@@ -26,6 +27,8 @@ export async function registerWithEmail(credentials: RegisterCredentials): Promi
     credentials.email,
     credentials.password
   );
+
+  await updateProfile(result.user, { displayName: credentials.fullName });
 
   return result.user;
 }

@@ -12,12 +12,12 @@ import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/Button";
 import { Divider } from "@/components/ui/Divider";
 import { Input } from "@/components/ui/Input";
-import { logoutFirebase, registerWithEmail, signInWithGoogle } from "@/firebase/auth";
+import { registerWithEmail, signInWithGoogle } from "@/firebase/auth";
 import { exchangeFirebaseSession } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { getFriendlyAuthError } from "@/utils/firebaseErrors";
-import { getDashboardRoute } from "@/utils/routes";
+import { getPostAuthenticationRoute } from "@/utils/routes";
 import { registerSchema, type RegisterFormValues } from "@/utils/validation";
 
 export function RegisterForm() {
@@ -54,26 +54,28 @@ export function RegisterForm() {
       tone: "success"
     });
 
-    router.push(getDashboardRoute(session.role));
+    router.push(getPostAuthenticationRoute(session.user));
   }
 
-  async function completeEmailRegistration() {
-    await logoutFirebase();
+  async function completeEmailRegistration(user: Awaited<ReturnType<typeof registerWithEmail>>) {
+    const session = await exchangeFirebaseSession(user);
+    authStore.setFirebaseUser(user);
+    authStore.setProfile(session.user);
 
     showToast({
       title: "Account created",
-      description: "Your account has been created successfully. Redirecting you to sign in.",
+      description: "Your account has been created successfully. Let's set up your profile.",
       tone: "success"
     });
 
-    router.push("/sign-in");
+    router.push(getPostAuthenticationRoute(session.user));
   }
 
   async function onSubmit(values: RegisterFormValues) {
     authStore.setLoading(true);
     try {
-      await registerWithEmail(values);
-      await completeEmailRegistration();
+      const user = await registerWithEmail(values);
+      await completeEmailRegistration(user);
     } catch (error) {
       showToast({
         title: "Unable to create account",
