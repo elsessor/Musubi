@@ -7,6 +7,7 @@ export type FirestoreUser = {
   fullName: string;
   email: string;
   role: UserRole;
+  position: string | null;
   organizationId: string | null;
   profilePicture: string | null;
   skills: string[];

@@ -73,7 +73,7 @@ export function DashboardPage() {
             name: fullName,
             role,
             roleLabel: typeof data?.position === "string" && data.position.trim() ? data.position : role,
-            organizationName: typeof data?.organizationName === "string" ? data.organizationName : "University Student Council",
+            organizationName: typeof data?.organizationName === "string" ? data.organizationName : "",
             academicYear: "AY 2025–2026",
             greetingDate: formatGreetingDate()
           });

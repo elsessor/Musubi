@@ -2,6 +2,7 @@
 
 import { Briefcase, Clock3, Target, UserCheck } from "lucide-react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { KPICard } from "@/components/dashboard/KPICard";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -25,6 +26,7 @@ type DashboardLayoutProps = {
   activeNavId: string;
   notificationCount: number;
   onLogout: () => void;
+  children?: ReactNode;
 };
 
 const kpiIconMap = {
@@ -42,7 +44,8 @@ export function DashboardLayout({
   activities,
   activeNavId,
   notificationCount,
-  onLogout
+  onLogout,
+  children
 }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -73,6 +76,7 @@ export function DashboardLayout({
         />
 
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          {children ?? <>
           {kpis.length > 0 ? (
             <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
               {kpis.map((kpi) => (
@@ -100,6 +104,7 @@ export function DashboardLayout({
             <RecentGoals goals={goals} />
             <RecentActivity activities={activities} />
           </section>
+          </>}
         </main>
       </div>
     </div>

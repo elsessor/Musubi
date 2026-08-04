@@ -76,6 +76,7 @@ export default function OnboardingPage() {
   const [joiningOrganizationLater, setJoiningOrganizationLater] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
   const [organizationType, setOrganizationType] = useState("");
+  const [organizationDescription, setOrganizationDescription] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [joinMode, setJoinMode] = useState<"search" | "code">("search");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -136,8 +137,8 @@ export default function OnboardingPage() {
     }
 
     if (role === "leader" && orgPath === "create") {
-      if (!organizationName.trim() || !organizationType) {
-        setError("Enter your organization name and type to continue.");
+      if (!organizationName.trim() || !organizationType || !organizationDescription.trim()) {
+        setError("Enter your organization name, type, and description to continue.");
         return;
       }
     } else if (joinMode === "code") {
@@ -185,6 +186,7 @@ export default function OnboardingPage() {
         role: role === "leader" ? "Student Leader" : "Organization Member",
         position: position.trim(),
         organizationId: onboardingOrganizationId,
+        organizationRequest: isNewOrganization ? { organizationId: onboardingOrganizationId as string, orgName: organizationName.trim(), orgType: organizationType, description: organizationDescription.trim() } : undefined,
         yearLevel: year,
         program: program.trim(),
         skills: selectedSkills
@@ -242,6 +244,7 @@ export default function OnboardingPage() {
             {isNewOrganization ? <div className="mt-6 space-y-4">
               <Field label="Organization name"><input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} className="onboarding-input" placeholder="e.g. Computer Science Society" /></Field>
               <Field label="Organization type"><select value={organizationType} onChange={(event) => setOrganizationType(event.target.value)} className="onboarding-input"><option value="">Select a type</option><option>Academic</option><option>Arts & Culture</option><option>Sports</option><option>Student Government</option><option>Community Service</option></select></Field>
+              <Field label="Organization description"><textarea value={organizationDescription} onChange={(event) => setOrganizationDescription(event.target.value)} className="onboarding-input min-h-24 h-auto py-3" placeholder="Describe your organization, its purpose, and planned activities." /></Field>
               <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">New organization registrations are reviewed by a Musubi administrator before activation.</p>
             </div> : <div className="mt-6">
               {role === "member" && <div className="mb-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1"><Tab active={joinMode === "search"} onClick={() => setJoinMode("search")}>Search</Tab><Tab active={joinMode === "code"} onClick={() => setJoinMode("code")}>Join code</Tab></div>}
@@ -256,8 +259,8 @@ export default function OnboardingPage() {
             <SectionTitle title="Tell us about yourself" description="Keep your profile current so your team can find the right people for each task." />
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Your skills {role === "member" && <span className="text-red-500">*</span>}</label><p className="mt-1 text-xs text-slate-500">Select all that apply - used to match you with the right tasks.</p><div className="mt-3 flex flex-wrap gap-2">{skills.map((skill) => <button key={skill} type="button" onClick={() => { toggleSkill(skill); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${selectedSkills.includes(skill) ? "border-brand bg-brand text-white" : "border-slate-200 bg-[#f3f6fa] text-slate-600 hover:border-blue-300"}`}>{skill}</button>)}</div><div className="mt-4 flex gap-2"><input value={customSkill} onChange={(event) => setCustomSkill(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomSkill(); } }} className="onboarding-input h-10 flex-1" placeholder="Add another skill..." /><button type="button" onClick={addCustomSkill} disabled={!customSkill.trim()} className="h-10 rounded-xl bg-[#e8edf5] px-4 text-sm font-bold text-[#244775] transition hover:bg-[#dce5f2] disabled:cursor-not-allowed disabled:opacity-50">Add</button></div>{manualSkills.length > 0 && <div className="mt-3"><p className="text-xs font-semibold text-slate-500">Added skills</p><div className="mt-2 flex flex-wrap gap-2">{manualSkills.map((skill) => <button key={skill} type="button" onClick={() => removeManualSkill(skill)} className="rounded-full border border-brand bg-brand text-white px-3 py-1.5 text-xs font-bold transition hover:bg-[#193960]" aria-label={`Remove ${skill}`}>{skill} <span aria-hidden>×</span></button>)}</div></div>}</div>
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Year level <span className="text-red-500">*</span></label><div className="mt-3 flex flex-wrap gap-2">{years.map((item) => <button key={item} type="button" onClick={() => { setYear(item); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${year === item ? "border-brand bg-brand text-white" : "border-slate-200 text-slate-600 hover:border-blue-300"}`}>{item}</button>)}</div></div>
-            <div className="mt-5"><Field label="Program"><input list="program-options" value={program} onChange={(event) => { setProgram(event.target.value); setError(""); }} className="onboarding-input h-10 text-[13px]" placeholder="Choose or type your program" /><datalist id="program-options">{programOptions.map((item) => <option key={item} value={item} />)}</datalist></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your program manually.</p></div>
-            <div className="mt-5"><Field label="Organization position"><input list="position-options" value={position} onChange={(event) => { setPosition(event.target.value); setError(""); }} className="onboarding-input h-10 text-[13px]" placeholder="Choose or type your position" /><datalist id="position-options">{positionOptions.map((item) => <option key={item} value={item} />)}</datalist></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your position manually.</p></div>
+            <div className="mt-5"><Field label="Program"><input list="program-options" value={program} onChange={(event) => { setProgram(event.target.value); setError(""); }} className="onboarding-input h-10 bg-white text-[13px] text-slate-900 [color-scheme:light]" placeholder="Choose or type your program" /><datalist id="program-options">{programOptions.map((item) => <option key={item} value={item} />)}</datalist></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your program manually.</p></div>
+            <div className="mt-5"><Field label="Organization position"><input list="position-options" value={position} onChange={(event) => { setPosition(event.target.value); setError(""); }} className="onboarding-input h-10 bg-white text-[13px] text-slate-900 [color-scheme:light]" placeholder="Choose or type your position" /><datalist id="position-options">{positionOptions.map((item) => <option key={item} value={item} />)}</datalist></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your position manually.</p></div>
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Birthdate</label><div className="mt-2 flex gap-2"><select value={birthMonth} onChange={(event) => setBirthMonth(event.target.value)} className="onboarding-input flex-1"><option value="">Month</option>{["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((month) => <option key={month}>{month}</option>)}</select><select value={birthDay} onChange={(event) => setBirthDay(event.target.value)} className="onboarding-input w-20"><option value="">Day</option>{Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <option key={day}>{day}</option>)}</select><select value={birthYear} onChange={(event) => setBirthYear(event.target.value)} className="onboarding-input w-28"><option value="">Year</option>{Array.from({ length: 60 }, (_, index) => new Date().getFullYear() - index).map((year) => <option key={year}>{year}</option>)}</select></div></div>
             <ErrorMessage message={error} />
             <div className="mt-7 flex gap-3"><SecondaryButton onClick={() => setStage("organization")}>Back</SecondaryButton><PrimaryButton onClick={submitDetails}>{isNewOrganization ? "Submit for review" : isJoiningOrganizationLater ? "Complete setup" : "Submit request"} <span aria-hidden>→</span></PrimaryButton></div>

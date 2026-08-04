@@ -28,6 +28,7 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
     fullName: typeof data.fullName === "string" ? data.fullName : "Campus Member",
     email: typeof data.email === "string" ? data.email : "",
     role,
+    position: typeof data.position === "string" ? data.position : null,
     organizationId: typeof data.organizationId === "string" ? data.organizationId : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
     skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
@@ -55,6 +56,7 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
     fullName: firebaseUser.displayName ?? "Campus Member",
     email: firebaseUser.email ?? "",
     role: DEFAULT_ROLE,
+    position: null,
     organizationId: null,
     profilePicture: firebaseUser.photoURL ?? null,
     skills: [],
@@ -90,6 +92,7 @@ export async function loginWithFirebaseToken(idToken: string): Promise<LoginResp
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      position: user.position,
       organizationId: user.organizationId,
       profilePicture: user.profilePicture
       ,skills: user.skills
@@ -120,6 +123,7 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     fullName: user.fullName,
     email: user.email,
     role: user.role,
+    position: user.position,
     organizationId: user.organizationId,
     profilePicture: user.profilePicture
     ,skills: user.skills
@@ -127,17 +131,76 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
   };
 }
 
+export async function getOrganizationRequests(uid: string) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Admin") throw new AppError("Administrator access is required.", 403);
+  const snapshot = await firestore.collection("org_requests").orderBy("submittedAt", "desc").get();
+  return snapshot.docs.map((request) => {
+    const data = request.data();
+    const submittedAt = data.submittedAt && typeof data.submittedAt.toDate === "function" ? data.submittedAt.toDate().toISOString() : null;
+    return { id: request.id, ...data, submittedAt };
+  });
+}
+
+export async function reviewOrganizationRequest(uid: string, requestId: string, status: "approved" | "rejected", rejectionReason: string | null) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Admin") throw new AppError("Administrator access is required.", 403);
+  const requestRef = firestore.collection("org_requests").doc(requestId);
+  const requestSnapshot = await requestRef.get();
+  if (!requestSnapshot.exists) throw new AppError("Organization request was not found.", 404);
+  const request = requestSnapshot.data() ?? {};
+  await requestRef.update({ status, rejectionReason, reviewedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+  if (status === "approved" && typeof request.organizationId === "string") {
+    await firestore.collection("organizations").doc(request.organizationId).set({
+      name: typeof request.orgName === "string" ? request.orgName : "Untitled organization",
+      type: typeof request.orgType === "string" ? request.orgType : "Unspecified",
+      description: typeof request.description === "string" ? request.description : "",
+      status: "active", requestedByUID: typeof request.requestedBy?.uid === "string" ? request.requestedBy.uid : null,
+      organizationConfig: {}, createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+}
+
+export async function getOrganizationForUser(uid: string, organizationId: string) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to this organization.", 403);
+  const snapshot = await firestore.collection("organizations").doc(organizationId).get();
+  if (!snapshot.exists) throw new AppError("Organization profile is not available yet.", 404);
+
+  const data = snapshot.data() ?? {};
+  const asIsoString = (value: unknown): string | null =>
+    value && typeof (value as { toDate?: unknown }).toDate === "function"
+      ? ((value as { toDate: () => Date }).toDate()).toISOString()
+      : null;
+
+  return {
+    id: snapshot.id,
+    name: typeof data.name === "string" ? data.name : "Untitled organization",
+    type: typeof data.type === "string" ? data.type : "Unspecified",
+    description: typeof data.description === "string" ? data.description : "",
+    status: typeof data.status === "string" ? data.status : "active",
+    requestedByUID: typeof data.requestedByUID === "string" ? data.requestedByUID : null,
+    organizationConfig:
+      data.organizationConfig && typeof data.organizationConfig === "object" && !Array.isArray(data.organizationConfig)
+        ? data.organizationConfig as Record<string, unknown>
+        : {},
+    createdAt: asIsoString(data.createdAt),
+    updatedAt: asIsoString(data.updatedAt)
+  };
+}
+
 export async function completeUserOnboarding(
   uid: string,
-  input: { role: Exclude<UserRole, "Admin">; organizationId: string | null; yearLevel: string; program: string; skills: string[] }
+  input: { role: Exclude<UserRole, "Admin">; position: string; organizationId: string | null; yearLevel: string; program: string; skills: string[]; organizationRequest?: { organizationId: string; orgName: string; orgType: string; description: string } }
 ): Promise<LoginResponse> {
-  if (!input.yearLevel || !input.program) {
+  if (!input.position.trim() || !input.yearLevel || !input.program) {
     throw new AppError("Complete the required onboarding details.", 400);
   }
 
   const userRef = firestore.collection("users").doc(uid);
   await userRef.set({
     role: input.role,
+    position: input.position.trim(),
     organizationId: input.organizationId,
     yearLevel: input.yearLevel,
     program: input.program,
@@ -145,6 +208,20 @@ export async function completeUserOnboarding(
     onboardingCompleted: true,
     lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
+
+  if (input.organizationRequest) {
+    const currentUser = await getCurrentUser(uid);
+    await firestore.collection("org_requests").add({
+      organizationId: input.organizationRequest.organizationId,
+      orgName: input.organizationRequest.orgName,
+      orgType: input.organizationRequest.orgType,
+      description: input.organizationRequest.description,
+      status: "pending",
+      rejectionReason: null,
+      submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      requestedBy: { uid, name: currentUser.fullName, email: currentUser.email }
+    });
+  }
 
   const user = await getCurrentUser(uid);
   return { token: createAppJwt({ uid: user.uid, email: user.email, role: user.role, organizationId: user.organizationId }), role: user.role, user };

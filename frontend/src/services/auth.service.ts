@@ -86,3 +86,48 @@ export async function completeOnboarding(user: User, payload: OnboardingPayload)
   if (!response.ok) throw new Error("Unable to save your onboarding details. Please try again.");
   return response.json() as Promise<BackendLoginResponse>;
 }
+
+export type OrganizationRequestRecord = {
+  id: string;
+  orgName: string;
+  orgType: string;
+  description: string;
+  status: "pending" | "approved" | "rejected";
+  rejectionReason?: string | null;
+  submittedAt: string | null;
+  requestedBy: { uid: string; name: string; email: string };
+};
+
+export async function getOrganizationRequests(user: User): Promise<OrganizationRequestRecord[]> {
+  const response = await fetch(`${API_BASE_URL}/auth/org-requests`, { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+  if (!response.ok) throw new Error("Unable to load organization requests.");
+  const data = await response.json() as { requests?: OrganizationRequestRecord[] };
+  return Array.isArray(data.requests) ? data.requests : [];
+}
+
+export async function reviewOrganizationRequest(user: User, requestId: string, status: "approved" | "rejected", rejectionReason: string | null): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/org-requests/${requestId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` }, body: JSON.stringify({ status, rejectionReason }) });
+  if (!response.ok) throw new Error("Unable to update this request.");
+}
+
+export type OrganizationRecord = {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  status: string;
+  requestedByUID: string | null;
+  organizationConfig: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export async function getOrganization(user: User, organizationId: string): Promise<OrganizationRecord> {
+  const response = await fetch(`${API_BASE_URL}/auth/organizations/${organizationId}`, { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+  if (!response.ok) throw new Error("Unable to load this organization.");
+  const data = await response.json() as { organization?: OrganizationRecord };
+  if (!data.organization || typeof data.organization.id !== "string" || typeof data.organization.name !== "string") {
+    throw new Error("Organization profile is unavailable.");
+  }
+  return data.organization;
+}
