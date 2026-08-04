@@ -1,12 +1,27 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Building2, Search } from "lucide-react";
+
+import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { useLogout } from "@/hooks/useLogout";
+import { getOrganizations, type OrganizationDirectoryRecord } from "@/services/auth.service";
+import { useAuthStore } from "@/store/authStore";
+import { getDashboardNavItems } from "@/utils/routes";
+
+const statuses = ["all", "pending", "active", "inactive"] as const;
+function displayDate(value: string | null) { return value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value)) : "—"; }
+
 export default function AdminOrganizationsPage() {
-  return (
-    <main className="min-h-screen bg-[#eef1f5] p-4 text-slate-900 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-4xl rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200/70 sm:p-8">
-        <h1 className="text-2xl font-semibold">Organizations</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          This admin section will display organization records and administrative controls.
-        </p>
-      </div>
-    </main>
-  );
+  const router = useRouter(); const profile = useAuthStore((state) => state.profile); const firebaseUser = useAuthStore((state) => state.firebaseUser); const authLoading = useAuthStore((state) => state.loading); const logout = useLogout();
+  const [organizations, setOrganizations] = useState<OrganizationDirectoryRecord[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [query, setQuery] = useState(""); const [status, setStatus] = useState<(typeof statuses)[number]>("all"); const [type, setType] = useState("all");
+  useEffect(() => { if (!authLoading && (!profile || profile.role !== "Admin")) router.replace(profile ? "/dashboard" : "/sign-in"); }, [authLoading, profile, router]);
+  useEffect(() => { if (!firebaseUser || profile?.role !== "Admin") return; void getOrganizations(firebaseUser).then(setOrganizations).catch(() => setError("Unable to load organizations.")).finally(() => setLoading(false)); }, [firebaseUser, profile?.role]);
+  const types = useMemo(() => ["all", ...Array.from(new Set(organizations.map((organization) => organization.type))).sort()], [organizations]);
+  const visibleOrganizations = useMemo(() => organizations.filter((organization) => (status === "all" || organization.status === status) && (type === "all" || organization.type === type) && `${organization.name} ${organization.type}`.toLowerCase().includes(query.toLowerCase())), [organizations, query, status, type]);
+  if (authLoading || !profile || profile.role !== "Admin") return <div className="flex min-h-screen items-center justify-center bg-[#eef1f5] text-slate-500">Loading organizations...</div>;
+  const user = { name: profile.fullName, role: "Admin" as const, roleLabel: profile.position ?? "Administrator", organizationName: "University Campus", academicYear: "", greetingDate: new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()) };
+  return <DashboardLayout activeNavId="organizations" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems("Admin")} notificationCount={0} onLogout={logout} user={user}><section className="mx-auto w-full max-w-6xl"><div><p className="text-sm font-bold uppercase tracking-[.16em] text-blue-600">Administration</p><h1 className="mt-1 text-2xl font-extrabold text-slate-900">Organizations</h1><p className="mt-1 text-sm text-slate-500">Manage registered campus organizations and their setup status.</p></div><div className="mt-6 flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:flex-row"><label className="flex h-10 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3"><Search className="size-4 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full text-sm outline-none" placeholder="Search organizations..." /></label><select value={type} onChange={(event) => setType(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="all">All types</option>{types.slice(1).map((item) => <option key={item}>{item}</option>)}</select><select value={status} onChange={(event) => setStatus(event.target.value as typeof status)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">{statuses.map((item) => <option key={item} value={item}>{item === "all" ? "All statuses" : item[0].toUpperCase() + item.slice(1)}</option>)}</select></div>{error ? <p className="mt-4 rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{error}</p> : null}<div className="mt-5 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200"><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-4">Organization</th><th className="px-4 py-4">Type</th><th className="px-4 py-4">Members</th><th className="px-4 py-4">Committees</th><th className="px-4 py-4">Status</th><th className="px-5 py-4">Created</th></tr></thead><tbody>{loading ? <tr><td colSpan={6} className="px-5 py-16 text-center text-sm text-slate-500">Loading organizations...</td></tr> : visibleOrganizations.length ? visibleOrganizations.map((organization) => <tr key={organization.id} onClick={() => router.push(`/admin/organizations/${organization.id}`)} className="cursor-pointer border-t border-slate-100 text-sm hover:bg-slate-50"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Building2 className="size-4" /></span><div><p className="font-bold text-slate-900">{organization.name}</p><p className="mt-0.5 max-w-xs truncate text-xs text-slate-500">{organization.description || "No description"}</p></div></div></td><td className="px-4 py-4 text-slate-600">{organization.type}</td><td className="px-4 py-4">{organization.memberCount}</td><td className="px-4 py-4">{organization.committeeCount}</td><td className="px-4 py-4"><Status value={organization.status} /></td><td className="px-5 py-4 text-slate-600">{displayDate(organization.createdAt)}</td></tr>) : <tr><td colSpan={6} className="px-5 py-16 text-center text-sm text-slate-500">No organizations match these filters.</td></tr>}</tbody></table></div></div></section></DashboardLayout>;
 }
+function Status({ value }: { value: string }) { const style = value === "active" ? "bg-emerald-50 text-emerald-700" : value === "inactive" ? "bg-slate-100 text-slate-600" : "bg-amber-50 text-amber-700"; return <span className={`rounded-full px-2.5 py-1 text-xs font-bold capitalize ${style}`}>{value}</span>; }

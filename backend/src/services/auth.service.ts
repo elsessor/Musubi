@@ -189,6 +189,71 @@ export async function getOrganizationForUser(uid: string, organizationId: string
   };
 }
 
+function normalizeOrganization(id: string, data: FirebaseFirestore.DocumentData) {
+  const asIsoString = (value: unknown): string | null => value && typeof (value as { toDate?: unknown }).toDate === "function" ? ((value as { toDate: () => Date }).toDate()).toISOString() : null;
+  return {
+    id,
+    name: typeof data.name === "string" ? data.name : "Untitled organization",
+    type: typeof data.type === "string" ? data.type : "Unspecified",
+    description: typeof data.description === "string" ? data.description : "",
+    status: typeof data.setupStatus === "string" ? data.setupStatus : typeof data.status === "string" ? data.status : "pending",
+    requestedByUID: typeof data.requestedByUID === "string" ? data.requestedByUID : null,
+    organizationConfig: data.orchestrationConfig && typeof data.orchestrationConfig === "object" ? data.orchestrationConfig : data.organizationConfig && typeof data.organizationConfig === "object" ? data.organizationConfig : {},
+    createdAt: asIsoString(data.createdAt),
+    updatedAt: asIsoString(data.updatedAt)
+  };
+}
+
+async function requireAdmin(uid: string) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Admin") throw new AppError("Administrator access is required.", 403);
+}
+
+export async function getOrganizationsForAdmin(uid: string) {
+  await requireAdmin(uid);
+  const snapshot = await firestore.collection("organizations").orderBy("createdAt", "desc").get();
+  return Promise.all(snapshot.docs.map(async (document) => {
+    const [members, memberRecords, committees] = await Promise.all([
+      firestore.collection("users").where("organizationId", "==", document.id).get(),
+      document.ref.collection("members").get(),
+      document.ref.collection("committees").get()
+    ]);
+    return { ...normalizeOrganization(document.id, document.data()), memberCount: memberRecords.size || members.size, committeeCount: committees.size };
+  }));
+}
+
+export async function getOrganizationManagementDetail(uid: string, organizationId: string) {
+  await requireAdmin(uid);
+  const ref = firestore.collection("organizations").doc(organizationId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw new AppError("Organization was not found.", 404);
+  const [usersSnapshot, membersSnapshot, committeesSnapshot, goalsSnapshot] = await Promise.all([
+    firestore.collection("users").where("organizationId", "==", organizationId).get(),
+    ref.collection("members").get(),
+    ref.collection("committees").get(),
+    ref.collection("goals").get()
+  ]);
+  const memberSource = membersSnapshot.size ? membersSnapshot : usersSnapshot;
+  const members = memberSource.docs.map((document) => { const data = document.data(); return { id: document.id, name: typeof data.fullName === "string" ? data.fullName : typeof data.name === "string" ? data.name : "Unnamed member", role: typeof data.role === "string" ? data.role : "Organization Member", position: typeof data.position === "string" ? data.position : "—", committeeId: typeof data.committeeId === "string" ? data.committeeId : null }; });
+  const committees = committeesSnapshot.docs.map((document) => { const data = document.data(); return { id: document.id, name: typeof data.name === "string" ? data.name : "Untitled committee", headMemberId: typeof data.headMemberId === "string" ? data.headMemberId : null, description: typeof data.description === "string" ? data.description : "" }; });
+  const goalSummary = goalsSnapshot.docs.reduce<Record<string, number>>((summary, document) => { const status = typeof document.data().status === "string" ? document.data().status : "pending"; summary[status] = (summary[status] ?? 0) + 1; return summary; }, {});
+  return { organization: normalizeOrganization(snapshot.id, snapshot.data() ?? {}), members, committees, goalSummary };
+}
+
+export async function updateOrganizationForAdmin(uid: string, organizationId: string, input: { name?: string; type?: string; description?: string; setupStatus?: string }) {
+  await requireAdmin(uid);
+  const ref = firestore.collection("organizations").doc(organizationId);
+  if (!(await ref.get()).exists) throw new AppError("Organization was not found.", 404);
+  const update: Record<string, unknown> = { updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() };
+  if (input.name !== undefined) update.name = input.name.trim();
+  if (input.type !== undefined) update.type = input.type.trim();
+  if (input.description !== undefined) update.description = input.description.trim();
+  if (input.setupStatus !== undefined) update.setupStatus = input.setupStatus;
+  await ref.update(update);
+  const updated = await ref.get();
+  return normalizeOrganization(updated.id, updated.data() ?? {});
+}
+
 export async function completeUserOnboarding(
   uid: string,
   input: { role: Exclude<UserRole, "Admin">; position: string; organizationId: string | null; yearLevel: string; program: string; skills: string[]; organizationRequest?: { organizationId: string; orgName: string; orgType: string; description: string } }

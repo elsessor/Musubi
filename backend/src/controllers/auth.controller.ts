@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { firebaseAuth } from "../config/firebase.js";
-import { completeUserOnboarding, getCurrentUser, getOrganizationForUser, getOrganizationRequests, loginWithFirebaseToken, reviewOrganizationRequest } from "../services/auth.service.js";
+import { completeUserOnboarding, getCurrentUser, getOrganizationForUser, getOrganizationManagementDetail, getOrganizationRequests, getOrganizationsForAdmin, loginWithFirebaseToken, reviewOrganizationRequest, updateOrganizationForAdmin } from "../services/auth.service.js";
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -96,3 +96,7 @@ export async function organizationController(request: Request, response: Respons
     response.status(200).json({ organization: await getOrganizationForUser(decodedToken.uid, request.params.organizationId) });
   } catch (error) { next(error); }
 }
+
+export async function organizationsController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); response.status(200).json({ organizations: await getOrganizationsForAdmin(decoded.uid) }); } catch (error) { next(error); } }
+export async function organizationManagementDetailController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); response.status(200).json(await getOrganizationManagementDetail(decoded.uid, request.params.organizationId)); } catch (error) { next(error); } }
+export async function updateOrganizationController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); const body = request.body as Record<string, unknown>; const allowedStatus = body.setupStatus === undefined || body.setupStatus === "pending" || body.setupStatus === "active" || body.setupStatus === "inactive"; if (!allowedStatus || (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim())) || (body.type !== undefined && (typeof body.type !== "string" || !body.type.trim())) || (body.description !== undefined && typeof body.description !== "string")) throw new AppError("Invalid organization details.", 400); response.status(200).json({ organization: await updateOrganizationForAdmin(decoded.uid, request.params.organizationId, { name: body.name as string | undefined, type: body.type as string | undefined, description: body.description as string | undefined, setupStatus: body.setupStatus as string | undefined }) }); } catch (error) { next(error); } }

@@ -23,21 +23,10 @@ import { getDashboardNavItems } from "@/utils/routes";
 
 type OrganizationTab = "overview" | "members" | "committees" | "announcements";
 
-const members = [
-  { initials: "BL", name: "Beatrice Lim", role: "Media Officer", committee: "Media Committee", skills: ["Design", "Photography", "Video Editing", "Social Media"], workload: 38, reliability: "91%", availability: "Available" },
-  { initials: "AR", name: "Ana Reyes", role: "Vice President", committee: "Events Committee", skills: ["Event Planning", "Coordination", "Leadership", "Public Speaking"], workload: 72, reliability: "96%", availability: "Available" },
-  { initials: "MDC", name: "Marco Dela Cruz", role: "Secretary", committee: "Secretariat", skills: ["Documentation", "Communication", "Writing", "Research"], workload: 45, reliability: "88%", availability: "Available" },
-  { initials: "ST", name: "Sophia Tan", role: "Treasurer", committee: "Finance Committee", skills: ["Finance", "Budgeting", "Accounting", "Reporting"], workload: 80, reliability: "94%", availability: "Busy" },
-  { initials: "LG", name: "Luis Garcia", role: "Events Head", committee: "Events Committee", skills: ["Logistics", "Venue Management", "Event Planning", "Coordination"], workload: 91, reliability: "82%", availability: "Busy" },
-  { initials: "JS", name: "Jerico Santos", role: "Liaison Officer", committee: "External Affairs", skills: ["Networking", "Communication", "Outreach", "Partnership"], workload: 55, reliability: "79%", availability: "Available" },
-  { initials: "PU", name: "Patricia Uy", role: "Volunteer Coord.", committee: "Events Committee", skills: ["HR", "Scheduling", "Coordination", "Leadership"], workload: 60, reliability: "85%", availability: "On Leave" }
-];
-
-const goals = [
-  { title: "Launch Annual University Culture Week", progress: 62, due: "Jun 28, 2026", status: "In Progress" },
-  { title: "Organize Freshmen Orientation Campaign", progress: 100, due: "Jun 10, 2026", status: "Completed" },
-  { title: "Produce End-of-Year Publication Newsletter", progress: 28, due: "Jul 15, 2026", status: "Pending" }
-];
+type MemberRow = { initials: string; name: string; role: string; committee: string; skills: string[]; workload: number; reliability: string; availability: string };
+type GoalRow = { title: string; progress: number; due: string; status: string };
+const members: MemberRow[] = [];
+const goals: GoalRow[] = [];
 
 function greetingDate() {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date());
@@ -121,13 +110,13 @@ function Overview({ organization }: { organization: OrganizationRecord }) {
   return <div className="mt-5 space-y-4">
     <article className="overflow-hidden rounded-2xl border border-[#d9e1ec] bg-white">
       <div className="relative overflow-hidden bg-[#213f68] px-6 py-6 text-white sm:px-7"><div className="absolute -right-8 -top-16 size-44 rounded-full bg-[#385779]" /><div className="relative flex items-center gap-4"><div className="flex size-12 items-center justify-center rounded-none bg-[#2868ed]"><BriefcaseBusiness className="size-6" /></div><div><h2 className="text-[21px] font-bold tracking-[-0.02em]">{organization.name}</h2><div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]"><span className="rounded-full bg-white/15 px-2.5 py-0.5">{organization.type}</span><span className="rounded-full bg-emerald-400/20 px-2.5 py-0.5 text-emerald-200">{organization.status === "active" ? "Complete" : organization.status}</span><span className="text-blue-100">Created {formatDate(organization.createdAt)}</span></div></div></div></div>
-      <div className="grid grid-cols-2 divide-x divide-y divide-[#dce3ed] lg:grid-cols-4 lg:divide-y-0"><Stat value="7" label="Total Members" color="text-[#2868ed]" /><Stat value="2" label="Active Goals" color="text-[#7c3aed]" /><Stat value="Heuristic" label="Delegation" color="text-amber-500" /><Stat value="On" label="Nudges" color="text-emerald-500" /></div>
+      <div className="grid grid-cols-2 divide-x divide-y divide-[#dce3ed] lg:grid-cols-4 lg:divide-y-0"><Stat value="—" label="Total Members" color="text-[#2868ed]" /><Stat value="—" label="Active Goals" color="text-[#7c3aed]" /><Stat value={typeof organization.organizationConfig.delegationMode === "string" ? organization.organizationConfig.delegationMode : "—"} label="Delegation" color="text-amber-500" /><Stat value={typeof organization.organizationConfig.nudgeMonitoring === "boolean" ? organization.organizationConfig.nudgeMonitoring ? "On" : "Off" : "—"} label="Nudges" color="text-emerald-500" /></div>
     </article>
     <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
       <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white"><CardTitle title="Organization Details" action="Edit" /><div className="p-4"><p className="text-[11px] font-semibold uppercase text-slate-500">Description</p><p className="mt-2 text-[13px] leading-6 text-slate-600">{organization.description || "No organization description has been provided."}</p></div><DetailRow label="Org UID" value={organization.id} /><DetailRow label="Type" value={organization.type} /><DetailRow label="Setup status" value={organization.status === "active" ? "Complete" : organization.status} /><DetailRow label="Created at" value={formatDate(organization.createdAt)} /></article>
-      <div className="space-y-4"><article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white"><CardTitle title="Orchestration Config" /><ConfigRow label="Delegation Mode" value="Heuristic" tone="purple" /><ConfigRow label="AI Task Atomization" value="Enabled" tone="green" /><ConfigRow label="Nudge Monitoring" value="Enabled" tone="green" /></article><article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white"><CardTitle title="Members Preview" action="View All →" /><div>{members.slice(0, 4).map((member) => <div className="flex items-center gap-2.5 border-t border-[#e5eaf1] px-4 py-2" key={member.name}><Avatar initials={member.initials} /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{member.name}</p><p className="truncate text-[10px] text-slate-500">{member.role}</p></div><Availability value={member.availability} /></div>)}</div></article></div>
+      <div className="space-y-4"><article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white"><CardTitle title="Orchestration Config" /><ConfigRow label="Delegation Mode" value={typeof organization.organizationConfig.delegationMode === "string" ? organization.organizationConfig.delegationMode : "Not configured"} tone="purple" /><ConfigRow label="AI Task Atomization" value={organization.organizationConfig.aiTaskAtomization === true ? "Enabled" : "Not configured"} tone="green" /><ConfigRow label="Nudge Monitoring" value={organization.organizationConfig.nudgeMonitoring === true ? "Enabled" : "Not configured"} tone="green" /></article><article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white"><CardTitle title="Members Preview" action="View All →" /><p className="border-t border-[#e5eaf1] px-4 py-6 text-center text-xs text-slate-500">Member data is managed by your administrator.</p></article></div>
     </div>
-    <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white"><CardTitle title="Goals" subtitle="Organizational goals — managed in Goals & Tasks" action="1 done  2 active  2 pending" /><div>{goals.map((goal) => <div className="border-t border-[#e5eaf1] px-4 py-3" key={goal.title}><div className="flex items-center justify-between gap-4"><p className="text-[12px] font-medium">{goal.title}</p><GoalStatus status={goal.status} /></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-500"><div className="h-1 w-24 overflow-hidden rounded bg-slate-200"><div className={`h-full rounded ${goal.status === "Completed" ? "bg-emerald-500" : "bg-[#2868ed]"}`} style={{ width: `${goal.progress}%` }} /></div><span>{goal.progress}%</span><CalendarDays className="size-3" /><span>{goal.due}</span></div></div>)}</div></article>
+    <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white"><CardTitle title="Goals" subtitle="Organizational goals — managed in Goals & Tasks" /><p className="border-t border-[#e5eaf1] px-4 py-6 text-center text-xs text-slate-500">No goal data is available yet.</p></article>
   </div>;
 }
 

@@ -131,3 +131,27 @@ export async function getOrganization(user: User, organizationId: string): Promi
   }
   return data.organization;
 }
+
+export type OrganizationDirectoryRecord = OrganizationRecord & { memberCount: number; committeeCount: number };
+export type OrganizationMemberRecord = { id: string; name: string; role: string; position: string; committeeId: string | null };
+export type OrganizationCommitteeRecord = { id: string; name: string; headMemberId: string | null; description: string };
+export type OrganizationManagementDetail = { organization: OrganizationRecord; members: OrganizationMemberRecord[]; committees: OrganizationCommitteeRecord[]; goalSummary: Record<string, number> };
+
+async function organizationRequest<T>(user: User, path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}`, ...init?.headers } });
+  if (!response.ok) throw new Error("Unable to load organization data.");
+  return response.json() as Promise<T>;
+}
+
+export async function getOrganizations(user: User): Promise<OrganizationDirectoryRecord[]> {
+  const data = await organizationRequest<{ organizations?: OrganizationDirectoryRecord[] }>(user, "/auth/organizations");
+  return Array.isArray(data.organizations) ? data.organizations : [];
+}
+
+export function getOrganizationManagementDetail(user: User, organizationId: string) {
+  return organizationRequest<OrganizationManagementDetail>(user, `/auth/organizations/${organizationId}/management`);
+}
+
+export function updateOrganization(user: User, organizationId: string, input: Partial<Pick<OrganizationRecord, "name" | "type" | "description">> & { setupStatus?: "pending" | "active" | "inactive" }) {
+  return organizationRequest<{ organization: OrganizationRecord }>(user, `/auth/organizations/${organizationId}`, { method: "PATCH", body: JSON.stringify(input) });
+}
