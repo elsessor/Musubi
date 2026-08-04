@@ -7,8 +7,9 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useAuthStore } from "@/store/authStore";
 import { useLogout } from "@/hooks/useLogout";
 import { getDashboardNavItems } from "@/utils/routes";
+import type { AuthUserProfile } from "@/types/auth";
 
-function buildAdminUser(profile: Parameters<typeof useAuthStore>[0] extends (state: infer S) => any ? S : never) {
+function buildAdminUser(profile: AuthUserProfile | null) {
   return {
     name: profile?.fullName ?? "Administrator",
     role: "Admin" as const,

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { Briefcase, Clock3, Target, UserCheck } from "lucide-react";
+import { useState } from "react";
 
 import { KPICard } from "@/components/dashboard/KPICard";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -44,33 +44,35 @@ export function DashboardLayout({
   notificationCount,
   onLogout
 }: DashboardLayoutProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
     <div className="h-screen overflow-hidden bg-[#eef1f5] text-slate-900">
+      {mobileSidebarOpen ? <button aria-label="Close navigation" className="fixed inset-0 z-30 bg-slate-950/45 md:hidden" onClick={() => setMobileSidebarOpen(false)} type="button" /> : null}
       <Sidebar
         activeNavId={activeNavId}
-        collapsed={sidebarCollapsed}
+        mobileOpen={mobileSidebarOpen}
         onLogout={onLogout}
+        onNavigate={() => setMobileSidebarOpen(false)}
         navItems={navItems}
+        role={user.role}
         roleLabel={user.roleLabel}
         userName={user.name}
-        onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
       />
 
-      <div
-        className={`flex h-full min-w-0 flex-col overflow-hidden transition-[margin-left] duration-300 ${sidebarCollapsed ? "ml-[84px]" : "ml-[280px]"}`}
-      >
+      <div className="flex h-full min-w-0 flex-col overflow-hidden md:ml-[354px]">
         <TopHeader
           academicYear={user.academicYear}
           greetingDate={user.greetingDate}
           name={user.name}
           notificationCount={notificationCount}
           organizationName={user.organizationName}
+          role={user.role}
           onLogout={onLogout}
+          onMenuToggle={() => setMobileSidebarOpen(true)}
         />
 
-        <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8 lg:py-8">
+        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
           {kpis.length > 0 ? (
             <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
               {kpis.map((kpi) => (

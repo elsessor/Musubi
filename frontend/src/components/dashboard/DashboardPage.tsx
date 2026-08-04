@@ -26,7 +26,7 @@ function buildDashboardUser(profile: AuthUserProfile | null) {
   return {
     name: profile?.fullName ?? "User",
     role,
-    roleLabel: role,
+    roleLabel: profile?.position ?? role,
     organizationName: "",
     academicYear: "",
     greetingDate: formatGreetingDate()
@@ -72,7 +72,7 @@ export function DashboardPage() {
           setDashboardUser({
             name: fullName,
             role,
-            roleLabel: role,
+            roleLabel: typeof data?.position === "string" && data.position.trim() ? data.position : role,
             organizationName: typeof data?.organizationName === "string" ? data.organizationName : "University Student Council",
             academicYear: "AY 2025–2026",
             greetingDate: formatGreetingDate()

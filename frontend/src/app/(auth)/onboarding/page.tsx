@@ -22,6 +22,45 @@ const organizations = [
 
 const skills = ["Event Planning", "Coordination", "Documentation", "Communication", "Finance", "Budgeting", "Logistics", "Venue Management", "Design", "Photography", "Networking", "HR", "Scheduling", "Research", "Writing", "Social Media", "Video Editing", "Public Speaking"];
 const years = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "Graduate"];
+const positionOptions = ["President", "Vice President", "Secretary", "Treasurer", "Finance Officer", "Auditor", "Public Relations Officer", "Committee Chair", "Project Coordinator", "Team Lead", "Organization Member"];
+const programOptions = [
+  "Bachelor of Science in Accountancy",
+  "Bachelor of Science in Accounting Information Management",
+  "Bachelor of Science in Biology",
+  "Bachelor of Science in Banking and Finance",
+  "Bachelor of Science in Civil Engineering",
+  "Bachelor of Science in Business Management Honors Program",
+  "Bachelor of Science in Computer Engineering",
+  "Bachelor of Science in Financial Management and Accounting",
+  "Bachelor of Science in Computer Science",
+  "Bachelor of Science in Legal Management",
+  "Bachelor of Science in Development Communication",
+  "Bachelor of Science in Management",
+  "Bachelor of Science in Electronics Engineering",
+  "Bachelor of Science in Marketing Management",
+  "Bachelor of Science in Entrepreneurship",
+  "Bachelor of Science in Specialized Track on Tourism",
+  "Bachelor of Science in Information Systems",
+  "Bachelor of Science in Information Technology",
+  "Bachelor of Science in Mathematics",
+  "Bachelor of Science in Nursing",
+  "Bachelor of Science in Psychology",
+  "Bachelor of Science in Tourism Management",
+  "Bachelor of Arts in Communication",
+  "Bachelor of Arts in Economics",
+  "Bachelor of Arts in English Language Studies",
+  "Bachelor of Arts in Literature",
+  "Bachelor of Arts in Philosophy",
+  "Bachelor of Arts in Political Science",
+  "Bachelor of Early Childhood Education",
+  "Bachelor of Elementary Education",
+  "Bachelor of Library Information Science",
+  "Bachelor of Secondary Education",
+  "Bachelor of Special Needs Education",
+  "Bachelor of Engineering Technology – Computer Engineering Technology",
+  "Bachelor of Physical Education",
+  "Bachelor of Religious and Values Education"
+];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -44,6 +83,7 @@ export default function OnboardingPage() {
   const [customSkill, setCustomSkill] = useState("");
   const [year, setYear] = useState("");
   const [program, setProgram] = useState("");
+  const [position, setPosition] = useState("");
   const [birthMonth, setBirthMonth] = useState("");
   const [birthDay, setBirthDay] = useState("");
   const [birthYear, setBirthYear] = useState("");
@@ -116,8 +156,8 @@ export default function OnboardingPage() {
   }
 
   function submitDetails() {
-    if (!year || !program.trim() || (role === "member" && selectedSkills.length === 0)) {
-      setError(role === "member" && selectedSkills.length === 0 ? "Choose at least one skill, then complete your academic details." : "Complete your year level and program to continue.");
+    if (!year || !program.trim() || !position.trim() || (role === "member" && selectedSkills.length === 0)) {
+      setError(role === "member" && selectedSkills.length === 0 ? "Choose at least one skill, then complete your profile details." : "Complete your position, year level, and program to continue.");
       return;
     }
     setError("");
@@ -132,7 +172,7 @@ export default function OnboardingPage() {
 
     const onboardingOrganizationId = isNewOrganization
       ? `new-${organizationName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`
-      : isJoiningOrganizationLater ? null : selectedOrganization?.id;
+      : isJoiningOrganizationLater ? null : selectedOrganization?.id ?? null;
 
     if (!onboardingOrganizationId && !isJoiningOrganizationLater) {
       setError("We could not determine your organization. Please go back and try again.");
@@ -143,6 +183,7 @@ export default function OnboardingPage() {
     try {
       const session = await completeOnboarding(firebaseUser, {
         role: role === "leader" ? "Student Leader" : "Organization Member",
+        position: position.trim(),
         organizationId: onboardingOrganizationId,
         yearLevel: year,
         program: program.trim(),
@@ -173,7 +214,7 @@ export default function OnboardingPage() {
 
         {stage !== "pending" && <Stepper active={completedSteps} />}
 
-        <section className="rounded-[20px] border border-[#e0e5ed] bg-white p-8 shadow-[0_2px_3px_rgba(20,35,55,.13)]">
+        <section className="rounded-[20px] border border-[#e0e5ed] bg-white p-5 shadow-[0_2px_3px_rgba(20,35,55,.13)] sm:p-6">
           {stage === "role" && <>
             <SectionTitle title="What is your role?" description="This helps us tailor your workspace and the tools you can access." />
             <div className="mt-6 space-y-3">
@@ -215,7 +256,8 @@ export default function OnboardingPage() {
             <SectionTitle title="Tell us about yourself" description="Keep your profile current so your team can find the right people for each task." />
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Your skills {role === "member" && <span className="text-red-500">*</span>}</label><p className="mt-1 text-xs text-slate-500">Select all that apply - used to match you with the right tasks.</p><div className="mt-3 flex flex-wrap gap-2">{skills.map((skill) => <button key={skill} type="button" onClick={() => { toggleSkill(skill); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${selectedSkills.includes(skill) ? "border-brand bg-brand text-white" : "border-slate-200 bg-[#f3f6fa] text-slate-600 hover:border-blue-300"}`}>{skill}</button>)}</div><div className="mt-4 flex gap-2"><input value={customSkill} onChange={(event) => setCustomSkill(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomSkill(); } }} className="onboarding-input h-10 flex-1" placeholder="Add another skill..." /><button type="button" onClick={addCustomSkill} disabled={!customSkill.trim()} className="h-10 rounded-xl bg-[#e8edf5] px-4 text-sm font-bold text-[#244775] transition hover:bg-[#dce5f2] disabled:cursor-not-allowed disabled:opacity-50">Add</button></div>{manualSkills.length > 0 && <div className="mt-3"><p className="text-xs font-semibold text-slate-500">Added skills</p><div className="mt-2 flex flex-wrap gap-2">{manualSkills.map((skill) => <button key={skill} type="button" onClick={() => removeManualSkill(skill)} className="rounded-full border border-brand bg-brand text-white px-3 py-1.5 text-xs font-bold transition hover:bg-[#193960]" aria-label={`Remove ${skill}`}>{skill} <span aria-hidden>×</span></button>)}</div></div>}</div>
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Year level <span className="text-red-500">*</span></label><div className="mt-3 flex flex-wrap gap-2">{years.map((item) => <button key={item} type="button" onClick={() => { setYear(item); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${year === item ? "border-brand bg-brand text-white" : "border-slate-200 text-slate-600 hover:border-blue-300"}`}>{item}</button>)}</div></div>
-            <div className="mt-6"><Input id="program" label="Program" required value={program} onChange={(event) => { setProgram(event.target.value); setError(""); }} className="h-11 rounded-xl border-slate-200 bg-[#f3f6fa] px-3 text-sm shadow-none focus:ring-[#2563eb]/20" placeholder="e.g. BS Information Technology" /></div>
+            <div className="mt-5"><Field label="Program"><input list="program-options" value={program} onChange={(event) => { setProgram(event.target.value); setError(""); }} className="onboarding-input h-10 text-[13px]" placeholder="Choose or type your program" /><datalist id="program-options">{programOptions.map((item) => <option key={item} value={item} />)}</datalist></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your program manually.</p></div>
+            <div className="mt-5"><Field label="Organization position"><input list="position-options" value={position} onChange={(event) => { setPosition(event.target.value); setError(""); }} className="onboarding-input h-10 text-[13px]" placeholder="Choose or type your position" /><datalist id="position-options">{positionOptions.map((item) => <option key={item} value={item} />)}</datalist></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your position manually.</p></div>
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Birthdate</label><div className="mt-2 flex gap-2"><select value={birthMonth} onChange={(event) => setBirthMonth(event.target.value)} className="onboarding-input flex-1"><option value="">Month</option>{["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((month) => <option key={month}>{month}</option>)}</select><select value={birthDay} onChange={(event) => setBirthDay(event.target.value)} className="onboarding-input w-20"><option value="">Day</option>{Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <option key={day}>{day}</option>)}</select><select value={birthYear} onChange={(event) => setBirthYear(event.target.value)} className="onboarding-input w-28"><option value="">Year</option>{Array.from({ length: 60 }, (_, index) => new Date().getFullYear() - index).map((year) => <option key={year}>{year}</option>)}</select></div></div>
             <ErrorMessage message={error} />
             <div className="mt-7 flex gap-3"><SecondaryButton onClick={() => setStage("organization")}>Back</SecondaryButton><PrimaryButton onClick={submitDetails}>{isNewOrganization ? "Submit for review" : isJoiningOrganizationLater ? "Complete setup" : "Submit request"} <span aria-hidden>→</span></PrimaryButton></div>

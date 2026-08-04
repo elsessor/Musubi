@@ -20,11 +20,11 @@ const accentStyles: Record<KPICardProps["color"], string> = {
 
 export function KPICard({ label, value, icon: Icon, color }: KPICardProps) {
   return (
-    <article className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
+    <article className="min-h-[172px] rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70 lg:min-h-[207px] lg:p-8">
       <div className={cn("flex size-11 items-center justify-center rounded-2xl", accentStyles[color])}>
         <Icon className="size-5" />
       </div>
-      <div className="mt-5">
+      <div className="mt-5 lg:mt-6">
         <p className="text-[32px] font-semibold leading-none tracking-tight text-slate-900">{value}</p>
         <p className="mt-2 text-sm font-medium text-slate-500">{label}</p>
       </div>

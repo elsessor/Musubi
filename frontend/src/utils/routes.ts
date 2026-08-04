@@ -17,14 +17,21 @@ export function getDashboardNavItems(role: UserRole): DashboardNavItem[] {
     ];
   }
 
-  return [
+  const commonMemberItems: DashboardNavItem[] = [
     { id: "dashboard", label: "Dashboard", href: "/dashboard" },
     { id: "events", label: "Events & Tasks", href: "/dashboard/events" },
     { id: "organization", label: "Organization", href: "/dashboard/organization" },
-    { id: "analytics", label: "Analytics", href: "/dashboard/analytics" },
     { id: "notifications", label: "Notifications", href: "/dashboard/notifications", badge: 2 },
     { id: "settings", label: "Settings", href: "/dashboard/settings" }
   ];
+
+  return role === "Student Leader"
+    ? [
+        ...commonMemberItems.slice(0, 3),
+        { id: "analytics", label: "Analytics", href: "/dashboard/analytics" },
+        ...commonMemberItems.slice(3)
+      ]
+    : commonMemberItems;
 }
 
 export function getPostAuthenticationRoute(user: AuthUserProfile): string {

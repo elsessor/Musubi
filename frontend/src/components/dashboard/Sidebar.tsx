@@ -1,11 +1,9 @@
-"use client";
+﻿"use client";
 
 import {
   BarChart2,
   Bell,
   Briefcase,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   FileText,
   LayoutGrid,
@@ -22,12 +20,13 @@ import { cn } from "@/utils/cn";
 
 type SidebarProps = {
   userName: string;
+  role: "Admin" | "Student Leader" | "Organization Member";
   roleLabel: string;
+  mobileOpen: boolean;
   navItems: DashboardNavItem[];
   activeNavId: string;
   onLogout: () => void;
-  collapsed: boolean;
-  onToggleCollapse: () => void;
+  onNavigate: () => void;
 };
 
 const navIconMap = {
@@ -43,7 +42,7 @@ const navIconMap = {
   "audit-logs": ShieldCheck
 } as const;
 
-function AvatarFallback({ name }: { name: string }) {
+function AvatarFallback({ name, role }: { name: string; role: SidebarProps["role"] }) {
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -52,7 +51,10 @@ function AvatarFallback({ name }: { name: string }) {
     .join("");
 
   return (
-    <div className="flex size-10 items-center justify-center rounded-full bg-slate-600 text-sm font-semibold text-white">
+    <div className={cn(
+      "flex size-12 items-center justify-center rounded-full text-base font-extrabold text-white",
+      role === "Admin" ? "bg-[#ef2360]" : "bg-[#385779]"
+    )}>
       {initials}
     </div>
   );
@@ -60,49 +62,47 @@ function AvatarFallback({ name }: { name: string }) {
 
 export function Sidebar({
   userName,
+  role,
   roleLabel,
+  mobileOpen,
   navItems,
   activeNavId,
   onLogout,
-  collapsed,
-  onToggleCollapse
+  onNavigate
 }: SidebarProps) {
   const uniqueNavItems = navItems.filter(
     (item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index
   );
 
-  const sidebarWidthClass = collapsed ? "w-[84px]" : "w-[280px]";
-
   return (
-    <aside className={`fixed inset-y-0 left-0 z-30 flex flex-col overflow-visible bg-[#1e293b] text-white shadow-[8px_0_32px_rgba(15,23,42,0.12)] transition-[width] duration-300 ${sidebarWidthClass}`}>
-      <div className={`border-b border-white/10 py-5 ${collapsed ? "px-4" : "px-6"}`}>
-        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500 shadow-[0_10px_28px_rgba(59,130,246,0.32)]">
-            <Zap className="size-5 text-white" />
+    <aside className={cn(
+      "fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] -translate-x-full flex-col bg-[#213f68] text-white shadow-xl transition-transform duration-300 md:z-30 md:w-[354px] md:max-w-none md:translate-x-0 md:shadow-none",
+      mobileOpen && "translate-x-0"
+    )}>
+      <div className="flex min-h-[100px] items-center border-b border-white/10 px-5 py-5 md:min-h-[108px]">
+        <div className="flex items-center gap-4">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#2868ed] shadow-[0_10px_24px_rgba(20,80,192,0.3)]">
+            <Zap className="size-6 text-white" strokeWidth={2.25} />
           </div>
-          {!collapsed ? (
-            <div>
-              <p className="text-lg font-semibold leading-none">Musubi</p>
-              <p className="mt-1 text-xs font-medium text-slate-300">Campus Organizations</p>
-            </div>
-          ) : null}
+          <div className="min-w-0">
+            <p className="truncate text-[18px] font-extrabold leading-tight tracking-[-0.02em]">AI Workflow &amp; Task Orchestr</p>
+            <p className="mt-1 text-[16px] font-semibold leading-tight text-[#aebdd0]">Campus Organizations</p>
+          </div>
         </div>
       </div>
 
-      <div className={`border-b border-white/10 py-5 ${collapsed ? "px-4" : "px-6"}`}>
-        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-          <AvatarFallback name={userName} />
-          {!collapsed ? (
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-none">{userName}</p>
-              <p className="mt-1 truncate text-xs font-medium text-slate-300">{roleLabel}</p>
-            </div>
-          ) : null}
+      <div className="flex min-h-[104px] items-center border-b border-white/10 px-5 py-5 md:min-h-[115px]">
+        <div className="flex items-center gap-4">
+          <AvatarFallback name={userName} role={role} />
+          <div className="min-w-0">
+            <p className="truncate text-base font-extrabold leading-tight">{userName}</p>
+            <p className="mt-1 truncate text-sm font-semibold leading-tight text-[#aebdd0]">{roleLabel}</p>
+          </div>
         </div>
       </div>
 
-      <nav className={`flex-1 py-4 ${collapsed ? "px-2" : "px-3"}`}>
-        <ul className="space-y-1.5">
+      <nav className="flex-1 px-3 py-4 md:py-[14px]">
+        <ul className="space-y-1">
           {uniqueNavItems.map((item) => {
             const Icon = navIconMap[item.id as keyof typeof navIconMap] ?? LayoutGrid;
             const active = item.id === activeNavId;
@@ -112,20 +112,19 @@ export function Sidebar({
                 <a
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "group relative flex items-center rounded-lg py-3 text-sm font-medium transition",
-                    collapsed ? "justify-center px-0" : "gap-3 px-4",
+                    "group relative flex h-12 items-center gap-4 rounded-xl px-4 text-[17px] font-bold transition md:h-[60px] md:rounded-[17px] md:px-5 md:text-[18px]",
                     active
-                      ? "bg-white/12 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-                      : "text-slate-300 hover:bg-white/6 hover:text-white"
+                      ? "bg-[#385779] text-white"
+                      : "text-[#b4c1d3] hover:bg-white/[0.07] hover:text-white"
                   )}
                   href={item.href}
+                  onClick={onNavigate}
                 >
-                  <Icon className={cn("size-4", active ? "text-white" : "text-slate-300")} />
-                  {!collapsed ? <span className="flex-1">{item.label}</span> : null}
+                  <Icon className={cn("size-6 shrink-0 md:size-[26px]", active ? "text-white" : "text-[#afbed0]")} strokeWidth={1.8} />
+                  <span className="flex-1">{item.label}</span>
                   {item.badge ? (
                     <span className={cn(
-                      "inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-semibold text-white",
-                      collapsed ? "absolute right-1 top-1" : ""
+                      "absolute left-8 top-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-[11px] font-extrabold text-white"
                     )}>
                       {item.badge}
                     </span>
@@ -137,28 +136,18 @@ export function Sidebar({
         </ul>
       </nav>
 
-      <div className={`border-t border-white/10 ${collapsed ? "p-3" : "p-4"}`}>
+      <div className="border-t border-white/10 px-3 py-4 md:py-[13px]">
         <button
           className={cn(
-            "flex w-full items-center rounded-lg py-3 text-sm font-medium text-slate-300 transition hover:bg-white/6 hover:text-white",
-            collapsed ? "justify-center px-0" : "gap-3 px-4"
+            "flex h-12 w-full items-center gap-4 rounded-xl px-4 text-[17px] font-bold text-[#b4c1d3] transition hover:bg-white/[0.07] hover:text-white md:h-[60px] md:rounded-[17px] md:px-5 md:text-[18px]"
           )}
           onClick={onLogout}
           type="button"
         >
-          <LogOut className="size-4" />
-          {!collapsed ? <span>Logout</span> : null}
+          <LogOut className="size-6" strokeWidth={1.8} />
+          <span>Logout</span>
         </button>
       </div>
-
-      <button
-        aria-label="Collapse sidebar"
-        className="absolute right-0 top-1/2 z-40 flex size-8 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-[0_8px_20px_rgba(15,23,42,0.12)]"
-        onClick={onToggleCollapse}
-        type="button"
-      >
-        {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
-      </button>
     </aside>
   );
 }

@@ -48,6 +48,7 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
     typeof backendUser.fullName !== "string" ||
     typeof backendUser.email !== "string" ||
     !isUserRole(backendUser.role) ||
+    !(typeof backendUser.position === "string" || backendUser.position === null || backendUser.position === undefined) ||
     !(typeof backendUser.organizationId === "string" || backendUser.organizationId === null) ||
     !(typeof backendUser.profilePicture === "string" || backendUser.profilePicture === null) ||
     !Array.isArray(backendUser.skills) ||
@@ -65,6 +66,7 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
       fullName: backendUser.fullName,
       email: backendUser.email,
       role: backendUser.role,
+      position: typeof backendUser.position === "string" ? backendUser.position : null,
       organizationId: backendUser.organizationId,
       profilePicture: backendUser.profilePicture,
       skills: backendUser.skills,

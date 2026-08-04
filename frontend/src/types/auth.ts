@@ -10,6 +10,7 @@ export type AuthUserProfile = {
   fullName: string;
   email: string;
   role: UserRole;
+  position: string | null;
   organizationId: string | null;
   profilePicture: string | null;
   skills: string[];
@@ -18,6 +19,7 @@ export type AuthUserProfile = {
 
 export type OnboardingPayload = {
   role: Extract<UserRole, "Student Leader" | "Organization Member">;
+  position: string;
   organizationId: string | null;
   yearLevel: string;
   program: string;
