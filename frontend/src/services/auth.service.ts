@@ -159,7 +159,7 @@ export function updateMemberAssignment(user: User, memberId: string, input: Part
 }
 
 export type OrganizationDirectoryOption = OrganizationRecord;
-export type OrganizationMember = { id: string; name: string; role: string; position: string; skills: string[] };
+export type OrganizationMember = { id: string; name: string; role: string; position: string; skills: string[]; membershipRole: "leader" | "committee_head" | "member"; committeeId: string | null };
 export type OrganizationJoinRequest = { id: string; name: string; email: string; position: string; skills: string[] };
 export type MyOrganizationJoinRequest = { id: string; organizationId: string; organizationName: string };
 
@@ -193,6 +193,14 @@ export async function getMyOrganizationJoinRequest(user: User): Promise<MyOrgani
 
 export function reviewOrganizationJoinRequest(user: User, organizationId: string, requestId: string, status: "accepted" | "rejected") {
   return organizationRequest<void>(user, `/auth/organizations/${organizationId}/join-requests/${requestId}`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+export function updateOrganizationMember(user: User, organizationId: string, memberId: string, input: { membershipRole?: "leader" | "committee_head" | "member"; position?: string; committeeId?: string | null }) {
+  return organizationRequest<void>(user, `/auth/organizations/${organizationId}/members/${memberId}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function inviteOrganizationMember(user: User, organizationId: string, email: string) {
+  return organizationRequest<void>(user, `/auth/organizations/${organizationId}/invitations`, { method: "POST", body: JSON.stringify({ email }) });
 }
 
 export function getOrganizationManagementDetail(user: User, organizationId: string) {

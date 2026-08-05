@@ -239,6 +239,7 @@ export async function reviewOrganizationJoinRequest(uid: string, organizationId:
 export async function createOrganization(uid: string, input: { name: string; type: string; description: string }) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Student Leader") throw new AppError("Only student leaders can create organizations.", 403);
+  if (user.organizationId) throw new AppError("You already belong to an organization and cannot create another.", 409);
   const ref = firestore.collection("organizations").doc();
   await ref.set({
     name: input.name.trim(), type: input.type.trim(), description: input.description.trim(), status: "pending", requestedByUID: uid,
@@ -263,9 +264,39 @@ export async function getOrganizationMembers(uid: string, organizationId: string
       name: typeof data.fullName === "string" ? data.fullName : "Unnamed member",
       role: typeof data.role === "string" ? data.role : "Organization Member",
       position: typeof data.position === "string" ? data.position : "Organization Member",
-      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : []
+      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
+      membershipRole: data.membershipRole === "leader" || data.membershipRole === "committee_head" || data.membershipRole === "member" ? data.membershipRole : data.role === "Student Leader" ? "leader" : "member",
+      committeeId: typeof data.committeeId === "string" ? data.committeeId : null
     };
   });
+}
+
+async function requireOrganizationLeader(uid: string, organizationId: string) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Student Leader" || user.organizationId !== organizationId) throw new AppError("Organization leader access is required.", 403);
+}
+
+export async function updateOrganizationMemberByLeader(uid: string, organizationId: string, memberId: string, input: { membershipRole?: "leader" | "committee_head" | "member"; position?: string; committeeId?: string | null }) {
+  await requireOrganizationLeader(uid, organizationId);
+  const memberRef = firestore.collection("users").doc(memberId);
+  const member = await memberRef.get();
+  if (!member.exists || member.data()?.organizationId !== organizationId) throw new AppError("Member was not found in this organization.", 404);
+  if (input.committeeId !== undefined && input.committeeId !== null && !(await firestore.collection("organizations").doc(organizationId).collection("committees").doc(input.committeeId).get()).exists) throw new AppError("Committee was not found.", 404);
+  const update: Record<string, unknown> = {};
+  if (input.membershipRole !== undefined) update.membershipRole = input.membershipRole;
+  if (input.position !== undefined) update.position = input.position.trim();
+  if (input.committeeId !== undefined) update.committeeId = input.committeeId;
+  await memberRef.update(update);
+}
+
+export async function inviteOrganizationMember(uid: string, organizationId: string, email: string) {
+  await requireOrganizationLeader(uid, organizationId);
+  const matches = await firestore.collection("users").where("email", "==", email.trim().toLowerCase()).limit(1).get();
+  if (matches.empty) throw new AppError("No Musubi account exists for that email address.", 404);
+  const member = matches.docs[0];
+  if (member.data().organizationId === organizationId) throw new AppError("This person is already a member.", 409);
+  await firestore.collection("organization_invitations").add({ organizationId, invitedUID: member.id, email: email.trim().toLowerCase(), status: "pending", sentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), invitedByUID: uid });
+  await member.ref.update({ inviteStatus: "pending" });
 }
 
 function normalizeOrganization(id: string, data: FirebaseFirestore.DocumentData) {
@@ -324,7 +355,8 @@ export async function updateMemberAssignmentForAdmin(uid: string, memberId: stri
 }
 
 export async function getOrganizationManagementDetail(uid: string, organizationId: string) {
-  await requireAdmin(uid);
+  const requestingUser = await getCurrentUser(uid);
+  if (requestingUser.role !== "Admin" && (requestingUser.role !== "Student Leader" || requestingUser.organizationId !== organizationId)) throw new AppError("You do not have access to this organization.", 403);
   const ref = firestore.collection("organizations").doc(organizationId);
   const snapshot = await ref.get();
   if (!snapshot.exists) throw new AppError("Organization was not found.", 404);

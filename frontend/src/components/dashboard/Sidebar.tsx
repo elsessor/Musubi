@@ -85,8 +85,8 @@ export function Sidebar({
             <Zap className="size-6 text-white" strokeWidth={2.25} />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[18px] font-extrabold leading-tight tracking-[-0.02em]">AI Workflow &amp; Task Orchestr</p>
-            <p className="mt-1 text-[16px] font-semibold leading-tight text-[#aebdd0]">Campus Organizations</p>
+            <p className="truncate text-[18px] font-extrabold leading-tight tracking-[-0.02em]">Musubi</p>
+            <p className="mt-1 text-[16px] font-semibold leading-tight text-[#aebdd0]">Powered by Gemini and Groq</p>
           </div>
         </div>
       </div>
