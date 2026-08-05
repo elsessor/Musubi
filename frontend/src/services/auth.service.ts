@@ -136,6 +136,7 @@ export type OrganizationDirectoryRecord = OrganizationRecord & { memberCount: nu
 export type OrganizationMemberRecord = { id: string; name: string; role: string; position: string; committeeId: string | null };
 export type OrganizationCommitteeRecord = { id: string; name: string; headMemberId: string | null; description: string };
 export type OrganizationManagementDetail = { organization: OrganizationRecord; members: OrganizationMemberRecord[]; committees: OrganizationCommitteeRecord[]; goalSummary: Record<string, number> };
+export type AdminMemberRecord = { id: string; name: string; email: string; organizationId: string | null; organizationName: string; membershipRole: "leader" | "committee_head" | "member"; committeeId: string | null; committeeName: string; inviteStatus: string };
 
 async function organizationRequest<T>(user: User, path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}`, ...init?.headers } });
@@ -146,6 +147,15 @@ async function organizationRequest<T>(user: User, path: string, init?: RequestIn
 export async function getOrganizations(user: User): Promise<OrganizationDirectoryRecord[]> {
   const data = await organizationRequest<{ organizations?: OrganizationDirectoryRecord[] }>(user, "/auth/organizations");
   return Array.isArray(data.organizations) ? data.organizations : [];
+}
+
+export async function getAllMembers(user: User): Promise<AdminMemberRecord[]> {
+  const data = await organizationRequest<{ members?: AdminMemberRecord[] }>(user, "/auth/members");
+  return Array.isArray(data.members) ? data.members : [];
+}
+
+export function updateMemberAssignment(user: User, memberId: string, input: Partial<Pick<AdminMemberRecord, "organizationId" | "committeeId" | "membershipRole">>) {
+  return organizationRequest<void>(user, `/auth/members/${memberId}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 export type OrganizationDirectoryOption = OrganizationRecord;

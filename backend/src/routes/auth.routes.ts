@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { createOrganizationController, joinOrganizationController, loginController, meController, myOrganizationJoinRequestController, onboardingController, organizationController, organizationDirectoryController, organizationJoinRequestsController, organizationManagementDetailController, organizationMembersController, organizationRequestsController, organizationsController, reviewOrganizationJoinRequestController, reviewOrganizationRequestController, updateOrganizationController } from "../controllers/auth.controller.js";
+import { allMembersController, createOrganizationController, joinOrganizationController, loginController, meController, myOrganizationJoinRequestController, onboardingController, organizationController, organizationDirectoryController, organizationJoinRequestsController, organizationManagementDetailController, organizationMembersController, organizationRequestsController, organizationsController, reviewOrganizationJoinRequestController, reviewOrganizationRequestController, updateMemberAssignmentController, updateOrganizationController } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 
 export const authRouter = Router();
@@ -14,6 +14,8 @@ authRouter.get("/organizations/directory", organizationDirectoryController);
 authRouter.post("/organizations/join", joinOrganizationController);
 authRouter.post("/organizations", createOrganizationController);
 authRouter.get("/organizations", organizationsController);
+authRouter.get("/members", allMembersController);
+authRouter.patch("/members/:memberId", updateMemberAssignmentController);
 authRouter.get("/organizations/join-requests/me", myOrganizationJoinRequestController);
 authRouter.get("/organizations/:organizationId/members", organizationMembersController);
 authRouter.get("/organizations/:organizationId/join-requests", organizationJoinRequestsController);

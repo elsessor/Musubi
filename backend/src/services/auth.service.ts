@@ -301,6 +301,28 @@ export async function getOrganizationsForAdmin(uid: string) {
   }));
 }
 
+export async function getAllMembersForAdmin(uid: string) {
+  await requireAdmin(uid);
+  const [usersSnapshot, organizationsSnapshot] = await Promise.all([firestore.collection("users").get(), firestore.collection("organizations").get()]);
+  const organizations = new Map(organizationsSnapshot.docs.map((document) => [document.id, { name: typeof document.data().name === "string" ? document.data().name : "Unknown organization", ref: document.ref }]));
+  const committeeNames = new Map<string, string>();
+  await Promise.all(Array.from(organizations.entries()).map(async ([organizationId, organization]) => { const committees = await organization.ref.collection("committees").get(); committees.docs.forEach((committee) => committeeNames.set(`${organizationId}:${committee.id}`, typeof committee.data().name === "string" ? committee.data().name : "Unnamed committee")); }));
+  return usersSnapshot.docs.map((document) => { const data = document.data(); const organizationId = typeof data.organizationId === "string" ? data.organizationId : null; const committeeId = typeof data.committeeId === "string" ? data.committeeId : null; const membershipRole = data.membershipRole === "leader" || data.membershipRole === "committee_head" || data.membershipRole === "member" ? data.membershipRole : data.role === "Student Leader" ? "leader" : "member"; return { id: document.id, name: typeof data.fullName === "string" ? data.fullName : "Unnamed member", email: typeof data.email === "string" ? data.email : "", organizationId, organizationName: organizationId ? organizations.get(organizationId)?.name ?? "Unknown organization" : "Unassigned", membershipRole, committeeId, committeeName: organizationId && committeeId ? committeeNames.get(`${organizationId}:${committeeId}`) ?? "Unassigned" : "Unassigned", inviteStatus: typeof data.inviteStatus === "string" ? data.inviteStatus : "active" }; });
+}
+
+export async function updateMemberAssignmentForAdmin(uid: string, memberId: string, input: { membershipRole?: "leader" | "committee_head" | "member"; organizationId?: string | null; committeeId?: string | null }) {
+  await requireAdmin(uid);
+  const ref = firestore.collection("users").doc(memberId);
+  if (!(await ref.get()).exists) throw new AppError("Member was not found.", 404);
+  if (input.organizationId !== undefined && input.organizationId !== null && !(await firestore.collection("organizations").doc(input.organizationId).get()).exists) throw new AppError("Organization was not found.", 404);
+  if (input.committeeId !== undefined && input.committeeId !== null) { const organizationId = input.organizationId ?? (await ref.get()).data()?.organizationId; if (typeof organizationId !== "string" || !(await firestore.collection("organizations").doc(organizationId).collection("committees").doc(input.committeeId).get()).exists) throw new AppError("Committee was not found in the selected organization.", 404); }
+  const update: Record<string, unknown> = {};
+  if (input.membershipRole !== undefined) update.membershipRole = input.membershipRole;
+  if (input.organizationId !== undefined) { update.organizationId = input.organizationId; if (input.organizationId === null) update.committeeId = null; }
+  if (input.committeeId !== undefined) update.committeeId = input.committeeId;
+  await ref.update(update);
+}
+
 export async function getOrganizationManagementDetail(uid: string, organizationId: string) {
   await requireAdmin(uid);
   const ref = firestore.collection("organizations").doc(organizationId);
