@@ -1,24 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Search, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { completeOnboarding } from "@/services/auth.service";
+import { completeOnboarding, getOrganizationDirectory, joinOrganization, type OrganizationDirectoryOption } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 
 type Role = "leader" | "member";
 type Stage = "role" | "leader-check" | "organization" | "details" | "pending";
-
-const organizations = [
-  { id: "csc", name: "Computer Science Society", type: "Academic", members: 24, code: "CSC202" },
-  { id: "ssc", name: "University Student Council", type: "Governing", members: 7, code: "USC2K6" },
-  { id: "jma", name: "Socio-Civic Action Group", type: "Socio-Civic", members: 12, code: "SCAG26" },
-  { id: "dance", name: "Campus Dance Troupe", type: "Arts & Culture", members: 19, code: "CDT420" }
-];
 
 const skills = ["Event Planning", "Coordination", "Documentation", "Communication", "Finance", "Budgeting", "Logistics", "Venue Management", "Design", "Photography", "Networking", "HR", "Scheduling", "Research", "Writing", "Social Media", "Video Editing", "Public Speaking"];
 const years = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "Graduate"];
@@ -77,6 +70,8 @@ export default function OnboardingPage() {
   const [organizationName, setOrganizationName] = useState("");
   const [organizationType, setOrganizationType] = useState("");
   const [organizationDescription, setOrganizationDescription] = useState("");
+  const [organizations, setOrganizations] = useState<OrganizationDirectoryOption[]>([]);
+  const [organizationsLoading, setOrganizationsLoading] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinMode, setJoinMode] = useState<"search" | "code">("search");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -92,12 +87,18 @@ export default function OnboardingPage() {
   const [isCompleting, setIsCompleting] = useState(false);
 
   const filteredOrganizations = useMemo(
-    () => organizations.filter((org) => org.name.toLowerCase().includes(orgSearch.toLowerCase())),
+    () => organizations.filter((org) => `${org.name} ${org.type}`.toLowerCase().includes(orgSearch.toLowerCase())),
     [orgSearch]
   );
   const selectedOrganization = organizations.find((org) => org.id === organizationId);
-  const isJoiningOrganizationLater = joiningOrganizationLater && !organizationId && !joinCode;
+  const isJoiningOrganizationLater = joiningOrganizationLater && !organizationId;
   const completedSteps = stage === "role" ? 1 : stage === "leader-check" || stage === "organization" || stage === "details" ? 2 : 3;
+
+  useEffect(() => {
+    if (!firebaseUser) return;
+    setOrganizationsLoading(true);
+    void getOrganizationDirectory(firebaseUser).then(setOrganizations).catch(() => setOrganizations([])).finally(() => setOrganizationsLoading(false));
+  }, [firebaseUser]);
 
   function toggleSkill(skill: string) {
     setSelectedSkills((current) => current.includes(skill) ? current.filter((item) => item !== skill) : [...current, skill]);
@@ -130,7 +131,7 @@ export default function OnboardingPage() {
   }
 
   function continueFromOrganization() {
-    if (role === "member" && isJoiningOrganizationLater) {
+    if (isJoiningOrganizationLater) {
       setError("");
       setStage("details");
       return;
@@ -141,13 +142,6 @@ export default function OnboardingPage() {
         setError("Enter your organization name, type, and description to continue.");
         return;
       }
-    } else if (joinMode === "code") {
-      const match = organizations.find((org) => org.code === joinCode.trim().toUpperCase());
-      if (!match) {
-        setError("Enter a valid 6-character join code.");
-        return;
-      }
-      setOrganizationId(match.id);
     } else if (!organizationId) {
       setError("Select an organization to continue.");
       return;
@@ -173,9 +167,9 @@ export default function OnboardingPage() {
 
     const onboardingOrganizationId = isNewOrganization
       ? `new-${organizationName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`
-      : isJoiningOrganizationLater ? null : selectedOrganization?.id ?? null;
+      : null;
 
-    if (!onboardingOrganizationId && !isJoiningOrganizationLater) {
+    if (!onboardingOrganizationId && !isJoiningOrganizationLater && !selectedOrganization) {
       setError("We could not determine your organization. Please go back and try again.");
       return;
     }
@@ -191,8 +185,9 @@ export default function OnboardingPage() {
         program: program.trim(),
         skills: selectedSkills
       });
+      if (!isNewOrganization && !isJoiningOrganizationLater && selectedOrganization) await joinOrganization(firebaseUser, selectedOrganization.id);
       setProfile(session.user);
-      showToast({ title: "Profile saved", description: "Your onboarding is complete.", tone: "success" });
+      showToast({ title: "Profile saved", description: selectedOrganization && !isNewOrganization ? "Your join request was submitted for leader approval." : "Your onboarding is complete.", tone: "success" });
       router.replace("/dashboard");
     } catch (completionError) {
       setError(completionError instanceof Error ? completionError.message : "Unable to save your onboarding details.");
@@ -247,10 +242,9 @@ export default function OnboardingPage() {
               <Field label="Organization description"><textarea value={organizationDescription} onChange={(event) => setOrganizationDescription(event.target.value)} className="onboarding-input min-h-24 h-auto py-3" placeholder="Describe your organization, its purpose, and planned activities." /></Field>
               <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">New organization registrations are reviewed by a Musubi administrator before activation.</p>
             </div> : <div className="mt-6">
-              {role === "member" && <div className="mb-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1"><Tab active={joinMode === "search"} onClick={() => setJoinMode("search")}>Search</Tab><Tab active={joinMode === "code"} onClick={() => setJoinMode("code")}>Join code</Tab></div>}
               {joinMode === "code" ? <Field label="6-character join code"><input value={joinCode} maxLength={6} onChange={(event) => { setJoinCode(event.target.value.toUpperCase()); setError(""); }} className="onboarding-input font-mono uppercase tracking-[0.25em]" placeholder="e.g. CSC202" /></Field> : <><Field label="Search organizations"><input value={orgSearch} onChange={(event) => { setOrgSearch(event.target.value); setError(""); }} className="onboarding-input" placeholder="Type an organization name..." /></Field><div className="mt-3 max-h-52 space-y-2 overflow-y-auto">{filteredOrganizations.map((org) => <button key={org.id} type="button" onClick={() => { setOrganizationId(org.id); setError(""); }} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${organizationId === org.id ? "border-accent bg-accent/5 ring-1 ring-accent" : "border-slate-200 hover:border-blue-300"}`}><span className="flex size-9 items-center justify-center rounded-lg bg-brand-soft font-bold text-brand">⌘</span><span className="flex-1"><span className="block text-sm font-bold text-slate-800">{org.name}</span><span className="text-xs text-slate-500">{org.type}</span></span>{organizationId === org.id && <span className="text-accent">✓</span>}</button>)}</div></>}
             </div>}
-            {role === "member" && !isNewOrganization && <button type="button" onClick={() => { setJoiningOrganizationLater(true); setOrganizationId(""); setJoinCode(""); setError(""); }} className={`mt-4 w-full rounded-xl border p-3 text-left transition ${isJoiningOrganizationLater ? "border-accent bg-accent/5 ring-1 ring-accent" : "border-dashed border-slate-300 hover:border-blue-300 hover:bg-slate-50"}`}><span className="block text-sm font-bold text-slate-800">I&apos;ll join an organization later</span><span className="mt-1 block text-xs text-slate-500">Continue setting up your profile and join an organization whenever you&apos;re ready.</span></button>}
+            {!isNewOrganization && <button type="button" onClick={() => { setJoiningOrganizationLater(true); setOrganizationId(""); setJoinCode(""); setError(""); }} className={`mt-4 w-full rounded-xl border p-3 text-left transition ${isJoiningOrganizationLater ? "border-accent bg-accent/5 ring-1 ring-accent" : "border-dashed border-slate-300 hover:border-blue-300 hover:bg-slate-50"}`}><span className="block text-sm font-bold text-slate-800">I&apos;ll join an organization later</span><span className="mt-1 block text-xs text-slate-500">Continue setting up your profile and request membership whenever you&apos;re ready.</span></button>}
             <ErrorMessage message={error} />
             <div className="mt-7 flex gap-3"><SecondaryButton onClick={() => setStage(role === "leader" ? "leader-check" : "role")}>Back</SecondaryButton><PrimaryButton onClick={continueFromOrganization}>Continue <span aria-hidden>→</span></PrimaryButton></div>
           </>}

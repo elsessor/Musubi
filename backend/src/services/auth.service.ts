@@ -189,6 +189,85 @@ export async function getOrganizationForUser(uid: string, organizationId: string
   };
 }
 
+export async function getOrganizationDirectory(uid: string) {
+  await getCurrentUser(uid);
+  const snapshot = await firestore.collection("organizations").orderBy("createdAt", "desc").get();
+  return snapshot.docs
+    .map((document) => normalizeOrganization(document.id, document.data()))
+    .filter((organization) => organization.status === "active");
+}
+
+export async function joinOrganization(uid: string, organizationId: string) {
+  const organization = await firestore.collection("organizations").doc(organizationId).get();
+  if (!organization.exists || normalizeOrganization(organization.id, organization.data() ?? {}).status !== "active") {
+    throw new AppError("This organization is not available to join.", 404);
+  }
+  const user = await getCurrentUser(uid);
+  if (user.organizationId === organizationId) throw new AppError("You already belong to this organization.", 409);
+  const existing = await firestore.collection("organization_join_requests").where("organizationId", "==", organizationId).where("requestedByUID", "==", uid).where("status", "==", "pending").limit(1).get();
+  if (!existing.empty) throw new AppError("You already have a pending request for this organization.", 409);
+  const request = await firestore.collection("organization_join_requests").add({ organizationId, requestedByUID: uid, name: user.fullName, email: user.email, position: user.position, skills: user.skills, status: "pending", submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+  return { id: request.id, status: "pending" as const };
+}
+
+export async function getOrganizationJoinRequests(uid: string, organizationId: string) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Student Leader" || user.organizationId !== organizationId) throw new AppError("Only organization leaders can view join requests.", 403);
+  const snapshot = await firestore.collection("organization_join_requests").where("organizationId", "==", organizationId).where("status", "==", "pending").get();
+  return snapshot.docs.map((document) => { const data = document.data(); return { id: document.id, name: typeof data.name === "string" ? data.name : "Unnamed member", email: typeof data.email === "string" ? data.email : "", position: typeof data.position === "string" ? data.position : "Organization Member", skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [] }; });
+}
+
+export async function getMyOrganizationJoinRequest(uid: string) {
+  const snapshot = await firestore.collection("organization_join_requests").where("requestedByUID", "==", uid).where("status", "==", "pending").limit(1).get();
+  if (snapshot.empty) return null;
+  const request = snapshot.docs[0];
+  const organization = await firestore.collection("organizations").doc(request.data().organizationId).get();
+  return { id: request.id, organizationId: request.data().organizationId, organizationName: organization.exists && typeof organization.data()?.name === "string" ? organization.data()?.name : "this organization" };
+}
+
+export async function reviewOrganizationJoinRequest(uid: string, organizationId: string, requestId: string, status: "accepted" | "rejected") {
+  const leader = await getCurrentUser(uid);
+  if (leader.role !== "Student Leader" || leader.organizationId !== organizationId) throw new AppError("Only organization leaders can review join requests.", 403);
+  const ref = firestore.collection("organization_join_requests").doc(requestId);
+  const snapshot = await ref.get();
+  const request = snapshot.data();
+  if (!snapshot.exists || request?.organizationId !== organizationId || request.status !== "pending" || typeof request.requestedByUID !== "string") throw new AppError("Join request was not found.", 404);
+  await ref.update({ status, reviewedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), reviewedByUID: uid });
+  if (status === "accepted") await firestore.collection("users").doc(request.requestedByUID).set({ organizationId }, { merge: true });
+}
+
+export async function createOrganization(uid: string, input: { name: string; type: string; description: string }) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Student Leader") throw new AppError("Only student leaders can create organizations.", 403);
+  const ref = firestore.collection("organizations").doc();
+  await ref.set({
+    name: input.name.trim(), type: input.type.trim(), description: input.description.trim(), status: "pending", requestedByUID: uid,
+    organizationConfig: {}, createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  });
+  await firestore.collection("users").doc(uid).set({ organizationId: ref.id }, { merge: true });
+  await firestore.collection("org_requests").add({
+    organizationId: ref.id, orgName: input.name.trim(), orgType: input.type.trim(), description: input.description.trim(), status: "pending", rejectionReason: null,
+    submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), requestedBy: { uid, name: user.fullName, email: user.email }
+  });
+  return { organization: normalizeOrganization(ref.id, (await ref.get()).data() ?? {}), user: await getCurrentUser(uid) };
+}
+
+export async function getOrganizationMembers(uid: string, organizationId: string) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to these members.", 403);
+  const snapshot = await firestore.collection("users").where("organizationId", "==", organizationId).get();
+  return snapshot.docs.map((document) => {
+    const data = document.data();
+    return {
+      id: document.id,
+      name: typeof data.fullName === "string" ? data.fullName : "Unnamed member",
+      role: typeof data.role === "string" ? data.role : "Organization Member",
+      position: typeof data.position === "string" ? data.position : "Organization Member",
+      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : []
+    };
+  });
+}
+
 function normalizeOrganization(id: string, data: FirebaseFirestore.DocumentData) {
   const asIsoString = (value: unknown): string | null => value && typeof (value as { toDate?: unknown }).toDate === "function" ? ((value as { toDate: () => Date }).toDate()).toISOString() : null;
   return {

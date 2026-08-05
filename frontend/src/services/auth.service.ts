@@ -140,12 +140,49 @@ export type OrganizationManagementDetail = { organization: OrganizationRecord; m
 async function organizationRequest<T>(user: User, path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}`, ...init?.headers } });
   if (!response.ok) throw new Error("Unable to load organization data.");
-  return response.json() as Promise<T>;
+  return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
 
 export async function getOrganizations(user: User): Promise<OrganizationDirectoryRecord[]> {
   const data = await organizationRequest<{ organizations?: OrganizationDirectoryRecord[] }>(user, "/auth/organizations");
   return Array.isArray(data.organizations) ? data.organizations : [];
+}
+
+export type OrganizationDirectoryOption = OrganizationRecord;
+export type OrganizationMember = { id: string; name: string; role: string; position: string; skills: string[] };
+export type OrganizationJoinRequest = { id: string; name: string; email: string; position: string; skills: string[] };
+export type MyOrganizationJoinRequest = { id: string; organizationId: string; organizationName: string };
+
+export async function getOrganizationDirectory(user: User): Promise<OrganizationDirectoryOption[]> {
+  const data = await organizationRequest<{ organizations?: OrganizationDirectoryOption[] }>(user, "/auth/organizations/directory");
+  return Array.isArray(data.organizations) ? data.organizations : [];
+}
+
+export function joinOrganization(user: User, organizationId: string) {
+  return organizationRequest<{ request: { id: string; status: "pending" } }>(user, "/auth/organizations/join", { method: "POST", body: JSON.stringify({ organizationId }) });
+}
+
+export function createOrganization(user: User, input: { name: string; type: string; description: string }) {
+  return organizationRequest<{ organization: OrganizationRecord; user: BackendLoginResponse["user"] }>(user, "/auth/organizations", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function getOrganizationMembers(user: User, organizationId: string): Promise<OrganizationMember[]> {
+  const data = await organizationRequest<{ members?: OrganizationMember[] }>(user, `/auth/organizations/${organizationId}/members`);
+  return Array.isArray(data.members) ? data.members : [];
+}
+
+export async function getOrganizationJoinRequests(user: User, organizationId: string): Promise<OrganizationJoinRequest[]> {
+  const data = await organizationRequest<{ requests?: OrganizationJoinRequest[] }>(user, `/auth/organizations/${organizationId}/join-requests`);
+  return Array.isArray(data.requests) ? data.requests : [];
+}
+
+export async function getMyOrganizationJoinRequest(user: User): Promise<MyOrganizationJoinRequest | null> {
+  const data = await organizationRequest<{ request?: MyOrganizationJoinRequest | null }>(user, "/auth/organizations/join-requests/me");
+  return data.request ?? null;
+}
+
+export function reviewOrganizationJoinRequest(user: User, organizationId: string, requestId: string, status: "accepted" | "rejected") {
+  return organizationRequest<void>(user, `/auth/organizations/${organizationId}/join-requests/${requestId}`, { method: "PATCH", body: JSON.stringify({ status }) });
 }
 
 export function getOrganizationManagementDetail(user: User, organizationId: string) {
