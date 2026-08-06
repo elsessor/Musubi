@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { adminMembersController, adminMembersStreamController, auditLogsController, auditLogsStreamController, bulkUpdateAdminMembersRoleController, createOrganizationController, joinOrganizationController, loginController, meController, myOrganizationJoinRequestController, onboardingController, organizationController, organizationDirectoryController, organizationJoinRequestsController, organizationManagementDetailController, organizationMembersController, organizationRequestsController, organizationsController, reviewOrganizationJoinRequestController, reviewOrganizationRequestController, updateAdminMemberController, updateOrganizationController } from "../controllers/auth.controller.js";
+import { adminMembersController, adminMembersStreamController, atomizeGoalController, auditLogsController, auditLogsStreamController, bulkUpdateAdminMembersRoleController, createOrganizationController, joinOrganizationController, loginController, meController, myOrganizationJoinRequestController, onboardingController, organizationController, organizationDirectoryController, organizationJoinRequestsController, organizationManagementDetailController, organizationMembersController, organizationRequestsController, organizationsController, reviewOrganizationJoinRequestController, reviewOrganizationRequestController, updateAdminMemberController, updateOrganizationController } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 
 export const authRouter = Router();
@@ -8,6 +8,7 @@ export const authRouter = Router();
 authRouter.post("/login", loginController);
 authRouter.post("/onboarding", onboardingController);
 authRouter.get("/me", requireAuth, meController);
+authRouter.post("/atomize", atomizeGoalController);
 authRouter.get("/org-requests", organizationRequestsController);
 authRouter.patch("/org-requests/:requestId", reviewOrganizationRequestController);
 authRouter.get("/organizations/directory", organizationDirectoryController);

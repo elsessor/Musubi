@@ -3,6 +3,8 @@
 import { AlertTriangle, Calendar, CheckCircle2, Loader2, User, Zap } from "lucide-react";
 import { useState } from "react";
 import type { Event, GeneratedTask, TaskPriority, TaskStatus } from "./types";
+import { atomizeGoal } from "@/services/auth.service";
+import { useAuthStore } from "@/store/authStore";
 
 const priorityConfig: Record<TaskPriority, { classes: string }> = {
   Low:      { classes: "bg-slate-100 text-slate-600 ring-slate-200" },
@@ -11,17 +13,6 @@ const priorityConfig: Record<TaskPriority, { classes: string }> = {
   Critical: { classes: "bg-rose-50 text-rose-600 ring-rose-200" }
 };
 
-const MOCK_GENERATED: GeneratedTask[] = [
-  { id: "g1", title: "Define event scope, goals, and success metrics", priority: "High", assigneeName: "Ana Reyes", dueDate: "Aug 8, 2026", status: "To Do", matchScore: 73, confirmed: false },
-  { id: "g2", title: "Develop detailed action plan and timeline", priority: "High", assigneeName: "Marco Dela Cruz", dueDate: "Aug 9, 2026", status: "To Do", matchScore: 79, confirmed: false },
-  { id: "g3", title: "Prepare and approve event budget", priority: "Critical", assigneeName: "Sophia Tan", dueDate: "Aug 9, 2026", status: "To Do", matchScore: 78, confirmed: false },
-  { id: "g4", title: "Assign task leads and brief the team", priority: "Medium", assigneeName: "Ana Reyes", dueDate: "Aug 10, 2026", status: "To Do", matchScore: 91, confirmed: false },
-  { id: "g5", title: "Finalize venue and logistics coordination", priority: "High", assigneeName: "Marco Dela Cruz", dueDate: "Aug 11, 2026", status: "To Do", matchScore: 85, confirmed: false },
-  { id: "g6", title: "Launch promotional campaign", priority: "Medium", assigneeName: "Sophia Tan", dueDate: "Aug 12, 2026", status: "To Do", matchScore: 68, confirmed: false },
-  { id: "g7", title: "Conduct volunteer orientation", priority: "Low", assigneeName: "Ana Reyes", dueDate: "Aug 13, 2026", status: "To Do", matchScore: 72, confirmed: false },
-  { id: "g8", title: "Post-event evaluation and report", priority: "Medium", assigneeName: "Marco Dela Cruz", dueDate: "Aug 15, 2026", status: "To Do", matchScore: 88, confirmed: false }
-];
-
 const STATUS_OPTIONS: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
 type AtomizerFormProps = {
@@ -29,23 +20,62 @@ type AtomizerFormProps = {
 };
 
 export function AtomizerForm({ events }: AtomizerFormProps) {
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const [selectedEventId, setSelectedEventId] = useState(events[0]?.id ?? "");
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>("To Do");
   const [goalDescription, setGoalDescription] = useState("");
   const [isAtomizing, setIsAtomizing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const [generatedTasks, setGeneratedTasks] = useState<GeneratedTask[]>([]);
   const [tasks, setTasks] = useState<GeneratedTask[]>([]);
 
   async function handleAtomize() {
     if (!goalDescription.trim()) return;
+    if (!firebaseUser) {
+      setErrorMsg("Your session has expired. Please sign in again.");
+      return;
+    }
+
     setIsAtomizing(true);
+    setErrorMsg("");
     setGeneratedTasks([]);
-    // Simulate AI latency
-    await new Promise((r) => setTimeout(r, 1600));
-    const seeded = MOCK_GENERATED.map((t) => ({ ...t, status: defaultStatus, confirmed: false }));
-    setGeneratedTasks(seeded);
-    setTasks(seeded);
-    setIsAtomizing(false);
+
+    try {
+      const selectedEvent = events.find((e) => e.id === selectedEventId);
+      const eventName = selectedEvent ? selectedEvent.title : "Event Goal";
+
+      const data = await atomizeGoal(firebaseUser, {
+        eventName,
+        goalDescription: goalDescription.trim(),
+        defaultStatus
+      });
+
+      const today = new Date();
+      const formattedTasks: GeneratedTask[] = data.tasks.map((item, idx) => {
+        const dueDate = new Date(today);
+        dueDate.setDate(dueDate.getDate() + (item.dueDateOffsetDays || 3));
+        const dateStr = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(dueDate);
+
+        return {
+          id: `gen-${Date.now()}-${idx}`,
+          title: item.title,
+          priority: item.priority,
+          assigneeName: item.assigneeName,
+          dueDate: dateStr,
+          status: defaultStatus,
+          matchScore: item.matchScore,
+          confirmed: false
+        };
+      });
+
+      setGeneratedTasks(formattedTasks);
+      setTasks(formattedTasks);
+    } catch (err: unknown) {
+      console.error("[Atomizer] Error running Genkit flow:", err);
+      setErrorMsg(err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.");
+    } finally {
+      setIsAtomizing(false);
+    }
   }
 
   function confirmTask(id: string) {
@@ -53,8 +83,7 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
   }
 
   function editTask(id: string) {
-    // placeholder — would open inline editing
-    console.log("edit", id);
+    console.log("edit task", id);
   }
 
   const confirmedCount = tasks.filter((t) => t.confirmed).length;
@@ -137,6 +166,12 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
           />
         </div>
 
+        {errorMsg && (
+          <div className="mt-3 rounded-xl bg-rose-50 px-4 py-2.5 text-xs text-rose-600 border border-rose-200">
+            {errorMsg}
+          </div>
+        )}
+
         {/* Atomize button */}
         <div className="mt-4 flex items-center gap-3">
           <button
@@ -150,7 +185,7 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
             ) : (
               <Zap size={16} />
             )}
-            {isAtomizing ? "Atomizing…" : "Atomize"}
+            {isAtomizing ? "Atomizing with Genkit..." : "Atomize"}
           </button>
 
           {generatedTasks.length > 0 && !isAtomizing && (

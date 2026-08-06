@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { firebaseAuth } from "../config/firebase.js";
+import { runAtomizerFlow } from "../services/atomizer.service.js";
 import {
   bulkUpdateMemberRolesForAdmin,
   completeUserOnboarding,
@@ -377,5 +378,35 @@ export async function auditLogsStreamController(request: Request, response: Resp
     } else {
       next(error);
     }
+  }
+}
+
+// ── AI Task Atomizer ─────────────────────────────────────────────────────────
+
+export async function atomizeGoalController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const user = await getCurrentUser(decoded.uid);
+
+    const { eventName, goalDescription, defaultStatus } = request.body as Record<string, unknown>;
+
+    if (typeof goalDescription !== "string" || !goalDescription.trim()) {
+      throw new AppError("A goal description is required.", 400);
+    }
+
+    const result = await runAtomizerFlow({
+      eventName: typeof eventName === "string" ? eventName.trim() : "Event Goal",
+      goalDescription: goalDescription.trim(),
+      defaultStatus: typeof defaultStatus === "string" ? defaultStatus : "To Do",
+      uid: user.uid,
+      userName: user.fullName,
+      userRole: user.role
+    });
+
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
   }
 }

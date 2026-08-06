@@ -200,7 +200,15 @@ async function organizationRequest<T>(user: User, path: string, init?: RequestIn
   });
 
   if (!response.ok) {
-    throw new Error("Unable to load organization data.");
+    let serverMessage = "";
+    try {
+      const errJson = (await response.json()) as { message?: string };
+      if (errJson && typeof errJson.message === "string") {
+        serverMessage = errJson.message;
+      }
+    } catch {}
+
+    throw new Error(serverMessage || "Unable to load organization data.");
   }
 
   if (response.status === 204) {
@@ -520,3 +528,22 @@ export function bulkUpdateAdminMembersRole(user: User, memberIds: string[], role
     body: JSON.stringify({ memberIds, role })
   });
 }
+
+export async function atomizeGoal(
+  user: User,
+  payload: { eventName: string; goalDescription: string; defaultStatus?: string }
+) {
+  return organizationRequest<{
+    tasks: Array<{
+      title: string;
+      priority: "Low" | "Medium" | "High" | "Critical";
+      assigneeName: string;
+      dueDateOffsetDays: number;
+      matchScore: number;
+    }>;
+  }>(user, "/auth/atomize", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
