@@ -29,6 +29,7 @@ export function getDashboardNavItems(role: UserRole): DashboardNavItem[] {
     ? [
         ...commonMemberItems.slice(0, 3),
         { id: "analytics", label: "Analytics", href: "/dashboard/analytics" },
+        { id: "audit-logs", label: "Audit Logs", href: "/dashboard/audit-logs" },
         ...commonMemberItems.slice(3)
       ]
     : commonMemberItems;
