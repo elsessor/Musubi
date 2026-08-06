@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { firebaseAuth } from "../config/firebase.js";
-import { completeUserOnboarding, createOrganization, getCurrentUser, getMyOrganizationJoinRequest, getOrganizationDirectory, getOrganizationForUser, getOrganizationJoinRequests, getOrganizationManagementDetail, getOrganizationMembers, getOrganizationRequests, getOrganizationsForAdmin, joinOrganization, loginWithFirebaseToken, reviewOrganizationJoinRequest, reviewOrganizationRequest, updateOrganizationForAdmin } from "../services/auth.service.js";
+import { bulkUpdateMemberRolesForAdmin, completeUserOnboarding, createOrganization, getAdminMemberDirectory, getAuditLogs, getCurrentUser, getMyOrganizationJoinRequest, getOrganizationDirectory, getOrganizationForUser, getOrganizationJoinRequests, getOrganizationManagementDetail, getOrganizationMembers, getOrganizationRequests, getOrganizationsForAdmin, joinOrganization, loginWithFirebaseToken, reviewOrganizationJoinRequest, reviewOrganizationRequest, updateMemberForAdmin, updateOrganizationForAdmin, watchAdminMemberDirectory, watchAuditLogs } from "../services/auth.service.js";
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -106,5 +106,49 @@ export async function myOrganizationJoinRequestController(request: Request, resp
 export async function reviewOrganizationJoinRequestController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); const status = (request.body as Record<string, unknown>).status; if (!token) throw new AppError("Firebase ID token is required.", 400); if (status !== "accepted" && status !== "rejected") throw new AppError("Invalid join request status.", 400); const decoded = await firebaseAuth.verifyIdToken(token); await reviewOrganizationJoinRequest(decoded.uid, request.params.organizationId, request.params.requestId, status); response.status(204).send(); } catch (error) { next(error); } }
 
 export async function organizationsController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); response.status(200).json({ organizations: await getOrganizationsForAdmin(decoded.uid) }); } catch (error) { next(error); } }
+export async function adminMembersController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); response.status(200).json(await getAdminMemberDirectory(decoded.uid)); } catch (error) { next(error); } }
+export async function adminMembersStreamController(request: Request, response: Response, next: NextFunction) { try { const token = typeof request.query.token === "string" ? request.query.token : getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive" }); response.write("retry: 5000\n\n"); const unsubscribe = await watchAdminMemberDirectory(decoded.uid, (directory) => { response.write(`event: members\n`); response.write(`data: ${JSON.stringify(directory)}\n\n`); }, (error) => { response.write(`event: error\n`); response.write(`data: ${JSON.stringify({ message: error.message })}\n\n`); }); request.on("close", () => { unsubscribe(); }); } catch (error) { if (response.headersSent) { response.write(`event: error\n`); response.write(`data: ${JSON.stringify({ message: error instanceof Error ? error.message : "Internal server error." })}\n\n`); response.end(); } else { next(error); } } }
+export async function updateAdminMemberController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); const body = request.body as Record<string, unknown>; const update: Parameters<typeof updateMemberForAdmin>[2] = {}; if (body.role !== undefined) { if (body.role !== "Admin" && body.role !== "Student Leader" && body.role !== "Organization Member") throw new AppError("Invalid role.", 400); update.role = body.role; } if (body.position !== undefined) { if (typeof body.position !== "string" || !body.position.trim()) throw new AppError("A position is required.", 400); update.position = body.position; } if (body.organizationId !== undefined) { if (!(typeof body.organizationId === "string" || body.organizationId === null)) throw new AppError("Invalid organization.", 400); update.organizationId = body.organizationId; } if (body.organizationName !== undefined) { if (typeof body.organizationName !== "string") throw new AppError("Invalid organization name.", 400); update.organizationName = body.organizationName; } if (body.committeeId !== undefined) { if (!(typeof body.committeeId === "string" || body.committeeId === null)) throw new AppError("Invalid committee.", 400); update.committeeId = body.committeeId; } if (body.committeeName !== undefined) { if (typeof body.committeeName !== "string") throw new AppError("Invalid committee name.", 400); update.committeeName = body.committeeName; } await updateMemberForAdmin(decoded.uid, request.params.memberId, update); response.status(204).send(); } catch (error) { next(error); } }
+export async function bulkUpdateAdminMembersRoleController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); const body = request.body as Record<string, unknown>; if (body.role !== "Admin" && body.role !== "Student Leader" && body.role !== "Organization Member") throw new AppError("Invalid role.", 400); if (!Array.isArray(body.memberIds) || !body.memberIds.every((memberId) => typeof memberId === "string")) throw new AppError("Member IDs are required.", 400); await bulkUpdateMemberRolesForAdmin(decoded.uid, body.memberIds, body.role); response.status(204).send(); } catch (error) { next(error); } }
 export async function organizationManagementDetailController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); response.status(200).json(await getOrganizationManagementDetail(decoded.uid, request.params.organizationId)); } catch (error) { next(error); } }
 export async function updateOrganizationController(request: Request, response: Response, next: NextFunction) { try { const token = getBearerToken(request); if (!token) throw new AppError("Firebase ID token is required.", 400); const decoded = await firebaseAuth.verifyIdToken(token); const body = request.body as Record<string, unknown>; const allowedStatus = body.setupStatus === undefined || body.setupStatus === "pending" || body.setupStatus === "active" || body.setupStatus === "inactive"; if (!allowedStatus || (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim())) || (body.type !== undefined && (typeof body.type !== "string" || !body.type.trim())) || (body.description !== undefined && typeof body.description !== "string")) throw new AppError("Invalid organization details.", 400); response.status(200).json({ organization: await updateOrganizationForAdmin(decoded.uid, request.params.organizationId, { name: body.name as string | undefined, type: body.type as string | undefined, description: body.description as string | undefined, setupStatus: body.setupStatus as string | undefined }) }); } catch (error) { next(error); } }
+
+export async function auditLogsController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    response.status(200).json({ logs: await getAuditLogs(decoded.uid) });
+  } catch (error) { next(error); }
+}
+
+export async function auditLogsStreamController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = typeof request.query.token === "string" ? request.query.token : getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    response.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive"
+    });
+    response.write("retry: 5000\n\n");
+    const unsubscribe = await watchAuditLogs(decoded.uid, (logs) => {
+      response.write(`event: audit_logs\n`);
+      response.write(`data: ${JSON.stringify({ logs })}\n\n`);
+    }, (error) => {
+      response.write(`event: error\n`);
+      response.write(`data: ${JSON.stringify({ message: error.message })}\n\n`);
+    });
+    request.on("close", () => { unsubscribe(); });
+  } catch (error) {
+    if (response.headersSent) {
+      response.write(`event: error\n`);
+      response.write(`data: ${JSON.stringify({ message: error instanceof Error ? error.message : "Internal server error." })}\n\n`);
+      response.end();
+    } else {
+      next(error);
+    }
+  }
+}
+

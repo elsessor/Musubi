@@ -17,21 +17,6 @@ export type AuthUserProfile = {
   onboardingCompleted: boolean;
 };
 
-export type OnboardingPayload = {
-  role: Extract<UserRole, "Student Leader" | "Organization Member">;
-  position: string;
-  organizationId: string | null;
-  organizationRequest?: {
-    organizationId: string;
-    orgName: string;
-    orgType: string;
-    description: string;
-  };
-  yearLevel: string;
-  program: string;
-  skills: string[];
-};
-
 export type AuthUserDocument = AuthUserProfile & {
   createdAt: Timestamp;
   lastLogin: Timestamp;

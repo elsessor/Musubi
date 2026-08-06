@@ -370,3 +370,207 @@ export async function completeUserOnboarding(
   const user = await getCurrentUser(uid);
   return { token: createAppJwt({ uid: user.uid, email: user.email, role: user.role, organizationId: user.organizationId }), role: user.role, user };
 }
+
+// ─── Admin member directory helpers ────────────────────────────────────────
+
+type AdminMemberEntry = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  position: string;
+  organizationId: string | null;
+  organization: string;
+  committeeId: string | null;
+  committee: string;
+  inviteStatus: "Active" | "Pending Invite" | "Inactive";
+  joinedDate: string | null;
+};
+
+type AdminMemberDirectory = {
+  members: AdminMemberEntry[];
+  organizations: { id: string; name: string }[];
+  committees: { id: string; name: string; organizationId: string | null }[];
+};
+
+function asIsoString(value: unknown): string | null {
+  return value && typeof (value as { toDate?: unknown }).toDate === "function"
+    ? ((value as { toDate: () => Date }).toDate()).toISOString()
+    : null;
+}
+
+async function buildAdminMemberDirectory(): Promise<AdminMemberDirectory> {
+  const [usersSnap, orgsSnap] = await Promise.all([
+    firestore.collection("users").get(),
+    firestore.collection("organizations").where("status", "==", "active").get()
+  ]);
+
+  const orgMap = new Map<string, string>();
+  const organizations: { id: string; name: string }[] = [];
+  for (const doc of orgsSnap.docs) {
+    const name = typeof doc.data().name === "string" ? doc.data().name : "Untitled organization";
+    orgMap.set(doc.id, name);
+    organizations.push({ id: doc.id, name });
+  }
+
+  const committeeMap = new Map<string, { id: string; name: string; organizationId: string | null }>();
+  await Promise.all(
+    orgsSnap.docs.map(async (orgDoc) => {
+      const committeeSnap = await orgDoc.ref.collection("committees").get();
+      for (const cDoc of committeeSnap.docs) {
+        const name = typeof cDoc.data().name === "string" ? cDoc.data().name : "Untitled committee";
+        committeeMap.set(cDoc.id, { id: cDoc.id, name, organizationId: orgDoc.id });
+      }
+    })
+  );
+
+  const committees = Array.from(committeeMap.values());
+
+  const members: AdminMemberEntry[] = usersSnap.docs.map((doc) => {
+    const data = doc.data();
+    const role = isUserRole(data.role) ? data.role : DEFAULT_ROLE;
+    const orgId = typeof data.organizationId === "string" ? data.organizationId : null;
+    const committeeId = typeof data.committeeId === "string" ? data.committeeId : null;
+    return {
+      id: doc.id,
+      name: typeof data.fullName === "string" ? data.fullName : "Campus Member",
+      email: typeof data.email === "string" ? data.email : "",
+      role,
+      position: typeof data.position === "string" ? data.position : role,
+      organizationId: orgId,
+      organization: orgId && orgMap.has(orgId) ? orgMap.get(orgId)! : "University Campus",
+      committeeId,
+      committee: committeeId && committeeMap.has(committeeId) ? committeeMap.get(committeeId)!.name : "Unassigned",
+      inviteStatus: data.onboardingCompleted === true ? "Active" : "Pending Invite",
+      joinedDate: asIsoString(data.createdAt)
+    };
+  });
+
+  return { members, organizations, committees };
+}
+
+export async function getAdminMemberDirectory(uid: string): Promise<AdminMemberDirectory> {
+  await requireAdmin(uid);
+  return buildAdminMemberDirectory();
+}
+
+export async function watchAdminMemberDirectory(
+  uid: string,
+  onData: (directory: AdminMemberDirectory) => void,
+  onError: (error: Error) => void
+): Promise<() => void> {
+  await requireAdmin(uid);
+
+  const unsubscribe = firestore.collection("users").onSnapshot(
+    async () => {
+      try {
+        const directory = await buildAdminMemberDirectory();
+        onData(directory);
+      } catch (error) {
+        onError(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    (error) => onError(error)
+  );
+
+  return unsubscribe;
+}
+
+// ─── Admin member update helpers ─────────────────────────────────────────────
+
+export async function updateMemberForAdmin(
+  uid: string,
+  memberId: string,
+  input: {
+    role?: UserRole;
+    position?: string;
+    organizationId?: string | null;
+    organizationName?: string;
+    committeeId?: string | null;
+    committeeName?: string;
+  }
+): Promise<void> {
+  await requireAdmin(uid);
+  const ref = firestore.collection("users").doc(memberId);
+  if (!(await ref.get()).exists) throw new AppError("Member was not found.", 404);
+
+  const update: Record<string, unknown> = {};
+  if (input.role !== undefined) update.role = input.role;
+  if (input.position !== undefined) update.position = input.position.trim();
+  if ("organizationId" in input) update.organizationId = input.organizationId ?? null;
+  if (input.organizationName !== undefined) update.organizationName = input.organizationName;
+  if ("committeeId" in input) update.committeeId = input.committeeId ?? null;
+  if (input.committeeName !== undefined) update.committeeName = input.committeeName;
+
+  await ref.update(update);
+}
+
+export async function bulkUpdateMemberRolesForAdmin(
+  uid: string,
+  memberIds: string[],
+  role: UserRole
+): Promise<void> {
+  await requireAdmin(uid);
+  if (memberIds.length === 0) return;
+
+  const batch = firestore.batch();
+  for (const memberId of memberIds) {
+    batch.update(firestore.collection("users").doc(memberId), { role });
+  }
+  await batch.commit();
+}
+
+// ─── Audit logs helpers ───────────────────────────────────────────────────────
+
+type AuditLogEntry = Record<string, unknown>;
+
+function normalizeAuditLog(id: string, data: FirebaseFirestore.DocumentData): AuditLogEntry {
+  return {
+    id,
+    orgId: typeof data.orgId === "string" ? data.orgId : null,
+    actorUID: typeof data.actorUID === "string" ? data.actorUID : null,
+    actorName: typeof data.actorName === "string" ? data.actorName : "System",
+    actorRole: typeof data.actorRole === "string" ? data.actorRole : "Automated",
+    action: typeof data.action === "string" ? data.action : "System Event",
+    actionCategory: typeof data.actionCategory === "string" ? data.actionCategory : "Organization",
+    targetType: typeof data.targetType === "string" ? data.targetType : "Entity",
+    targetName: typeof data.targetName === "string" ? data.targetName : null,
+    changes: data.changes ?? null,
+    reason: typeof data.reason === "string" ? data.reason : null,
+    context: data.context ?? null,
+    metadata: data.metadata ?? null,
+    createdAt: asIsoString(data.createdAt)
+  };
+}
+
+export async function getAuditLogs(uid: string): Promise<AuditLogEntry[]> {
+  await requireAdmin(uid);
+  const snapshot = await firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200).get();
+  return snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+}
+
+export async function watchAuditLogs(
+  uid: string,
+  onData: (logs: AuditLogEntry[]) => void,
+  onError: (error: Error) => void
+): Promise<() => void> {
+  await requireAdmin(uid);
+
+  const unsubscribe = firestore
+    .collection("audit_logs")
+    .orderBy("createdAt", "desc")
+    .limit(200)
+    .onSnapshot(
+      (snapshot) => {
+        try {
+          const logs = snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+          onData(logs);
+        } catch (error) {
+          onError(error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+      (error) => onError(error)
+    );
+
+  return unsubscribe;
+}

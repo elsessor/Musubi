@@ -3,14 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Check,
   CheckSquare,
   Clock3,
-  Filter,
   FolderGit2,
   Mail,
   Search,
-  ShieldCheck,
   Square,
   UserCheck,
   UserCog,
@@ -20,164 +17,49 @@ import {
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useLogout } from "@/hooks/useLogout";
+import {
+  bulkUpdateAdminMembersRole,
+  createAdminMembersStream,
+  updateAdminMember,
+  type AdminMemberRecord
+} from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import type { UserRole } from "@/types/auth";
 import { getDashboardNavItems } from "@/utils/routes";
 
-export type MemberRecord = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  position: string;
-  organization: string;
-  committee: string;
-  inviteStatus: "Active" | "Pending Invite" | "Inactive";
-  joinedDate: string;
-};
-
-const INITIAL_MEMBERS: MemberRecord[] = [
-  {
-    id: "mem-001",
-    name: "Juan Dela Cruz",
-    email: "juan.delacruz@university.edu.ph",
-    role: "Admin",
-    position: "System Administrator",
-    organization: "University Campus",
-    committee: "Executive Board",
-    inviteStatus: "Active",
-    joinedDate: "Jan 15, 2025"
-  },
-  {
-    id: "mem-002",
-    name: "Maria Santos",
-    email: "maria.santos@university.edu.ph",
-    role: "Student Leader",
-    position: "President",
-    organization: "Computer Society",
-    committee: "Executive Committee",
-    inviteStatus: "Active",
-    joinedDate: "Feb 01, 2025"
-  },
-  {
-    id: "mem-003",
-    name: "Alex Rivera",
-    email: "alex.rivera@university.edu.ph",
-    role: "Student Leader",
-    position: "Vice President Internal",
-    organization: "Computer Society",
-    committee: "Events & Logistics",
-    inviteStatus: "Active",
-    joinedDate: "Feb 10, 2025"
-  },
-  {
-    id: "mem-004",
-    name: "Sophia Chen",
-    email: "sophia.chen@university.edu.ph",
-    role: "Organization Member",
-    position: "Logistics Lead",
-    organization: "Engineering Guild",
-    committee: "Events & Logistics",
-    inviteStatus: "Active",
-    joinedDate: "Feb 12, 2025"
-  },
-  {
-    id: "mem-005",
-    name: "Carlos Mendoza",
-    email: "carlos.mendoza@university.edu.ph",
-    role: "Student Leader",
-    position: "Treasurer",
-    organization: "Student Council",
-    committee: "Finance & Sponsorship",
-    inviteStatus: "Pending Invite",
-    joinedDate: "Feb 18, 2025"
-  },
-  {
-    id: "mem-006",
-    name: "Alyssa Gonzales",
-    email: "alyssa.gonzales@university.edu.ph",
-    role: "Organization Member",
-    position: "Media Manager",
-    organization: "Youth Developers Org",
-    committee: "Media & Documentation",
-    inviteStatus: "Active",
-    joinedDate: "Feb 20, 2025"
-  },
-  {
-    id: "mem-007",
-    name: "Gabriel Ramos",
-    email: "gabriel.ramos@university.edu.ph",
-    role: "Organization Member",
-    position: "Member",
-    organization: "Computer Society",
-    committee: "Unassigned",
-    inviteStatus: "Pending Invite",
-    joinedDate: "Feb 22, 2025"
-  },
-  {
-    id: "mem-008",
-    name: "Beatrice Tan",
-    email: "beatrice.tan@university.edu.ph",
-    role: "Student Leader",
-    position: "Secretary General",
-    organization: "Youth Developers Org",
-    committee: "Executive Committee",
-    inviteStatus: "Active",
-    joinedDate: "Mar 01, 2025"
-  },
-  {
-    id: "mem-009",
-    name: "Daniel Kim",
-    email: "daniel.kim@university.edu.ph",
-    role: "Organization Member",
-    position: "Technical Specialist",
-    organization: "Engineering Guild",
-    committee: "Technology & Web",
-    inviteStatus: "Inactive",
-    joinedDate: "Mar 05, 2025"
-  },
-  {
-    id: "mem-010",
-    name: "Patricia Reyes",
-    email: "patricia.reyes@university.edu.ph",
-    role: "Organization Member",
-    position: "Design Officer",
-    organization: "Youth Developers Org",
-    committee: "Media & Documentation",
-    inviteStatus: "Active",
-    joinedDate: "Mar 10, 2025"
-  }
-];
-
-const AVAILABLE_ORGANIZATIONS = [
-  "Computer Society",
-  "Student Council",
-  "Engineering Guild",
-  "Youth Developers Org",
-  "University Campus"
-];
-
-const AVAILABLE_COMMITTEES = [
-  "Executive Board",
-  "Executive Committee",
-  "Events & Logistics",
-  "Finance & Sponsorship",
-  "Media & Documentation",
-  "Technology & Web",
-  "Unassigned"
-];
+export type MemberRecord = AdminMemberRecord;
 
 const AVAILABLE_ROLES: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
+
+type OrganizationOption = {
+  id: string;
+  name: string;
+};
+
+type CommitteeOption = {
+  id: string;
+  name: string;
+  organizationId: string | null;
+};
+
+const EMPTY_COMMITTEE = "Unassigned";
+const UNASSIGNED_ORGANIZATION = "Unassigned";
+const CAMPUS_ORGANIZATION = "University Campus";
 
 export default function AdminMembersPage() {
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const authLoading = useAuthStore((state) => state.loading);
   const logout = useLogout();
   const showToast = useToastStore((state) => state.showToast);
 
-  const [members, setMembers] = useState<MemberRecord[]>(INITIAL_MEMBERS);
+  const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [committees, setCommittees] = useState<CommitteeOption[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [orgFilter, setOrgFilter] = useState<string>("all");
@@ -198,6 +80,64 @@ export default function AdminMembersPage() {
     }
   }, [authLoading, profile, router]);
 
+  useEffect(() => {
+    if (authLoading || profile?.role !== "Admin" || !firebaseUser) {
+      return;
+    }
+
+    let isMounted = true;
+    let closeStream: (() => void) | null = null;
+    setMembersLoading(true);
+    setMembersError("");
+
+    void createAdminMembersStream(firebaseUser, {
+      onData: (directory) => {
+        if (!isMounted) return;
+        setMembers(directory.members);
+        setOrganizations(directory.organizations);
+        setCommittees(directory.committees);
+        setMembersError("");
+        setMembersLoading(false);
+      },
+      onError: () => {
+        if (!isMounted) return;
+        setMembersLoading(false);
+        setMembersError("Live member connection was interrupted. Refresh the page if it does not reconnect.");
+      }
+    })
+      .then((close) => {
+        closeStream = close;
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setMembersLoading(false);
+        setMembersError("Unable to load live member data from Firebase.");
+      });
+
+    return () => {
+      isMounted = false;
+      closeStream?.();
+    };
+  }, [authLoading, firebaseUser, profile?.role]);
+
+  const organizationOptions = useMemo(
+    () => [
+      { id: "__campus__", name: CAMPUS_ORGANIZATION },
+      { id: "__unassigned_org__", name: UNASSIGNED_ORGANIZATION },
+      ...organizations
+    ],
+    [organizations]
+  );
+
+  const committeeOptions = useMemo(
+    () => [{ id: "__unassigned__", name: EMPTY_COMMITTEE, organizationId: null }, ...committees],
+    [committees]
+  );
+
+  useEffect(() => {
+    setSelectedIds((currentIds) => currentIds.filter((id) => members.some((member) => member.id === id)));
+  }, [members]);
+
   const filteredMembers = useMemo(() => {
     return members.filter((member) => {
       const matchesSearch =
@@ -207,8 +147,15 @@ export default function AdminMembersPage() {
         member.position.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesRole = roleFilter === "all" || member.role === roleFilter;
-      const matchesOrg = orgFilter === "all" || member.organization === orgFilter;
-      const matchesCommittee = committeeFilter === "all" || member.committee === committeeFilter;
+      const matchesOrg =
+        orgFilter === "all" ||
+        member.organizationId === orgFilter ||
+        (orgFilter === "__campus__" && member.organization === CAMPUS_ORGANIZATION) ||
+        (orgFilter === "__unassigned_org__" && member.organization === UNASSIGNED_ORGANIZATION);
+      const matchesCommittee =
+        committeeFilter === "all" ||
+        member.committeeId === committeeFilter ||
+        (committeeFilter === "__unassigned__" && member.committee === EMPTY_COMMITTEE);
       const matchesStatus = statusFilter === "all" || member.inviteStatus === statusFilter;
 
       return matchesSearch && matchesRole && matchesOrg && matchesCommittee && matchesStatus;
@@ -234,45 +181,81 @@ export default function AdminMembersPage() {
   }
 
   // Single Role Change Handler
-  function handleSaveRole(id: string, newRole: UserRole, newPosition: string) {
-    setMembers((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, role: newRole, position: newPosition } : m))
-    );
+  async function handleSaveRole(id: string, newRole: UserRole, newPosition: string) {
+    if (!firebaseUser) return;
     const target = members.find((m) => m.id === id);
-    showToast({
-      title: "Role updated",
-      description: `Updated role for ${target?.name ?? "member"} to ${newRole}.`,
-      tone: "success"
-    });
-    setRoleModalMember(null);
+    try {
+      await updateAdminMember(firebaseUser, id, {
+        role: newRole,
+        position: newPosition
+      });
+      showToast({
+        title: "Role updated",
+        description: `Updated role for ${target?.name ?? "member"} to ${newRole}.`,
+        tone: "success"
+      });
+      setRoleModalMember(null);
+    } catch {
+      showToast({
+        title: "Unable to update role",
+        description: "Firebase rejected the role update. Please check permissions and try again.",
+        tone: "error"
+      });
+    }
   }
 
   // Single Reassign Handler
-  function handleSaveReassign(id: string, newOrg: string, newCommittee: string) {
-    setMembers((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, organization: newOrg, committee: newCommittee } : m))
-    );
+  async function handleSaveReassign(id: string, organizationValue: string, committeeValue: string) {
+    if (!firebaseUser) return;
     const target = members.find((m) => m.id === id);
-    showToast({
-      title: "Assignment updated",
-      description: `Reassigned ${target?.name ?? "member"} to ${newOrg} (${newCommittee}).`,
-      tone: "success"
-    });
-    setReassignModalMember(null);
+    const organizationId = organizationValue.startsWith("__") ? null : organizationValue;
+    const committeeId = committeeValue === "__unassigned__" ? null : committeeValue;
+    const organizationName =
+      organizationOptions.find((organization) => organization.id === organizationValue)?.name ??
+      UNASSIGNED_ORGANIZATION;
+    const committeeName =
+      committeeOptions.find((committee) => committee.id === committeeValue)?.name ?? EMPTY_COMMITTEE;
+    try {
+      await updateAdminMember(firebaseUser, id, {
+        organizationId,
+        organizationName,
+        committeeId,
+        committeeName
+      });
+      showToast({
+        title: "Assignment updated",
+        description: `Reassigned ${target?.name ?? "member"} to ${organizationName} (${committeeName}).`,
+        tone: "success"
+      });
+      setReassignModalMember(null);
+    } catch {
+      showToast({
+        title: "Unable to update assignment",
+        description: "Firebase rejected the reassignment. Please check permissions and try again.",
+        tone: "error"
+      });
+    }
   }
 
   // Bulk Role Change Handler
-  function handleSaveBulkRole(newRole: UserRole) {
-    setMembers((prev) =>
-      prev.map((m) => (selectedIds.includes(m.id) ? { ...m, role: newRole } : m))
-    );
-    showToast({
-      title: "Bulk role update successful",
-      description: `Updated role to ${newRole} for ${selectedIds.length} selected member(s).`,
-      tone: "success"
-    });
-    setBulkRoleModalOpen(false);
-    setSelectedIds([]);
+  async function handleSaveBulkRole(newRole: UserRole) {
+    if (!firebaseUser) return;
+    try {
+      await bulkUpdateAdminMembersRole(firebaseUser, selectedIds, newRole);
+      showToast({
+        title: "Bulk role update successful",
+        description: `Updated role to ${newRole} for ${selectedIds.length} selected member(s).`,
+        tone: "success"
+      });
+      setBulkRoleModalOpen(false);
+      setSelectedIds([]);
+    } catch {
+      showToast({
+        title: "Unable to update selected members",
+        description: "Firebase rejected the bulk role update. Please try again.",
+        tone: "error"
+      });
+    }
   }
 
   if (authLoading || !profile || profile.role !== "Admin") {
@@ -428,9 +411,9 @@ export default function AdminMembersPage() {
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
               >
                 <option value="all">All Organizations</option>
-                {AVAILABLE_ORGANIZATIONS.map((org) => (
-                  <option key={org} value={org}>
-                    {org}
+                {organizationOptions.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
                   </option>
                 ))}
               </select>
@@ -441,9 +424,9 @@ export default function AdminMembersPage() {
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
               >
                 <option value="all">All Committees</option>
-                {AVAILABLE_COMMITTEES.map((comm) => (
-                  <option key={comm} value={comm}>
-                    {comm}
+                {committeeOptions.map((comm) => (
+                  <option key={comm.id} value={comm.id}>
+                    {comm.name}
                   </option>
                 ))}
               </select>
@@ -461,6 +444,12 @@ export default function AdminMembersPage() {
             </div>
           </div>
         </div>
+
+        {membersError ? (
+          <p className="rounded-xl bg-rose-50 p-4 text-sm font-semibold text-rose-700">
+            {membersError}
+          </p>
+        ) : null}
 
         {/* Floating Bulk Action Bar */}
         {selectedIds.length > 0 ? (
@@ -522,7 +511,13 @@ export default function AdminMembersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm font-medium">
-                {filteredMembers.length ? (
+                {membersLoading ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-16 text-center text-slate-500">
+                      Loading live members from Firebase...
+                    </td>
+                  </tr>
+                ) : filteredMembers.length ? (
                   filteredMembers.map((member) => {
                     const isChecked = selectedIds.includes(member.id);
                     return (
@@ -638,8 +633,10 @@ export default function AdminMembersPage() {
       {/* Reassign Committee / Org Modal */}
       {reassignModalMember ? (
         <ReassignModal
+          committees={committeeOptions}
           member={reassignModalMember}
           onClose={() => setReassignModalMember(null)}
+          organizations={organizationOptions}
           onSave={handleSaveReassign}
         />
       ) : null}
@@ -793,16 +790,40 @@ function ChangeRoleModal({
 
 /* Reassign Committee & Org Modal Component */
 function ReassignModal({
+  committees,
   member,
   onClose,
+  organizations,
   onSave
 }: {
+  committees: CommitteeOption[];
   member: MemberRecord;
   onClose: () => void;
-  onSave: (id: string, newOrg: string, newCommittee: string) => void;
+  organizations: OrganizationOption[];
+  onSave: (id: string, organizationValue: string, committeeValue: string) => void;
 }) {
-  const [organization, setOrganization] = useState(member.organization);
-  const [committee, setCommittee] = useState(member.committee);
+  const initialOrganizationId =
+    member.organizationId ??
+    (member.organization === CAMPUS_ORGANIZATION ? "__campus__" : "__unassigned_org__");
+  const [organizationId, setOrganizationId] = useState(initialOrganizationId);
+  const [committeeId, setCommitteeId] = useState(member.committeeId ?? "__unassigned__");
+  const visibleCommittees = committees.filter(
+    (committee) =>
+      committee.id === "__unassigned__" ||
+      !committee.organizationId ||
+      committee.organizationId === organizationId
+  );
+
+  function handleOrganizationChange(nextOrganizationId: string) {
+    setOrganizationId(nextOrganizationId);
+    const committeeBelongsToOrganization = visibleCommittees.some(
+      (committee) => committee.id === committeeId && committee.organizationId === nextOrganizationId
+    );
+
+    if (!committeeBelongsToOrganization) {
+      setCommitteeId("__unassigned__");
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 animate-in fade-in">
@@ -824,13 +845,13 @@ function ReassignModal({
               Organization
             </label>
             <select
-              value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
+              value={organizationId}
+              onChange={(e) => handleOrganizationChange(e.target.value)}
               className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
             >
-              {AVAILABLE_ORGANIZATIONS.map((org) => (
-                <option key={org} value={org}>
-                  {org}
+              {organizations.map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
                 </option>
               ))}
             </select>
@@ -841,13 +862,13 @@ function ReassignModal({
               Committee Placement
             </label>
             <select
-              value={committee}
-              onChange={(e) => setCommittee(e.target.value)}
+              value={committeeId}
+              onChange={(e) => setCommitteeId(e.target.value)}
               className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
             >
-              {AVAILABLE_COMMITTEES.map((comm) => (
-                <option key={comm} value={comm}>
-                  {comm}
+              {visibleCommittees.map((comm) => (
+                <option key={comm.id} value={comm.id}>
+                  {comm.name}
                 </option>
               ))}
             </select>
@@ -864,7 +885,7 @@ function ReassignModal({
           </button>
           <button
             type="button"
-            onClick={() => onSave(member.id, organization, committee)}
+            onClick={() => onSave(member.id, organizationId, committeeId)}
             className="h-11 flex-1 rounded-xl bg-[#2868ed] text-sm font-extrabold text-white hover:bg-blue-700 transition"
           >
             Save Reassignment
