@@ -108,6 +108,8 @@ function normalizeAdminInviteStatus(value: unknown): AdminMemberRecord["inviteSt
   return value === "Active" || value === "Pending Invite" || value === "Inactive" ? value : "Active";
 }
 
+// ── Session / auth ────────────────────────────────────────────────────────────
+
 export async function exchangeFirebaseSession(user: User): Promise<BackendLoginResponse> {
   const idToken = await user.getIdToken();
 
@@ -167,6 +169,8 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
   };
 }
 
+// ── Shared HTTP helper ────────────────────────────────────────────────────────
+
 function normalizeOrganization(value: unknown): OrganizationDirectoryOption | null {
   if (!isRecord(value) || typeof value.id !== "string") {
     return null;
@@ -206,6 +210,8 @@ async function organizationRequest<T>(user: User, path: string, init?: RequestIn
   return response.json() as Promise<T>;
 }
 
+// ── Organization directory ────────────────────────────────────────────────────
+
 export async function getOrganizationDirectory(user: User): Promise<OrganizationDirectoryOption[]> {
   const response = await fetch(`${API_BASE_URL}/auth/organizations/directory`, {
     headers: getAuthHeaders(await user.getIdToken())
@@ -220,6 +226,8 @@ export async function getOrganizationDirectory(user: User): Promise<Organization
     ? data.organizations.map(normalizeOrganization).filter((organization): organization is OrganizationDirectoryOption => organization !== null)
     : [];
 }
+
+// ── Onboarding ────────────────────────────────────────────────────────────────
 
 export async function completeOnboarding(user: User, payload: {
   role: "Student Leader" | "Organization Member";
@@ -250,6 +258,8 @@ export async function completeOnboarding(user: User, payload: {
 
   return response.json() as Promise<BackendLoginResponse>;
 }
+
+// ── Organizations ─────────────────────────────────────────────────────────────
 
 export function joinOrganization(user: User, organizationId: string) {
   return organizationRequest<{ request: { id: string; status: "pending" } }>(user, "/auth/organizations/join", {
@@ -367,8 +377,38 @@ export function updateOrganization(
   });
 }
 
-export async function getOrganizationRequests(user: User) {
-  return organizationRequest<{ requests?: unknown[] }>(user, "/auth/org-requests");
+// ── Organization requests (admin) ─────────────────────────────────────────────
+
+export async function getOrganizationRequests(user: User): Promise<{
+  id: string;
+  orgName: string;
+  orgType: string;
+  description: string;
+  status: string;
+  rejectionReason: string | null;
+  submittedAt: string | null;
+  requestedBy: { uid: string; name: string; email: string };
+}[]> {
+  const data = await organizationRequest<{ requests?: unknown[] }>(user, "/auth/org-requests");
+  const raw = Array.isArray(data.requests) ? data.requests : [];
+  return raw.map((item) => {
+    const r = isRecord(item) ? item : {};
+    const requestedBy = isRecord(r.requestedBy) ? r.requestedBy : {};
+    return {
+      id: typeof r.id === "string" ? r.id : "",
+      orgName: typeof r.orgName === "string" ? r.orgName : "Untitled",
+      orgType: typeof r.orgType === "string" ? r.orgType : "Unspecified",
+      description: typeof r.description === "string" ? r.description : "",
+      status: typeof r.status === "string" ? r.status : "pending",
+      rejectionReason: typeof r.rejectionReason === "string" ? r.rejectionReason : null,
+      submittedAt: typeof r.submittedAt === "string" ? r.submittedAt : null,
+      requestedBy: {
+        uid: typeof requestedBy.uid === "string" ? requestedBy.uid : "",
+        name: typeof requestedBy.name === "string" ? requestedBy.name : "Unknown",
+        email: typeof requestedBy.email === "string" ? requestedBy.email : ""
+      }
+    };
+  });
 }
 
 export function reviewOrganizationRequest(
@@ -382,6 +422,8 @@ export function reviewOrganizationRequest(
     body: JSON.stringify({ status, rejectionReason })
   });
 }
+
+// ── Admin member directory ────────────────────────────────────────────────────
 
 function normalizeAdminMemberDirectory(value: unknown): AdminMemberDirectory {
   const record = isRecord(value) ? value : {};
@@ -448,9 +490,7 @@ export async function createAdminMembersStream(
     callbacks.onData(normalizeAdminMemberDirectory(JSON.parse(event.data)));
   });
 
-  // The native "error" event fires on both transient connection drops (which
-  // EventSource auto-retries) and permanent failures. Only call onError when
-  // the stream is permanently closed; ignore reconnect cycles.
+  // Only call onError when permanently closed — transient reconnects are readyState CONNECTING
   stream.addEventListener("error", () => {
     if (stream.readyState === EventSource.CLOSED) {
       callbacks.onError();
