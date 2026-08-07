@@ -44,3 +44,30 @@ export type GeneratedTask = {
   matchScore: number; // 0–100
   confirmed: boolean;
 };
+
+// ── Subtask review & goal draft models (MSB-FE-013) ───────────────────────────
+
+export type Subtask = {
+  id: string;
+  title: string;
+  description: string;
+  requiredSkills: string[];
+  estimatedDays: number;
+  isLeaderOnly: boolean;
+  isAiGenerated: boolean;
+  aiMetadata?: {
+    confidenceScore: number; // e.g. 88 for 88%
+  };
+  priority: TaskPriority;
+  assigneeName?: string;
+  status?: TaskStatus;
+};
+
+export type GoalDraft = {
+  id: string;
+  eventName: string;
+  description: string;
+  status: "Draft" | "Active" | "Completed";
+  subtasks: Subtask[];
+};
+

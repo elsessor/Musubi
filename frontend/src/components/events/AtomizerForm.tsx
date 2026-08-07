@@ -1,16 +1,17 @@
 "use client";
 
-import { AlertTriangle, Calendar, CheckCircle2, Loader2, User, Zap } from "lucide-react";
+import { AlertTriangle, Calendar, CheckCircle2, Loader2, Sparkles, User, Zap } from "lucide-react";
 import { useState } from "react";
-import type { Event, GeneratedTask, TaskPriority, TaskStatus } from "./types";
+import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
+import type { Event, GoalDraft, Subtask, TaskPriority, TaskStatus } from "./types";
 import { atomizeGoal } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 
 const priorityConfig: Record<TaskPriority, { classes: string }> = {
-  Low:      { classes: "bg-slate-100 text-slate-600 ring-slate-200" },
-  Medium:   { classes: "bg-blue-50 text-blue-600 ring-blue-200" },
-  High:     { classes: "bg-amber-50 text-amber-700 ring-amber-200" },
-  Critical: { classes: "bg-rose-50 text-rose-600 ring-rose-200" }
+  Low: { classes: "bg-[#f1f5f9] text-[#475569]" },
+  Medium: { classes: "bg-[#dbeafe] text-[#1d4ed8]" },
+  High: { classes: "bg-[#ffedd5] text-[#c2410c]" },
+  Critical: { classes: "bg-[#ffe4e6] text-[#e11d48]" }
 };
 
 const STATUS_OPTIONS: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
@@ -26,8 +27,7 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
   const [goalDescription, setGoalDescription] = useState("");
   const [isAtomizing, setIsAtomizing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [generatedTasks, setGeneratedTasks] = useState<GeneratedTask[]>([]);
-  const [tasks, setTasks] = useState<GeneratedTask[]>([]);
+  const [activeGoalDraft, setActiveGoalDraft] = useState<GoalDraft | null>(null);
 
   async function handleAtomize() {
     if (!goalDescription.trim()) return;
@@ -38,11 +38,10 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
 
     setIsAtomizing(true);
     setErrorMsg("");
-    setGeneratedTasks([]);
 
     try {
       const selectedEvent = events.find((e) => e.id === selectedEventId);
-      const eventName = selectedEvent ? selectedEvent.title : "Event Goal";
+      const eventName = selectedEvent ? selectedEvent.title : "Culture Week";
 
       const data = await atomizeGoal(firebaseUser, {
         eventName,
@@ -50,26 +49,34 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
         defaultStatus
       });
 
-      const today = new Date();
-      const formattedTasks: GeneratedTask[] = data.tasks.map((item, idx) => {
-        const dueDate = new Date(today);
-        dueDate.setDate(dueDate.getDate() + (item.dueDateOffsetDays || 3));
-        const dateStr = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(dueDate);
+      const generatedSubtasks: Subtask[] = data.tasks.map((item, idx) => ({
+        id: `subtask-ai-${Date.now()}-${idx}`,
+        title: item.title,
+        description: `Actionable subtask breakdown for ${eventName}. Priority: ${item.priority}. Suggested lead: ${item.assigneeName}.`,
+        assigneeName: item.assigneeName || (idx % 2 === 0 ? "Luis Garcia" : "Beatrice Lim"),
+        requiredSkills:
+          idx % 3 === 0
+            ? ["Logistics", "Permits"]
+            : idx % 3 === 1
+              ? ["Design", "Promotions"]
+              : ["Coordination", "Ticketing"],
+        estimatedDays: item.dueDateOffsetDays || 3,
+        isLeaderOnly: idx === 0,
+        isAiGenerated: true,
+        aiMetadata: { confidenceScore: item.matchScore },
+        priority: item.priority,
+        status: defaultStatus
+      }));
 
-        return {
-          id: `gen-${Date.now()}-${idx}`,
-          title: item.title,
-          priority: item.priority,
-          assigneeName: item.assigneeName,
-          dueDate: dateStr,
-          status: defaultStatus,
-          matchScore: item.matchScore,
-          confirmed: false
-        };
-      });
+      const draft: GoalDraft = {
+        id: `draft-${Date.now()}`,
+        eventName,
+        description: goalDescription.trim(),
+        status: "Draft",
+        subtasks: generatedSubtasks
+      };
 
-      setGeneratedTasks(formattedTasks);
-      setTasks(formattedTasks);
+      setActiveGoalDraft(draft);
     } catch (err: unknown) {
       console.error("[Atomizer] Error running Genkit flow:", err);
       setErrorMsg(err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.");
@@ -78,53 +85,117 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
     }
   }
 
-  function confirmTask(id: string) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, confirmed: true } : t)));
+  function handleDemoReview() {
+    const selectedEvent = events.find((e) => e.id === selectedEventId);
+    const eventName = selectedEvent ? selectedEvent.title : "Culture Week";
+
+    const demoSubtasks: Subtask[] = [
+      {
+        id: "st-demo-1",
+        title: "Book venue and secure event permits",
+        description: "Reserve main campus hall, obtain safety clearance, and secure sound permits.",
+        assigneeName: "Luis Garcia",
+        requiredSkills: ["Logistics", "Permits", "Administration"],
+        estimatedDays: 4,
+        isLeaderOnly: true,
+        isAiGenerated: true,
+        aiMetadata: { confidenceScore: 95 },
+        priority: "High"
+      },
+      {
+        id: "st-demo-2",
+        title: "Design promotional materials and social assets",
+        description: "Create publicity banners, social media cards, and campus flyers.",
+        assigneeName: "Beatrice Lim",
+        requiredSkills: ["Graphics Design", "Marketing"],
+        estimatedDays: 3,
+        isLeaderOnly: false,
+        isAiGenerated: true,
+        aiMetadata: { confidenceScore: 76 },
+        priority: "Medium"
+      },
+      {
+        id: "st-demo-3",
+        title: "Set up online registration and ticketing",
+        description: "Configure participant sign-up forms, pass distribution, and QR check-in.",
+        assigneeName: "Marco Dela Cruz",
+        requiredSkills: ["Tech Support", "Registration"],
+        estimatedDays: 2,
+        isLeaderOnly: false,
+        isAiGenerated: true,
+        aiMetadata: { confidenceScore: 88 },
+        priority: "High"
+      },
+      {
+        id: "st-demo-4",
+        title: "Coordinate department booth sign-ups",
+        description: "Organize booth assignments, power outlets, and table requisitions.",
+        assigneeName: "Ana Reyes",
+        requiredSkills: ["Coordination", "Vendor Mgmt"],
+        estimatedDays: 3,
+        isLeaderOnly: true,
+        isAiGenerated: false,
+        priority: "Medium"
+      }
+    ];
+
+    setActiveGoalDraft({
+      id: `draft-demo-${Date.now()}`,
+      eventName,
+      description: goalDescription.trim() || "Organize campus culture week with booth sign-ups and performances.",
+      status: "Draft",
+      subtasks: demoSubtasks
+    });
   }
 
-  function editTask(id: string) {
-    console.log("edit task", id);
+  // If a goal draft is active, show SubtaskReviewScreen in Old UI style
+  if (activeGoalDraft) {
+    return (
+      <SubtaskReviewScreen
+        goalDraft={activeGoalDraft}
+        onBack={() => setActiveGoalDraft(null)}
+        onPublishGoal={(publishedGoal) => {
+          setActiveGoalDraft(publishedGoal);
+        }}
+      />
+    );
   }
-
-  const confirmedCount = tasks.filter((t) => t.confirmed).length;
-  const selectedEvent = events.find((e) => e.id === selectedEventId);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 bg-[#f4f7fb] p-6 rounded-3xl min-h-screen">
       {/* Header */}
-      <div className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow">
+      <div className="flex items-start gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm">
           <Zap size={18} />
         </div>
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold text-slate-900">AI Task Atomizer</h2>
-            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-2.5 py-0.5 text-xs font-bold text-[#d97706]">
               <Zap size={10} />
               AI Powered
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Describe an event or task goal and the AI will break it into specific, actionable tasks with suggested assignees, deadlines, and priorities.
+            Describe an event macro-goal and Genkit AI will generate subtask recommendations. Leaders review, edit, add, or publish subtasks.
           </p>
         </div>
       </div>
 
       {/* Form */}
-      <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           {/* Target Event */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
                 Target Event <span className="text-rose-500">*</span>
               </label>
-              <button type="button" className="text-xs font-medium text-blue-600 hover:underline">+ Create from Description</button>
             </div>
             <select
               value={selectedEventId}
               onChange={(e) => setSelectedEventId(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-slate-800 focus:bg-white focus:border-blue-400 focus:outline-none"
             >
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
@@ -137,13 +208,14 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
           {/* Default Task Status */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Default Task Status</label>
-              <button type="button" className="text-xs font-medium text-slate-400 hover:text-slate-600">⚙ Manage</button>
+              <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                Default Task Status
+              </label>
             </div>
             <select
               value={defaultStatus}
               onChange={(e) => setDefaultStatus(e.target.value as TaskStatus)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-slate-800 focus:bg-white focus:border-blue-400 focus:outline-none"
             >
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>{s}</option>
@@ -154,7 +226,7 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
 
         {/* Goal description */}
         <div className="mt-5">
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
             Goal Description
           </label>
           <textarea
@@ -162,170 +234,33 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
             onChange={(e) => setGoalDescription(e.target.value)}
             placeholder='e.g. "Organize a campus-wide culture week with booths, performances, and food stalls for 500+ attendees."'
             rows={4}
-            className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] p-4 text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-blue-400 focus:outline-none"
           />
         </div>
 
         {errorMsg && (
-          <div className="mt-3 rounded-xl bg-rose-50 px-4 py-2.5 text-xs text-rose-600 border border-rose-200">
+          <div className="mt-3 rounded-2xl bg-rose-50 p-4 text-xs font-semibold text-rose-600 border border-rose-200">
             {errorMsg}
           </div>
         )}
 
-        {/* Atomize button */}
-        <div className="mt-4 flex items-center gap-3">
+        {/* Atomize & Demo buttons */}
+        <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={handleAtomize}
             disabled={isAtomizing || !goalDescription.trim()}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-2 rounded-2xl bg-[#1e3a5f] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#152943] disabled:opacity-60"
           >
             {isAtomizing ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (
               <Zap size={16} />
             )}
-            {isAtomizing ? "Atomizing with Genkit..." : "Atomize"}
-          </button>
-
-          {generatedTasks.length > 0 && !isAtomizing && (
-            <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
-              <CheckCircle2 size={13} />
-              {generatedTasks.length} tasks generated
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Work breakdown */}
-      {tasks.length > 0 && (
-        <div>
-          <div className="mb-3 flex items-center gap-3">
-            <h3 className="text-sm font-bold text-slate-900">Work Breakdown</h3>
-            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-              AI Generated
-            </span>
-            {selectedEvent && (
-              <span className="text-xs text-slate-500">for &quot;{selectedEvent.title}&quot;</span>
-            )}
-            <span className="text-xs text-slate-400">
-              · {confirmedCount} confirmed · Review each task before adding to event
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {tasks.map((task) => (
-              <GeneratedTaskCard
-                key={task.id}
-                task={task}
-                onConfirm={() => confirmTask(task.id)}
-                onEdit={() => editTask(task.id)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Generated Task Card ───────────────────────────────────────────────────────
-
-type GeneratedTaskCardProps = {
-  task: GeneratedTask;
-  onConfirm: () => void;
-  onEdit: () => void;
-};
-
-function GeneratedTaskCard({ task, onConfirm, onEdit }: GeneratedTaskCardProps) {
-  const pCfg = priorityConfig[task.priority];
-  const scoreColor =
-    task.matchScore >= 80 ? "text-emerald-600" :
-    task.matchScore >= 60 ? "text-amber-600" :
-    "text-rose-500";
-  const scoreBar =
-    task.matchScore >= 80 ? "bg-emerald-400" :
-    task.matchScore >= 60 ? "bg-amber-400" :
-    "bg-rose-400";
-
-  return (
-    <div className={`flex flex-col rounded-2xl border bg-white p-5 shadow-sm transition-all ${
-      task.confirmed
-        ? "border-emerald-300 ring-1 ring-emerald-200"
-        : "border-amber-300 ring-1 ring-amber-100"
-    }`}>
-      {/* Header: Needs Review / Confirmed + priority */}
-      <div className="mb-3 flex items-center justify-between">
-        {task.confirmed ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-            <CheckCircle2 size={11} />
-            Confirmed
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
-            <AlertTriangle size={11} />
-            Needs Review
-          </span>
-        )}
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${pCfg.classes}`}>
-          {task.priority}
-        </span>
-      </div>
-
-      {/* Title */}
-      <h4 className="text-sm font-semibold text-slate-900">{task.title}</h4>
-
-      {/* Assignee + date */}
-      <div className="mt-2 flex items-center gap-4 text-xs text-slate-500">
-        <span className="flex items-center gap-1">
-          <User size={11} />
-          {task.assigneeName}
-        </span>
-        <span className="flex items-center gap-1">
-          <Calendar size={11} />
-          {task.dueDate}
-        </span>
-      </div>
-
-      {/* Status row */}
-      <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
-        <span className="text-slate-500">Status:</span>
-        <span className="font-medium text-slate-700">{task.status}</span>
-      </div>
-
-      {/* AI match score */}
-      <div className="mt-3">
-        <div className="mb-1 flex items-center justify-between text-xs">
-          <span className="text-slate-500">AI Match Score</span>
-          <span className={`font-bold ${scoreColor}`}>{task.matchScore}%</span>
-        </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-          <div
-            className={`h-full rounded-full transition-all ${scoreBar}`}
-            style={{ width: `${task.matchScore}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Action buttons */}
-      {!task.confirmed && (
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onEdit}
-            className="rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
-          >
-            Confirm
+            {isAtomizing ? "Atomizing with Genkit..." : "Atomize Goal with AI"}
           </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
