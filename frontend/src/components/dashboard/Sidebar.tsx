@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   BarChart2,
@@ -130,6 +130,7 @@ export function Sidebar({
                     </span>
                   ) : null}
                 </a>
+
               </li>
             );
           })}
