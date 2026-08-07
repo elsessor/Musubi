@@ -12,6 +12,8 @@ export function errorMiddleware(
   response: Response,
   _next: NextFunction
 ) {
+  console.error("[ServerError]:", error);
+
   if (error instanceof AppError) {
     response.status(error.statusCode).json({
       message: error.message
@@ -19,7 +21,9 @@ export function errorMiddleware(
     return;
   }
 
+  const message = error instanceof Error ? error.message : "Internal server error.";
+
   response.status(500).json({
-    message: "Internal server error."
+    message
   });
 }

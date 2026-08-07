@@ -10,11 +10,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@genkit-ai/googleai": "^1.28.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.1",
     "firebase-admin": "^13.0.1",
-    "jsonwebtoken": "^9.0.2"
+    "genkit": "^1.40.1",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

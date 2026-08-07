@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import { firebaseAdmin, firebaseAuth, firestore } from "../config/firebase.js";
 import type { FirestoreUser, JwtPayload, LoginResponse, UserRole } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
+import { writeAuditLog } from "../utils/auditLog.js";
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
 const validRoles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -84,6 +85,17 @@ export async function loginWithFirebaseToken(idToken: string): Promise<LoginResp
     organizationId: user.organizationId
   };
 
+  writeAuditLog({
+    actorUID: user.uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "User signed in",
+    actionCategory: "Security & Access",
+    targetType: "User",
+    targetName: user.email,
+    orgId: user.organizationId
+  });
+
   return {
     token: createAppJwt(payload),
     role: user.role,
@@ -159,6 +171,17 @@ export async function reviewOrganizationRequest(uid: string, requestId: string, 
       organizationConfig: {}, createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   }
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: status === "approved" ? "Organization request approved" : "Organization request rejected",
+    actionCategory: "Organization",
+    targetType: "Organization Request",
+    targetName: typeof request.orgName === "string" ? request.orgName : requestId,
+    reason: status === "rejected" ? (rejectionReason ?? undefined) : undefined,
+    changes: { field: "status", from: "pending", to: status }
+  });
 }
 
 export async function getOrganizationForUser(uid: string, organizationId: string) {
@@ -202,11 +225,22 @@ export async function joinOrganization(uid: string, organizationId: string) {
   if (!organization.exists || normalizeOrganization(organization.id, organization.data() ?? {}).status !== "active") {
     throw new AppError("This organization is not available to join.", 404);
   }
+  const orgName = typeof organization.data()?.name === "string" ? organization.data()!.name : "Unknown Organization";
   const user = await getCurrentUser(uid);
   if (user.organizationId === organizationId) throw new AppError("You already belong to this organization.", 409);
   const existing = await firestore.collection("organization_join_requests").where("organizationId", "==", organizationId).where("requestedByUID", "==", uid).where("status", "==", "pending").limit(1).get();
   if (!existing.empty) throw new AppError("You already have a pending request for this organization.", 409);
   const request = await firestore.collection("organization_join_requests").add({ organizationId, requestedByUID: uid, name: user.fullName, email: user.email, position: user.position, skills: user.skills, status: "pending", submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "Submitted join request to organization",
+    actionCategory: "Organization",
+    targetType: "Organization",
+    targetName: orgName,
+    orgId: organizationId
+  });
   return { id: request.id, status: "pending" as const };
 }
 
@@ -234,6 +268,17 @@ export async function reviewOrganizationJoinRequest(uid: string, organizationId:
   if (!snapshot.exists || request?.organizationId !== organizationId || request.status !== "pending" || typeof request.requestedByUID !== "string") throw new AppError("Join request was not found.", 404);
   await ref.update({ status, reviewedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), reviewedByUID: uid });
   if (status === "accepted") await firestore.collection("users").doc(request.requestedByUID).set({ organizationId }, { merge: true });
+  writeAuditLog({
+    actorUID: uid,
+    actorName: leader.fullName,
+    actorRole: leader.role,
+    action: status === "accepted" ? "Member join request accepted" : "Member join request rejected",
+    actionCategory: "Organization",
+    targetType: "User",
+    targetName: typeof request?.name === "string" ? request.name : request?.requestedByUID,
+    orgId: organizationId,
+    changes: { field: "status", from: "pending", to: status }
+  });
 }
 
 export async function createOrganization(uid: string, input: { name: string; type: string; description: string }) {
@@ -248,6 +293,16 @@ export async function createOrganization(uid: string, input: { name: string; typ
   await firestore.collection("org_requests").add({
     organizationId: ref.id, orgName: input.name.trim(), orgType: input.type.trim(), description: input.description.trim(), status: "pending", rejectionReason: null,
     submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), requestedBy: { uid, name: user.fullName, email: user.email }
+  });
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "Organization created and submitted for approval",
+    actionCategory: "Organization",
+    targetType: "Organization",
+    targetName: input.name.trim(),
+    orgId: ref.id
   });
   return { organization: normalizeOrganization(ref.id, (await ref.get()).data() ?? {}), user: await getCurrentUser(uid) };
 }
@@ -320,9 +375,11 @@ export async function getOrganizationManagementDetail(uid: string, organizationI
 }
 
 export async function updateOrganizationForAdmin(uid: string, organizationId: string, input: { name?: string; type?: string; description?: string; setupStatus?: string }) {
-  await requireAdmin(uid);
+  const admin = await getCurrentUser(uid);
+  if (admin.role !== "Admin") throw new AppError("Administrator access is required.", 403);
   const ref = firestore.collection("organizations").doc(organizationId);
-  if (!(await ref.get()).exists) throw new AppError("Organization was not found.", 404);
+  const before = await ref.get();
+  if (!before.exists) throw new AppError("Organization was not found.", 404);
   const update: Record<string, unknown> = { updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() };
   if (input.name !== undefined) update.name = input.name.trim();
   if (input.type !== undefined) update.type = input.type.trim();
@@ -330,6 +387,31 @@ export async function updateOrganizationForAdmin(uid: string, organizationId: st
   if (input.setupStatus !== undefined) update.setupStatus = input.setupStatus;
   await ref.update(update);
   const updated = await ref.get();
+  const orgName = typeof before.data()?.name === "string" ? before.data()!.name : organizationId;
+  if (input.setupStatus !== undefined) {
+    writeAuditLog({
+      actorUID: uid,
+      actorName: admin.fullName,
+      actorRole: admin.role,
+      action: "Organization status updated",
+      actionCategory: "Organization",
+      targetType: "Organization",
+      targetName: orgName,
+      orgId: organizationId,
+      changes: { field: "setupStatus", from: before.data()?.setupStatus ?? before.data()?.status, to: input.setupStatus }
+    });
+  } else {
+    writeAuditLog({
+      actorUID: uid,
+      actorName: admin.fullName,
+      actorRole: admin.role,
+      action: "Organization details updated by administrator",
+      actionCategory: "Organization",
+      targetType: "Organization",
+      targetName: orgName,
+      orgId: organizationId
+    });
+  }
   return normalizeOrganization(updated.id, updated.data() ?? {});
 }
 
@@ -368,5 +450,266 @@ export async function completeUserOnboarding(
   }
 
   const user = await getCurrentUser(uid);
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "User completed onboarding",
+    actionCategory: "User Management",
+    targetType: "User",
+    targetName: user.email,
+    orgId: user.organizationId,
+    changes: { field: "role", from: "new user", to: input.role }
+  });
   return { token: createAppJwt({ uid: user.uid, email: user.email, role: user.role, organizationId: user.organizationId }), role: user.role, user };
+}
+
+// ─── Admin member directory helpers ────────────────────────────────────────
+
+type AdminMemberEntry = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  position: string;
+  organizationId: string | null;
+  organization: string;
+  committeeId: string | null;
+  committee: string;
+  inviteStatus: "Active" | "Pending Invite" | "Inactive";
+  joinedDate: string | null;
+};
+
+type AdminMemberDirectory = {
+  members: AdminMemberEntry[];
+  organizations: { id: string; name: string }[];
+  committees: { id: string; name: string; organizationId: string | null }[];
+};
+
+function asIsoString(value: unknown): string | null {
+  return value && typeof (value as { toDate?: unknown }).toDate === "function"
+    ? ((value as { toDate: () => Date }).toDate()).toISOString()
+    : null;
+}
+
+async function buildAdminMemberDirectory(): Promise<AdminMemberDirectory> {
+  const [usersSnap, orgsSnap] = await Promise.all([
+    firestore.collection("users").get(),
+    firestore.collection("organizations").where("status", "==", "active").get()
+  ]);
+
+  const orgMap = new Map<string, string>();
+  const organizations: { id: string; name: string }[] = [];
+  for (const doc of orgsSnap.docs) {
+    const name = typeof doc.data().name === "string" ? doc.data().name : "Untitled organization";
+    orgMap.set(doc.id, name);
+    organizations.push({ id: doc.id, name });
+  }
+
+  const committeeMap = new Map<string, { id: string; name: string; organizationId: string | null }>();
+  await Promise.all(
+    orgsSnap.docs.map(async (orgDoc) => {
+      const committeeSnap = await orgDoc.ref.collection("committees").get();
+      for (const cDoc of committeeSnap.docs) {
+        const name = typeof cDoc.data().name === "string" ? cDoc.data().name : "Untitled committee";
+        committeeMap.set(cDoc.id, { id: cDoc.id, name, organizationId: orgDoc.id });
+      }
+    })
+  );
+
+  const committees = Array.from(committeeMap.values());
+
+  const members: AdminMemberEntry[] = usersSnap.docs.map((doc) => {
+    const data = doc.data();
+    const role = isUserRole(data.role) ? data.role : DEFAULT_ROLE;
+    const orgId = typeof data.organizationId === "string" ? data.organizationId : null;
+    const committeeId = typeof data.committeeId === "string" ? data.committeeId : null;
+    return {
+      id: doc.id,
+      name: typeof data.fullName === "string" ? data.fullName : "Campus Member",
+      email: typeof data.email === "string" ? data.email : "",
+      role,
+      position: typeof data.position === "string" ? data.position : role,
+      organizationId: orgId,
+      organization: orgId && orgMap.has(orgId) ? orgMap.get(orgId)! : "University Campus",
+      committeeId,
+      committee: committeeId && committeeMap.has(committeeId) ? committeeMap.get(committeeId)!.name : "Unassigned",
+      inviteStatus: data.onboardingCompleted === true ? "Active" : "Pending Invite",
+      joinedDate: asIsoString(data.createdAt)
+    };
+  });
+
+  return { members, organizations, committees };
+}
+
+export async function getAdminMemberDirectory(uid: string): Promise<AdminMemberDirectory> {
+  await requireAdmin(uid);
+  return buildAdminMemberDirectory();
+}
+
+export async function watchAdminMemberDirectory(
+  uid: string,
+  onData: (directory: AdminMemberDirectory) => void,
+  onError: (error: Error) => void
+): Promise<() => void> {
+  await requireAdmin(uid);
+
+  const unsubscribe = firestore.collection("users").onSnapshot(
+    async () => {
+      try {
+        const directory = await buildAdminMemberDirectory();
+        onData(directory);
+      } catch (error) {
+        onError(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    (error) => onError(error)
+  );
+
+  return unsubscribe;
+}
+
+// ─── Admin member update helpers ─────────────────────────────────────────────
+
+export async function updateMemberForAdmin(
+  uid: string,
+  memberId: string,
+  input: {
+    role?: UserRole;
+    position?: string;
+    organizationId?: string | null;
+    organizationName?: string;
+    committeeId?: string | null;
+    committeeName?: string;
+  }
+): Promise<void> {
+  const adminUser = await getCurrentUser(uid);
+  if (adminUser.role !== "Admin") throw new AppError("Administrator access is required.", 403);
+  const ref = firestore.collection("users").doc(memberId);
+  const before = await ref.get();
+  if (!before.exists) throw new AppError("Member was not found.", 404);
+
+  const update: Record<string, unknown> = {};
+  if (input.role !== undefined) update.role = input.role;
+  if (input.position !== undefined) update.position = input.position.trim();
+  if ("organizationId" in input) update.organizationId = input.organizationId ?? null;
+  if (input.organizationName !== undefined) update.organizationName = input.organizationName;
+  if ("committeeId" in input) update.committeeId = input.committeeId ?? null;
+  if (input.committeeName !== undefined) update.committeeName = input.committeeName;
+
+  await ref.update(update);
+
+  const memberName = typeof before.data()?.fullName === "string" ? before.data()!.fullName : memberId;
+  const beforeData = before.data() ?? {};
+
+  if (input.role !== undefined) {
+    writeAuditLog({
+      actorUID: uid,
+      actorName: adminUser.fullName,
+      actorRole: adminUser.role,
+      action: "Member role changed by administrator",
+      actionCategory: "User Management",
+      targetType: "User",
+      targetName: memberName,
+      changes: { field: "role", from: beforeData.role ?? "Unknown", to: input.role }
+    });
+  }
+  if ("organizationId" in input || "committeeId" in input) {
+    writeAuditLog({
+      actorUID: uid,
+      actorName: adminUser.fullName,
+      actorRole: adminUser.role,
+      action: "Member organization or committee reassigned",
+      actionCategory: "Organization",
+      targetType: "User",
+      targetName: memberName,
+      orgId: typeof input.organizationId === "string" ? input.organizationId : null,
+      changes: {
+        organization: { from: beforeData.organizationId ?? null, to: input.organizationId ?? null },
+        committee: { from: beforeData.committeeId ?? null, to: input.committeeId ?? null }
+      }
+    });
+  }
+}
+
+export async function bulkUpdateMemberRolesForAdmin(
+  uid: string,
+  memberIds: string[],
+  role: UserRole
+): Promise<void> {
+  const adminUser = await getCurrentUser(uid);
+  if (adminUser.role !== "Admin") throw new AppError("Administrator access is required.", 403);
+  if (memberIds.length === 0) return;
+
+  const batch = firestore.batch();
+  for (const memberId of memberIds) {
+    batch.update(firestore.collection("users").doc(memberId), { role });
+  }
+  await batch.commit();
+
+  writeAuditLog({
+    actorUID: uid,
+    actorName: adminUser.fullName,
+    actorRole: adminUser.role,
+    action: `Bulk role update: ${memberIds.length} member(s) set to "${role}"`,
+    actionCategory: "User Management",
+    targetType: "Users",
+    targetName: `${memberIds.length} members`,
+    changes: { field: "role", to: role, affectedCount: memberIds.length }
+  });
+}
+
+// ─── Audit logs helpers ───────────────────────────────────────────────────────
+
+type AuditLogEntry = Record<string, unknown>;
+
+function normalizeAuditLog(id: string, data: FirebaseFirestore.DocumentData): AuditLogEntry {
+  return {
+    id,
+    orgId: typeof data.orgId === "string" ? data.orgId : null,
+    actorUID: typeof data.actorUID === "string" ? data.actorUID : null,
+    actorName: typeof data.actorName === "string" ? data.actorName : "System",
+    actorRole: typeof data.actorRole === "string" ? data.actorRole : "Automated",
+    action: typeof data.action === "string" ? data.action : "System Event",
+    actionCategory: typeof data.actionCategory === "string" ? data.actionCategory : "Organization",
+    targetType: typeof data.targetType === "string" ? data.targetType : "Entity",
+    targetName: typeof data.targetName === "string" ? data.targetName : null,
+    changes: data.changes ?? null,
+    reason: typeof data.reason === "string" ? data.reason : null,
+    context: data.context ?? null,
+    metadata: data.metadata ?? null,
+    createdAt: asIsoString(data.createdAt)
+  };
+}
+
+export async function getAuditLogs(uid: string): Promise<AuditLogEntry[]> {
+  await requireAdmin(uid);
+  const snapshot = await firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200).get();
+  return snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+}
+
+export async function watchAuditLogs(
+  uid: string,
+  onData: (logs: AuditLogEntry[]) => void,
+  onError: (error: Error) => void
+): Promise<() => void> {
+  await requireAdmin(uid);
+
+  const unsubscribe = firestore
+    .collection("audit_logs")
+    .orderBy("createdAt", "desc")
+    .limit(200)
+    .onSnapshot(
+      (snapshot) => {
+        try {
+          const logs = snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+          onData(logs);
+        } catch (error) {
+          onError(error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+      (error) => onError(error)
+    );
+
+  return unsubscribe;
 }
