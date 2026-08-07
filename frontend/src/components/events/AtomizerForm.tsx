@@ -206,7 +206,7 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
               AI Generated
             </span>
             {selectedEvent && (
-              <span className="text-xs text-slate-500">for "{selectedEvent.title}"</span>
+              <span className="text-xs text-slate-500">for &quot;{selectedEvent.title}&quot;</span>
             )}
             <span className="text-xs text-slate-400">
               · {confirmedCount} confirmed · Review each task before adding to event
