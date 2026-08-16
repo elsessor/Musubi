@@ -128,6 +128,10 @@ export function AdminOrgRequestsView() {
 
   useEffect(() => {
     void fetchRequests();
+    const interval = setInterval(() => {
+      void fetchRequests();
+    }, 4000);
+    return () => clearInterval(interval);
   }, [firebaseUser]);
 
   const pendingRequests = useMemo(() => {

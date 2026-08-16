@@ -55,6 +55,53 @@ const programOptions = [
   "Bachelor of Religious and Values Education"
 ];
 
+const DEFAULT_DIRECTORY_ORGANIZATIONS: OrganizationDirectoryOption[] = [
+  {
+    id: "org-1",
+    name: "University Student Council",
+    type: "Governing",
+    description: "The highest governing student body of the university.",
+    status: "active",
+    requestedByUID: null,
+    organizationConfig: {},
+    createdAt: null,
+    updatedAt: null
+  },
+  {
+    id: "org-2",
+    name: "Computer Science Society",
+    type: "Academic",
+    description: "Org for CS majors focused on tech and innovation.",
+    status: "active",
+    requestedByUID: null,
+    organizationConfig: {},
+    createdAt: null,
+    updatedAt: null
+  },
+  {
+    id: "org-3",
+    name: "Socio-Civic Action Group",
+    type: "Socio-Civic",
+    description: "Community outreach and civic engagement programs.",
+    status: "active",
+    requestedByUID: null,
+    organizationConfig: {},
+    createdAt: null,
+    updatedAt: null
+  },
+  {
+    id: "org-4",
+    name: "Campus Media Network",
+    type: "Media",
+    description: "Handles campus publications and broadcast.",
+    status: "active",
+    requestedByUID: null,
+    organizationConfig: {},
+    createdAt: null,
+    updatedAt: null
+  }
+];
+
 export default function OnboardingPage() {
   const router = useRouter();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
@@ -86,11 +133,16 @@ export default function OnboardingPage() {
   const [error, setError] = useState("");
   const [isCompleting, setIsCompleting] = useState(false);
 
-  const filteredOrganizations = useMemo(
-    () => organizations.filter((org) => `${org.name} ${org.type}`.toLowerCase().includes(orgSearch.toLowerCase())),
-    [orgSearch]
+  const availableOrganizations = useMemo(
+    () => (organizations.length > 0 ? organizations : DEFAULT_DIRECTORY_ORGANIZATIONS),
+    [organizations]
   );
-  const selectedOrganization = organizations.find((org) => org.id === organizationId);
+
+  const filteredOrganizations = useMemo(
+    () => availableOrganizations.filter((org) => `${org.name} ${org.type}`.toLowerCase().includes(orgSearch.toLowerCase())),
+    [availableOrganizations, orgSearch]
+  );
+  const selectedOrganization = availableOrganizations.find((org) => org.id === organizationId);
   const isJoiningOrganizationLater = joiningOrganizationLater && !organizationId;
   const completedSteps = stage === "role" ? 1 : stage === "leader-check" || stage === "organization" || stage === "details" ? 2 : 3;
 
@@ -150,16 +202,11 @@ export default function OnboardingPage() {
     setStage("details");
   }
 
-  function submitDetails() {
+  async function submitDetails() {
     if (!year || !program.trim() || !position.trim() || (role === "member" && selectedSkills.length === 0)) {
       setError(role === "member" && selectedSkills.length === 0 ? "Choose at least one skill, then complete your profile details." : "Complete your position, year level, and program to continue.");
       return;
     }
-    setError("");
-    setStage(role === "leader" && orgPath === "create" ? "pending" : "pending");
-  }
-
-  async function finishOnboarding() {
     if (!firebaseUser || !role) {
       setError("Your sign-in session has expired. Please sign in again.");
       return;
@@ -175,25 +222,54 @@ export default function OnboardingPage() {
     }
 
     setIsCompleting(true);
+    setError("");
     try {
       const session = await completeOnboarding(firebaseUser, {
         role: role === "leader" ? "Student Leader" : "Organization Member",
         position: position.trim(),
         organizationId: onboardingOrganizationId,
-        organizationRequest: isNewOrganization ? { organizationId: onboardingOrganizationId as string, orgName: organizationName.trim(), orgType: organizationType, description: organizationDescription.trim() } : undefined,
+        organizationRequest: isNewOrganization
+          ? {
+              organizationId: onboardingOrganizationId as string,
+              orgName: organizationName.trim(),
+              orgType: organizationType,
+              description: organizationDescription.trim()
+            }
+          : undefined,
         yearLevel: year,
         program: program.trim(),
         skills: selectedSkills
       });
-      if (!isNewOrganization && !isJoiningOrganizationLater && selectedOrganization) await joinOrganization(firebaseUser, selectedOrganization.id);
+
+      if (!isNewOrganization && !isJoiningOrganizationLater && selectedOrganization) {
+        await joinOrganization(firebaseUser, selectedOrganization.id);
+      }
+
       setProfile(session.user);
-      showToast({ title: "Profile saved", description: selectedOrganization && !isNewOrganization ? "Your join request was submitted for leader approval." : "Your onboarding is complete.", tone: "success" });
-      router.replace("/dashboard");
+      showToast({
+        title: "Profile saved",
+        description: isNewOrganization
+          ? "Your organization request was submitted for review."
+          : selectedOrganization
+          ? "Your join request was submitted for leader approval."
+          : "Your onboarding is complete.",
+        tone: "success"
+      });
+
+      if (isNewOrganization || selectedOrganization) {
+        setStage("pending");
+      } else {
+        router.replace("/dashboard");
+      }
     } catch (completionError) {
       setError(completionError instanceof Error ? completionError.message : "Unable to save your onboarding details.");
     } finally {
       setIsCompleting(false);
     }
+  }
+
+  function finishOnboarding() {
+    router.replace("/dashboard");
   }
 
   const isNewOrganization = role === "leader" && orgPath === "create";
@@ -242,7 +318,7 @@ export default function OnboardingPage() {
               <Field label="Organization description"><textarea value={organizationDescription} onChange={(event) => setOrganizationDescription(event.target.value)} className="onboarding-input min-h-24 h-auto py-3" placeholder="Describe your organization, its purpose, and planned activities." /></Field>
               <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">New organization registrations are reviewed by a Musubi administrator before activation.</p>
             </div> : <div className="mt-6">
-              {joinMode === "code" ? <Field label="6-character join code"><input value={joinCode} maxLength={6} onChange={(event) => { setJoinCode(event.target.value.toUpperCase()); setError(""); }} className="onboarding-input font-mono uppercase tracking-[0.25em]" placeholder="e.g. CSC202" /></Field> : <><Field label="Search organizations"><input value={orgSearch} onChange={(event) => { setOrgSearch(event.target.value); setError(""); }} className="onboarding-input" placeholder="Type an organization name..." /></Field><div className="mt-3 max-h-52 space-y-2 overflow-y-auto">{filteredOrganizations.map((org) => <button key={org.id} type="button" onClick={() => { setOrganizationId(org.id); setError(""); }} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${organizationId === org.id ? "border-accent bg-accent/5 ring-1 ring-accent" : "border-slate-200 hover:border-blue-300"}`}><span className="flex size-9 items-center justify-center rounded-lg bg-brand-soft font-bold text-brand">⌘</span><span className="flex-1"><span className="block text-sm font-bold text-slate-800">{org.name}</span><span className="text-xs text-slate-500">{org.type}</span></span>{organizationId === org.id && <span className="text-accent">✓</span>}</button>)}</div></>}
+              {joinMode === "code" ? <Field label="6-character join code"><input value={joinCode} maxLength={6} onChange={(event) => { setJoinCode(event.target.value.toUpperCase()); setError(""); }} className="onboarding-input font-mono uppercase tracking-[0.25em]" placeholder="e.g. CSC202" /></Field> : <><Field label="Search organizations"><input value={orgSearch} onChange={(event) => { setOrgSearch(event.target.value); setError(""); }} className="onboarding-input" placeholder="Type an organization name..." /></Field><div className="mt-3 max-h-52 space-y-2 overflow-y-auto">{filteredOrganizations.map((org) => <button key={org.id} type="button" onClick={() => { setOrganizationId(org.id); setJoiningOrganizationLater(false); setError(""); }} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${organizationId === org.id ? "border-accent bg-accent/5 ring-1 ring-accent" : "border-slate-200 hover:border-blue-300"}`}><span className="flex size-9 items-center justify-center rounded-lg bg-brand-soft font-bold text-brand">⌘</span><span className="flex-1"><span className="block text-sm font-bold text-slate-800">{org.name}</span><span className="text-xs text-slate-500">{org.type}</span></span>{organizationId === org.id && <span className="text-accent">✓</span>}</button>)}</div></>}
             </div>}
             {!isNewOrganization && <button type="button" onClick={() => { setJoiningOrganizationLater(true); setOrganizationId(""); setJoinCode(""); setError(""); }} className={`mt-4 w-full rounded-xl border p-3 text-left transition ${isJoiningOrganizationLater ? "border-accent bg-accent/5 ring-1 ring-accent" : "border-dashed border-slate-300 hover:border-blue-300 hover:bg-slate-50"}`}><span className="block text-sm font-bold text-slate-800">I&apos;ll join an organization later</span><span className="mt-1 block text-xs text-slate-500">Continue setting up your profile and request membership whenever you&apos;re ready.</span></button>}
             <ErrorMessage message={error} />
