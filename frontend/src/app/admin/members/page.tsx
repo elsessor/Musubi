@@ -523,9 +523,8 @@ export default function AdminMembersPage() {
                     return (
                       <tr
                         key={member.id}
-                        className={`transition hover:bg-slate-50/80 ${
-                          isChecked ? "bg-blue-50/30" : ""
-                        }`}
+                        className={`transition hover:bg-slate-50/80 ${isChecked ? "bg-blue-50/30" : ""
+                          }`}
                       >
                         {/* Checkbox */}
                         <td className="px-4 py-4 text-center">
@@ -666,8 +665,8 @@ function MemberAvatar({ name, role }: { name: string; role: UserRole }) {
     role === "Admin"
       ? "bg-rose-600 text-white"
       : role === "Student Leader"
-      ? "bg-[#2868ed] text-white"
-      : "bg-[#385779] text-white";
+        ? "bg-[#2868ed] text-white"
+        : "bg-[#385779] text-white";
 
   return (
     <div

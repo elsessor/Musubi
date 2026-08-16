@@ -163,11 +163,10 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
             type="button"
             disabled={subtasks.length === 0 || isPublished}
             onClick={() => setShowPublishModal(true)}
-            className={`inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-bold text-white shadow-md transition ${
-              subtasks.length === 0 || isPublished
+            className={`inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-bold text-white shadow-md transition ${subtasks.length === 0 || isPublished
                 ? "bg-slate-300 cursor-not-allowed opacity-70"
                 : "bg-[#1e3a5f] hover:bg-[#152943]"
-            }`}
+              }`}
           >
             <Zap size={15} />
             {isPublished ? "Goal Published" : `Publish Goal (${subtasks.length} subtasks)`}
@@ -289,11 +288,10 @@ function OldTaskCard({
 
   return (
     <div
-      className={`relative flex flex-col rounded-3xl bg-white p-6 shadow-sm transition-all border-2 ${
-        isConfirmed
+      className={`relative flex flex-col rounded-3xl bg-white p-6 shadow-sm transition-all border-2 ${isConfirmed
           ? "border-[#10b981] ring-1 ring-emerald-200"
           : "border-[#fcd34d] ring-1 ring-amber-100"
-      }`}
+        }`}
     >
       {/* Regeneration Spinner */}
       {isRegenerating && (
