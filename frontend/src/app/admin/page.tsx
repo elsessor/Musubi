@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { AdminDashboardView } from "@/components/admin/AdminDashboardView";
 import { useAuthStore } from "@/store/authStore";
 import { useLogout } from "@/hooks/useLogout";
 import { getDashboardNavItems } from "@/utils/routes";
@@ -59,6 +60,8 @@ export default function AdminDashboardPage() {
       notificationCount={0}
       onLogout={logout}
       user={buildAdminUser(profile)}
-    />
+    >
+      <AdminDashboardView />
+    </DashboardLayout>
   );
 }
