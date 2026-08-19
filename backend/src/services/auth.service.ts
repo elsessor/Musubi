@@ -161,7 +161,8 @@ export async function reviewOrganizationRequest(uid: string, requestId: string, 
   const requestSnapshot = await requestRef.get();
   if (!requestSnapshot.exists) throw new AppError("Organization request was not found.", 404);
   const request = requestSnapshot.data() ?? {};
-  await requestRef.update({ status, rejectionReason, reviewedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+  const cleanedRejectionReason = status === "rejected" ? (rejectionReason ?? null) : null;
+  await requestRef.update({ status, rejectionReason: cleanedRejectionReason, reviewedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
   if (status === "approved" && typeof request.organizationId === "string") {
     await firestore.collection("organizations").doc(request.organizationId).set({
       name: typeof request.orgName === "string" ? request.orgName : "Untitled organization",
@@ -179,7 +180,7 @@ export async function reviewOrganizationRequest(uid: string, requestId: string, 
     actionCategory: "Organization",
     targetType: "Organization Request",
     targetName: typeof request.orgName === "string" ? request.orgName : requestId,
-    reason: status === "rejected" ? (rejectionReason ?? undefined) : undefined,
+    reason: cleanedRejectionReason,
     changes: { field: "status", from: "pending", to: status }
   });
 }

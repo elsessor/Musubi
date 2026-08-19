@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Calendar, CheckCircle2, Loader2, Sparkles, User, Zap } from "lucide-react";
+import { AlertTriangle, Calendar, CheckCircle2, Loader2, SlidersHorizontal, User, Zap } from "lucide-react";
 import { useState } from "react";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, TaskPriority, TaskStatus } from "./types";
@@ -22,7 +22,7 @@ type AtomizerFormProps = {
 
 export function AtomizerForm({ events }: AtomizerFormProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
-  const [selectedEventId, setSelectedEventId] = useState(events[0]?.id ?? "");
+  const [selectedEventId, setSelectedEventId] = useState("");
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>("To Do");
   const [goalDescription, setGoalDescription] = useState("");
   const [isAtomizing, setIsAtomizing] = useState(false);
@@ -162,41 +162,45 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6 bg-[#f4f7fb] p-6 rounded-3xl min-h-screen">
-      {/* Header */}
-      <div className="flex items-start gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm">
-          <Zap size={18} />
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-slate-900">AI Task Atomizer</h2>
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-2.5 py-0.5 text-xs font-bold text-[#d97706]">
-              <Zap size={10} />
-              AI Powered
-            </span>
+    <div className="flex flex-col gap-6">
+      {/* Unified Main Card Container */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+        {/* Header Section */}
+        <div className="mb-6 flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100/70 text-blue-500">
+            <Zap size={18} />
           </div>
-          <p className="mt-1 text-xs text-slate-500">
-            Describe an event macro-goal and Genkit AI will generate subtask recommendations. Leaders review, edit, add, or publish subtasks.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900">AI Task Atomizer</h2>
+              <span className="inline-flex items-center rounded-full bg-blue-100/70 px-2.5 py-0.5 text-[11px] font-semibold text-blue-600">
+                AI Powered
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Describe an event or task goal and the AI will break it into specific, actionable tasks with suggested assignees, deadlines, and priorities.
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Form */}
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* Form Controls */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           {/* Target Event */}
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
                 Target Event <span className="text-rose-500">*</span>
               </label>
+              <button type="button" className="text-xs font-medium text-blue-600 hover:underline">
+                + Create from Description
+              </button>
             </div>
             <select
               value={selectedEventId}
               onChange={(e) => setSelectedEventId(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-slate-800 focus:bg-white focus:border-blue-400 focus:outline-none"
+              className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
+              <option value="">— Select an event —</option>
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
                   {ev.title} ({ev.status})
@@ -207,15 +211,19 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
 
           {/* Default Task Status */}
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
                 Default Task Status
               </label>
+              <button type="button" className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline">
+                <SlidersHorizontal size={13} />
+                Manage
+              </button>
             </div>
             <select
               value={defaultStatus}
               onChange={(e) => setDefaultStatus(e.target.value as TaskStatus)}
-              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-slate-800 focus:bg-white focus:border-blue-400 focus:outline-none"
+              className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>{s}</option>
@@ -226,15 +234,15 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
 
         {/* Goal description */}
         <div className="mt-5">
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+          <label className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
             Goal Description
           </label>
           <textarea
             value={goalDescription}
             onChange={(e) => setGoalDescription(e.target.value)}
-            placeholder='e.g. "Organize a campus-wide culture week with booths, performances, and food stalls for 500+ attendees."'
+            placeholder='e.g. "Organize a campus-wide culture week celebration across all departments"'
             rows={4}
-            className="w-full resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] p-4 text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-blue-400 focus:outline-none"
+            className="w-full resize-none rounded-2xl border border-slate-200/60 bg-[#F0F4F8] p-4 text-sm text-slate-700 placeholder:text-slate-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
@@ -244,13 +252,13 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
           </div>
         )}
 
-        {/* Atomize & Demo buttons */}
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        {/* Atomize button */}
+        <div className="mt-5 flex items-center gap-3">
           <button
             type="button"
             onClick={handleAtomize}
             disabled={isAtomizing || !goalDescription.trim()}
-            className="flex items-center gap-2 rounded-2xl bg-[#1e3a5f] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#152943] disabled:opacity-60"
+            className="flex items-center gap-2 rounded-2xl bg-blue-400 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isAtomizing ? (
               <Loader2 size={16} className="animate-spin" />

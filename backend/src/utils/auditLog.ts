@@ -28,10 +28,14 @@ export type AuditLogData = {
  * user-facing request.
  */
 export function writeAuditLog(data: AuditLogData): void {
+  const cleanData = Object.fromEntries(
+    Object.entries(data).filter(([_, value]) => value !== undefined)
+  );
+
   firestore
     .collection("audit_logs")
     .add({
-      ...data,
+      ...cleanData,
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
     })
     .catch((err: unknown) => {
