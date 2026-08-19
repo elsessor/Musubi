@@ -17,6 +17,8 @@ import {
   Plus,
   RefreshCw,
   Shield,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Trash2,
   User,
@@ -25,6 +27,7 @@ import {
   Zap
 } from "lucide-react";
 import { useState } from "react";
+import { validateSubtaskSafeguards } from "./starterTemplates";
 import type { GoalDraft, Subtask, TaskPriority } from "./types";
 
 const PRIORITY_BADGES: Record<TaskPriority, { bg: string; text: string }> = {
@@ -125,8 +128,35 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
     }
   }
 
+  const [showOnlyWarnings, setShowOnlyWarnings] = useState(false);
+
+  function handleAutoFixSafeguards() {
+    setSubtasks((prev) =>
+      prev.map((st) => {
+        const warnings = validateSubtaskSafeguards(st);
+        if (warnings.length === 0) return st;
+
+        const sensitiveKeywords = ["budget", "finance", "permit", "legal", "audit", "contract", "honorarium", "cash"];
+        const titleAndDesc = `${st.title} ${st.description}`.toLowerCase();
+        const containsSensitive = sensitiveKeywords.some((kw) => titleAndDesc.includes(kw));
+
+        return {
+          ...st,
+          isLeaderOnly: containsSensitive ? true : st.isLeaderOnly,
+          assigneeName: !st.assigneeName || st.assigneeName.trim() === "" ? "Luis Garcia" : st.assigneeName,
+          requiredSkills: st.requiredSkills.length === 0 ? ["Event Planning", "Coordination"] : st.requiredSkills,
+          description: st.description.length < 10 ? `${st.description} (Detailed breakdown verified by Student Leader)` : st.description
+        };
+      })
+    );
+  }
+
   const confirmedCount = subtasks.filter((s) => s.status === "To Do").length;
   const isPublished = currentGoal.status === "Active";
+  const subtasksWithWarnings = subtasks.filter((st) => validateSubtaskSafeguards(st).length > 0);
+  const displayedSubtasks = showOnlyWarnings
+    ? subtasks.filter((st) => validateSubtaskSafeguards(st).length > 0)
+    : subtasks;
 
   return (
     <div className="flex flex-col gap-6 bg-[#f4f7fb] p-6 rounded-3xl min-h-screen">
@@ -174,12 +204,73 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
         </div>
       </div>
 
+      {/* Semantic Safeguard Status Bar (MSB-FE-014) */}
+      <div className="rounded-3xl border border-slate-200/90 bg-white p-4.5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className={`flex size-10 shrink-0 items-center justify-center rounded-2xl font-bold shadow-2xs ${
+            subtasksWithWarnings.length === 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
+          }`}>
+            {subtasksWithWarnings.length === 0 ? <ShieldCheck size={22} /> : <ShieldAlert size={22} />}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-extrabold text-slate-900 tracking-tight">
+                Semantic Safeguard Audit
+              </span>
+              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                subtasksWithWarnings.length === 0
+                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                  : "bg-amber-100 text-amber-800 border border-amber-300"
+              }`}>
+                {subtasksWithWarnings.length === 0 ? "Safeguard Compliant (0 Warnings)" : `${subtasksWithWarnings.length} Flagged Item(s)`}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-slate-500 font-medium">
+              {subtasksWithWarnings.length === 0
+                ? "All subtasks meet quality, skill assignment, and organizational security standards."
+                : `${subtasksWithWarnings.length} subtask(s) flagged for low confidence, missing details, or unassigned roles.`}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {subtasksWithWarnings.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowOnlyWarnings(!showOnlyWarnings)}
+                className={`rounded-2xl border px-3 py-1.5 text-xs font-bold transition ${
+                  showOnlyWarnings
+                    ? "border-amber-400 bg-amber-50 text-amber-800"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {showOnlyWarnings ? "Show All Tasks" : `Filter Warnings (${subtasksWithWarnings.length})`}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAutoFixSafeguards}
+                className="inline-flex items-center gap-1.5 rounded-2xl bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-600 transition"
+              >
+                <Sparkles size={13} />
+                Auto-Fix Safeguards
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Work Breakdown Section Header (Exact Old UI Style) */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 flex-wrap">
           <h2 className="text-lg font-bold text-[#1e293b]">Work Breakdown</h2>
           <span className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-2.5 py-0.5 text-xs font-semibold text-[#d97706]">
-            AI Generated
+            {currentGoal.generationSource === "template"
+              ? "Template Based"
+              : currentGoal.generationSource === "manual"
+              ? "Manual Authored"
+              : "AI Generated"}
           </span>
           <span className="text-sm font-semibold text-slate-500">
             for &quot;{currentGoal.eventName || "Culture Week"}&quot;
@@ -192,11 +283,15 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
       </div>
 
       {/* Task Cards Grid (2-column Old UI Layout) */}
-      {subtasks.length === 0 ? (
+      {displayedSubtasks.length === 0 ? (
         <div className="rounded-3xl border-2 border-dashed border-slate-300 bg-white p-12 text-center shadow-xs">
           <Layers size={32} className="mx-auto text-slate-400 mb-2" />
-          <h3 className="text-base font-bold text-slate-900">No Subtasks</h3>
-          <p className="text-xs text-slate-500 mt-1">Add subtasks manually to proceed.</p>
+          <h3 className="text-base font-bold text-slate-900">
+            {showOnlyWarnings ? "No Flagged Subtasks" : "No Subtasks"}
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            {showOnlyWarnings ? "All subtasks have passed safeguard checks." : "Add subtasks manually to proceed."}
+          </p>
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
@@ -207,7 +302,7 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {subtasks.map((st) => (
+          {displayedSubtasks.map((st) => (
             <OldTaskCard
               key={st.id}
               subtask={st}
@@ -277,6 +372,7 @@ function OldTaskCard({
   const isConfirmed = subtask.status === "To Do";
   const priorityBadge = PRIORITY_BADGES[subtask.priority];
   const matchScore = subtask.aiMetadata?.confidenceScore ?? (subtask.isAiGenerated ? 95 : 0);
+  const warnings = validateSubtaskSafeguards(subtask);
 
   const scoreColor =
     matchScore >= 85 ? "text-[#10b981]" : matchScore >= 70 ? "text-[#f59e0b]" : "text-[#ef4444]";
@@ -288,10 +384,13 @@ function OldTaskCard({
 
   return (
     <div
-      className={`relative flex flex-col rounded-3xl bg-white p-6 shadow-sm transition-all border-2 ${isConfirmed
+      className={`relative flex flex-col rounded-3xl bg-white p-6 shadow-sm transition-all border-2 ${
+        warnings.length > 0
+          ? "border-amber-400 ring-2 ring-amber-100/70 bg-amber-50/10"
+          : isConfirmed
           ? "border-[#10b981] ring-1 ring-emerald-200"
           : "border-[#fcd34d] ring-1 ring-amber-100"
-        }`}
+      }`}
     >
       {/* Regeneration Spinner */}
       {isRegenerating && (
@@ -305,7 +404,7 @@ function OldTaskCard({
 
       {/* Card Header Row: Needs Review / Confirmed Pill & Priority */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isConfirmed ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#d1fae5] px-3 py-1 text-xs font-bold text-[#047857]">
               <CheckCircle2 size={12} />
@@ -323,11 +422,15 @@ function OldTaskCard({
             </span>
           )}
 
-          {!subtask.isAiGenerated && (
+          {subtask.isTemplateBased ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-0.5 text-[11px] font-bold text-purple-800">
+              Template Based
+            </span>
+          ) : !subtask.isAiGenerated ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-blue-800">
               <Wrench size={10} /> Leader Authored
             </span>
-          )}
+          ) : null}
         </div>
 
         <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ${priorityBadge.bg} ${priorityBadge.text}`}>
@@ -342,7 +445,7 @@ function OldTaskCard({
       <div className="mt-2.5 flex items-center gap-4 text-xs font-medium text-slate-500">
         <span className="flex items-center gap-1.5">
           <User size={13} className="text-slate-400" />
-          {subtask.assigneeName || "Luis Garcia"}
+          {subtask.assigneeName || "Unassigned"}
         </span>
 
         <span className="flex items-center gap-1.5">
@@ -350,6 +453,30 @@ function OldTaskCard({
           Aug 11, 2026
         </span>
       </div>
+
+      {/* Inline Safeguard Validation Warnings Box (MSB-FE-014) */}
+      {warnings.length > 0 && (
+        <div className="mt-3.5 rounded-2xl border border-amber-300 bg-amber-50/90 p-3.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-900">
+              <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+              <span>Inline Validation Warning ({warnings.length}):</span>
+            </div>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="text-[11px] font-extrabold text-blue-700 hover:text-blue-900 underline"
+            >
+              Edit &amp; Resolve &rarr;
+            </button>
+          </div>
+          <ul className="text-xs text-amber-900 space-y-1 pl-4 list-disc font-medium">
+            {warnings.map((w, idx) => (
+              <li key={idx}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Status Box */}
       <div className="mt-3.5 flex items-center justify-between rounded-xl bg-[#f1f5f9] px-4 py-2.5 text-xs">

@@ -1,18 +1,12 @@
 "use client";
 
-import { AlertTriangle, Calendar, CheckCircle2, Loader2, SlidersHorizontal, User, Zap } from "lucide-react";
+import { AlertTriangle, Calendar, CheckCircle2, Loader2, RefreshCw, ShieldAlert, SlidersHorizontal, User, Wrench, Zap } from "lucide-react";
 import { useState } from "react";
+import { AIFallbackScreen } from "./AIFallbackScreen";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
-import type { Event, GoalDraft, Subtask, TaskPriority, TaskStatus } from "./types";
+import type { Event, GoalDraft, StarterTemplate, Subtask, TaskPriority, TaskStatus } from "./types";
 import { atomizeGoal } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
-
-const priorityConfig: Record<TaskPriority, { classes: string }> = {
-  Low: { classes: "bg-[#f1f5f9] text-[#475569]" },
-  Medium: { classes: "bg-[#dbeafe] text-[#1d4ed8]" },
-  High: { classes: "bg-[#ffedd5] text-[#c2410c]" },
-  Critical: { classes: "bg-[#ffe4e6] text-[#e11d48]" }
-};
 
 const STATUS_OPTIONS: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
@@ -28,6 +22,11 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
   const [isAtomizing, setIsAtomizing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [activeGoalDraft, setActiveGoalDraft] = useState<GoalDraft | null>(null);
+
+  // MSB-FE-014: AI Fallback & Error State state
+  const [showFallback, setShowFallback] = useState(false);
+  const [fallbackError, setFallbackError] = useState("");
+  const [retryCount, setRetryCount] = useState(3);
 
   async function handleAtomize() {
     if (!goalDescription.trim()) return;
@@ -73,82 +72,146 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
         eventName,
         description: goalDescription.trim(),
         status: "Draft",
-        subtasks: generatedSubtasks
+        subtasks: generatedSubtasks,
+        generationSource: "ai"
       };
 
       setActiveGoalDraft(draft);
     } catch (err: unknown) {
       console.error("[Atomizer] Error running Genkit flow:", err);
-      setErrorMsg(err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.");
+      const msg = err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.";
+      setFallbackError(msg);
+      setShowFallback(true);
     } finally {
       setIsAtomizing(false);
     }
   }
 
-  function handleDemoReview() {
+  function handleSimulateFailure() {
     const selectedEvent = events.find((e) => e.id === selectedEventId);
-    const eventName = selectedEvent ? selectedEvent.title : "Culture Week";
+    const eventName = selectedEvent ? selectedEvent.title : "Campus Culture Week";
 
-    const demoSubtasks: Subtask[] = [
+    setFallbackError("Genkit AI Gateway timeout after 3 exhausted attempts (504 Gateway Timeout). Semantic Fallback Safeguard automatically triggered.");
+    setRetryCount(3);
+    setShowFallback(true);
+  }
+
+  function handleSimulateMalformedOutput() {
+    const selectedEvent = events.find((e) => e.id === selectedEventId);
+    const eventName = selectedEvent ? selectedEvent.title : "Campus Culture Week";
+
+    const malformedSubtasks: Subtask[] = [
       {
-        id: "st-demo-1",
-        title: "Book venue and secure event permits",
-        description: "Reserve main campus hall, obtain safety clearance, and secure sound permits.",
-        assigneeName: "Luis Garcia",
-        requiredSkills: ["Logistics", "Permits", "Administration"],
-        estimatedDays: 4,
-        isLeaderOnly: true,
-        isAiGenerated: true,
-        aiMetadata: { confidenceScore: 95 },
-        priority: "High"
-      },
-      {
-        id: "st-demo-2",
-        title: "Design promotional materials and social assets",
-        description: "Create publicity banners, social media cards, and campus flyers.",
-        assigneeName: "Beatrice Lim",
-        requiredSkills: ["Graphics Design", "Marketing"],
-        estimatedDays: 3,
-        isLeaderOnly: false,
-        isAiGenerated: true,
-        aiMetadata: { confidenceScore: 76 },
-        priority: "Medium"
-      },
-      {
-        id: "st-demo-3",
-        title: "Set up online registration and ticketing",
-        description: "Configure participant sign-up forms, pass distribution, and QR check-in.",
-        assigneeName: "Marco Dela Cruz",
-        requiredSkills: ["Tech Support", "Registration"],
+        id: `st-mal-1`,
+        title: "Book", // < 5 chars title warning
+        description: "Reserve venue.", // < 10 chars description warning
+        assigneeName: "", // Unassigned warning
+        requiredSkills: [], // Missing skills warning
         estimatedDays: 2,
         isLeaderOnly: false,
         isAiGenerated: true,
-        aiMetadata: { confidenceScore: 88 },
-        priority: "High"
+        aiMetadata: { confidenceScore: 52 }, // Low AI confidence <70% warning
+        priority: "High",
+        status: "To Do"
       },
       {
-        id: "st-demo-4",
-        title: "Coordinate department booth sign-ups",
-        description: "Organize booth assignments, power outlets, and table requisitions.",
-        assigneeName: "Ana Reyes",
-        requiredSkills: ["Coordination", "Vendor Mgmt"],
+        id: `st-mal-2`,
+        title: "Process Budget & Financial Honorarium Payments",
+        description: "Handle Cash disbursement and legal contract sign-offs for guest performers.",
+        assigneeName: "Beatrice Lim",
+        requiredSkills: ["Finance"],
+        estimatedDays: 4,
+        isLeaderOnly: false, // Governance warning: sensitive keywords without leader restriction
+        isAiGenerated: true,
+        aiMetadata: { confidenceScore: 68 }, // Low confidence warning
+        priority: "Critical",
+        status: "To Do"
+      },
+      {
+        id: `st-mal-3`,
+        title: "Setup Publicity Posters & Campus Social Media Banners",
+        description: "Design promotional graphics, print flyers, and post event announcements on Instagram.",
+        assigneeName: "Marco Dela Cruz",
+        requiredSkills: ["Graphics", "Promotions"],
         estimatedDays: 3,
-        isLeaderOnly: true,
-        isAiGenerated: false,
-        priority: "Medium"
+        isLeaderOnly: false,
+        isAiGenerated: true,
+        aiMetadata: { confidenceScore: 92 },
+        priority: "Medium",
+        status: "To Do"
       }
     ];
 
     setActiveGoalDraft({
-      id: `draft-demo-${Date.now()}`,
+      id: `draft-malformed-${Date.now()}`,
       eventName,
-      description: goalDescription.trim() || "Organize campus culture week with booth sign-ups and performances.",
+      description: goalDescription.trim() || "Simulated malformed AI breakdown response for validation testing.",
       status: "Draft",
-      subtasks: demoSubtasks
+      subtasks: malformedSubtasks,
+      generationSource: "ai"
     });
   }
 
-  // If a goal draft is active, show SubtaskReviewScreen in Old UI style
+  function handleSelectStarterTemplate(template: StarterTemplate) {
+    const selectedEvent = events.find((e) => e.id === selectedEventId);
+    const eventName = selectedEvent ? selectedEvent.title : "Campus Event";
+
+    const loadedSubtasks: Subtask[] = template.subtasks.map((st, idx) => ({
+      ...st,
+      id: `subtask-tpl-${Date.now()}-${idx}`
+    }));
+
+    setActiveGoalDraft({
+      id: `draft-tpl-${Date.now()}`,
+      eventName,
+      description: goalDescription.trim() || template.description,
+      status: "Draft",
+      subtasks: loadedSubtasks,
+      generationSource: "template"
+    });
+
+    setShowFallback(false);
+  }
+
+  function handleStartFromScratch() {
+    const selectedEvent = events.find((e) => e.id === selectedEventId);
+    const eventName = selectedEvent ? selectedEvent.title : "Campus Event";
+
+    setActiveGoalDraft({
+      id: `draft-manual-${Date.now()}`,
+      eventName,
+      description: goalDescription.trim() || "Manual Goal Breakdown Workspace",
+      status: "Draft",
+      subtasks: [],
+      generationSource: "manual"
+    });
+
+    setShowFallback(false);
+  }
+
+  // 1. Show Fallback Failure Screen if AI generation fails or is triggered
+  if (showFallback) {
+    const selectedEvent = events.find((e) => e.id === selectedEventId);
+    const eventName = selectedEvent ? selectedEvent.title : "Campus Culture Week";
+
+    return (
+      <AIFallbackScreen
+        eventName={eventName}
+        goalDescription={goalDescription}
+        errorMessage={fallbackError}
+        retryCount={retryCount}
+        onSelectTemplate={handleSelectStarterTemplate}
+        onStartFromScratch={handleStartFromScratch}
+        onRetryGeneration={() => {
+          setShowFallback(false);
+          void handleAtomize();
+        }}
+        onBackToForm={() => setShowFallback(false)}
+      />
+    );
+  }
+
+  // 2. If a goal draft is active, show SubtaskReviewScreen
   if (activeGoalDraft) {
     return (
       <SubtaskReviewScreen
@@ -170,11 +233,14 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100/70 text-blue-500">
             <Zap size={18} />
           </div>
-          <div>
+          <div className="flex-1">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-slate-900">AI Task Atomizer</h2>
               <span className="inline-flex items-center rounded-full bg-blue-100/70 px-2.5 py-0.5 text-[11px] font-semibold text-blue-600">
                 AI Powered
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                Fallback Safeguard Active
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -252,13 +318,13 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
           </div>
         )}
 
-        {/* Atomize button */}
-        <div className="mt-5 flex items-center gap-3">
+        {/* Action Controls */}
+        <div className="mt-6 flex items-center gap-3">
           <button
             type="button"
             onClick={handleAtomize}
             disabled={isAtomizing || !goalDescription.trim()}
-            className="flex items-center gap-2 rounded-2xl bg-blue-400 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-2 rounded-2xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isAtomizing ? (
               <Loader2 size={16} className="animate-spin" />

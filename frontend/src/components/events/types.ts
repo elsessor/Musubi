@@ -55,12 +55,14 @@ export type Subtask = {
   estimatedDays: number;
   isLeaderOnly: boolean;
   isAiGenerated: boolean;
+  isTemplateBased?: boolean;
   aiMetadata?: {
     confidenceScore: number; // e.g. 88 for 88%
   };
   priority: TaskPriority;
   assigneeName?: string;
   status?: TaskStatus;
+  validationWarnings?: string[];
 };
 
 export type GoalDraft = {
@@ -69,5 +71,25 @@ export type GoalDraft = {
   description: string;
   status: "Draft" | "Active" | "Completed";
   subtasks: Subtask[];
+  generationSource?: "ai" | "template" | "manual";
 };
+
+// ── Starter Template Types (MSB-FE-014) ───────────────────────────────────────
+
+export type OrgCategory =
+  | "Governing"
+  | "Academic"
+  | "Socio-Civic"
+  | "Arts & Culture"
+  | "Sports & Recreation";
+
+export type StarterTemplate = {
+  id: string;
+  category: OrgCategory;
+  title: string;
+  description: string;
+  iconName: string;
+  subtasks: Array<Omit<Subtask, "id">>;
+};
+
 
