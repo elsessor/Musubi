@@ -1,21 +1,26 @@
 // Events & Tasks — shared data models
 
-export type EventStatus = "Active" | "Planning" | "Completed" | "Archived";
+export type EventStatus = "Active" | "Planning" | "Completed" | "Cancelled" | "Archived";
 export type TaskStatus = "To Do" | "In Progress" | "In Review" | "Completed";
 export type TaskPriority = "Low" | "Medium" | "High" | "Critical";
 
 export type Assignee = {
   initials: string;
   color: string; // tailwind bg class
+  name?: string;
 };
 
 export type Task = {
   id: string;
   title: string;
+  description?: string;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: string;
   assignee: Assignee;
+  requiredSkills?: string[];
+  isLeaderOnly?: boolean;
+  isAiGenerated?: boolean;
   blockedBy?: number;
 };
 

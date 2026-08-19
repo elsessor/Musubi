@@ -7,6 +7,7 @@ const statusConfig: Record<EventStatus, { label: string; dot: string; badge: str
   Active:    { label: "Active",    dot: "bg-blue-500",   badge: "bg-blue-50 text-blue-600 ring-blue-200",    text: "text-blue-600"  },
   Planning:  { label: "Planning",  dot: "bg-amber-400",  badge: "bg-amber-50 text-amber-700 ring-amber-200",  text: "text-amber-600" },
   Completed: { label: "Completed", dot: "bg-emerald-500",badge: "bg-emerald-50 text-emerald-700 ring-emerald-200", text: "text-emerald-600" },
+  Cancelled: { label: "Cancelled", dot: "bg-rose-500",   badge: "bg-rose-50 text-rose-700 ring-rose-200",       text: "text-rose-600" },
   Archived:  { label: "Archived",  dot: "bg-slate-400",  badge: "bg-slate-100 text-slate-600 ring-slate-200", text: "text-slate-500"  }
 };
 

@@ -5,10 +5,10 @@ import type { Task, TaskStatus } from "./types";
 import { TaskCard } from "./TaskCard";
 
 const columnConfig: Record<TaskStatus, { dot: string; header: string }> = {
-  "To Do":       { dot: "bg-slate-400",   header: "text-slate-700" },
-  "In Progress": { dot: "bg-blue-500",    header: "text-blue-700" },
-  "In Review":   { dot: "bg-amber-400",   header: "text-amber-700" },
-  "Completed":   { dot: "bg-emerald-500", header: "text-emerald-700" }
+  "To Do": { dot: "bg-slate-400", header: "text-slate-700" },
+  "In Progress": { dot: "bg-blue-500", header: "text-blue-700" },
+  "In Review": { dot: "bg-amber-400", header: "text-amber-700" },
+  "Completed": { dot: "bg-emerald-500", header: "text-emerald-700" }
 };
 
 type KanbanColumnProps = {
@@ -17,9 +17,10 @@ type KanbanColumnProps = {
   onAddTask?: () => void;
   onDragStart?: (taskId: string) => void;
   onDrop?: (status: TaskStatus) => void;
+  onReassignTask?: (task: Task) => void;
 };
 
-export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop }: KanbanColumnProps) {
+export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop, onReassignTask }: KanbanColumnProps) {
   const cfg = columnConfig[status];
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -54,7 +55,7 @@ export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop }: 
           </div>
         ) : (
           tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onDragStart={onDragStart} />
+            <TaskCard key={task.id} task={task} onDragStart={onDragStart} onReassign={onReassignTask} />
           ))
         )}
       </div>

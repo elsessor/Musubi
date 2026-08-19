@@ -12,6 +12,7 @@ const STATUS_FILTERS: { label: string; key: StatusFilter }[] = [
   { label: "Active", key: "Active" },
   { label: "Planning", key: "Planning" },
   { label: "Completed", key: "Completed" },
+  { label: "Cancelled", key: "Cancelled" },
   { label: "Archived", key: "Archived" }
 ];
 
@@ -19,6 +20,7 @@ const STATUS_DOT: Record<EventStatus, string> = {
   Active:    "bg-blue-500",
   Planning:  "bg-amber-400",
   Completed: "bg-emerald-500",
+  Cancelled: "bg-rose-500",
   Archived:  "bg-slate-400"
 };
 

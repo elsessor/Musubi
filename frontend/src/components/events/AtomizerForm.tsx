@@ -4,7 +4,7 @@ import { AlertTriangle, Calendar, CheckCircle2, Loader2, RefreshCw, ShieldAlert,
 import { useState } from "react";
 import { AIFallbackScreen } from "./AIFallbackScreen";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
-import type { Event, GoalDraft, StarterTemplate, Subtask, TaskPriority, TaskStatus } from "./types";
+import type { Event, GoalDraft, StarterTemplate, Subtask, Task, TaskPriority, TaskStatus } from "./types";
 import { atomizeGoal } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 
@@ -12,9 +12,10 @@ const STATUS_OPTIONS: TaskStatus[] = ["To Do", "In Progress", "In Review", "Comp
 
 type AtomizerFormProps = {
   events: Event[];
+  onPublishGoalTasks?: (targetEventId: string, publishedTasks: Task[]) => void;
 };
 
-export function AtomizerForm({ events }: AtomizerFormProps) {
+export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>("To Do");
@@ -219,6 +220,27 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
         onBack={() => setActiveGoalDraft(null)}
         onPublishGoal={(publishedGoal) => {
           setActiveGoalDraft(publishedGoal);
+          const targetId = selectedEventId || events[0]?.id || "culture-week";
+          const publishedTasks: Task[] = publishedGoal.subtasks.map((st) => ({
+            id: st.id,
+            title: st.title,
+            description: st.description,
+            status: st.status || "To Do",
+            priority: st.priority,
+            dueDate: "Aug 30",
+            assignee: {
+              initials: st.assigneeName ? st.assigneeName.split(" ").map((n) => n[0]).join("") : "LG",
+              color: "bg-[#1e3a5f]",
+              name: st.assigneeName || "Luis Garcia"
+            },
+            requiredSkills: st.requiredSkills,
+            isLeaderOnly: st.isLeaderOnly,
+            isAiGenerated: st.isAiGenerated
+          }));
+
+          if (onPublishGoalTasks) {
+            onPublishGoalTasks(targetId, publishedTasks);
+          }
         }}
       />
     );
