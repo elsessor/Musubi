@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { adminMembersController, adminMembersStreamController, atomizeGoalController, auditLogsController, auditLogsStreamController, bulkUpdateAdminMembersRoleController, createOrganizationController, joinOrganizationController, loginController, meController, myOrganizationJoinRequestController, onboardingController, organizationController, organizationDirectoryController, organizationJoinRequestsController, organizationManagementDetailController, organizationMembersController, organizationRequestsController, organizationsController, reviewOrganizationJoinRequestController, reviewOrganizationRequestController, updateAdminMemberController, updateOrganizationController } from "../controllers/auth.controller.js";
+import { adminMembersController, adminMembersStreamController, atomizeGoalController, auditLogsController, auditLogsStreamController, bulkUpdateAdminMembersRoleController, clearEventsController, createEventController, createOrganizationController, getEventsController, joinOrganizationController, loginController, meController, myOrganizationJoinRequestController, onboardingController, organizationController, organizationDirectoryController, organizationJoinRequestsController, organizationManagementDetailController, organizationMembersController, organizationRequestsController, organizationsController, reviewOrganizationJoinRequestController, reviewOrganizationRequestController, updateAdminMemberController, updateEventController, updateOrganizationController } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 
 export const authRouter = Router();
@@ -9,6 +9,10 @@ authRouter.post("/login", loginController);
 authRouter.post("/onboarding", onboardingController);
 authRouter.get("/me", requireAuth, meController);
 authRouter.post("/atomize", atomizeGoalController);
+authRouter.get("/events", requireAuth, getEventsController);
+authRouter.post("/events", requireAuth, createEventController);
+authRouter.patch("/events/:eventId", requireAuth, updateEventController);
+authRouter.delete("/organizations/:organizationId/events", requireAuth, clearEventsController);
 authRouter.get("/org-requests", organizationRequestsController);
 authRouter.patch("/org-requests/:requestId", reviewOrganizationRequestController);
 authRouter.get("/organizations/directory", organizationDirectoryController);

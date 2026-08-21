@@ -6,6 +6,8 @@ import type { Event, GeneratedTask, TaskPriority, TaskStatus } from "./types";
 import { atomizeGoal } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 
+import { createEventFirestore } from "@/services/events.service";
+
 const priorityConfig: Record<TaskPriority, { classes: string }> = {
   Low:      { classes: "bg-slate-100 text-slate-600 ring-slate-200" },
   Medium:   { classes: "bg-blue-50 text-blue-600 ring-blue-200" },
@@ -21,6 +23,7 @@ type AtomizerFormProps = {
 
 export function AtomizerForm({ events }: AtomizerFormProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const profile = useAuthStore((state) => state.profile);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>("To Do");
   const [goalDescription, setGoalDescription] = useState("");
@@ -42,7 +45,11 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
 
     try {
       const selectedEvent = events.find((e) => e.id === selectedEventId);
-      const eventName = selectedEvent ? selectedEvent.title : "Event Goal";
+      const eventName = selectedEvent
+        ? selectedEvent.title
+        : selectedEventId === "new-event-atomizer"
+        ? "New Event from Atomizer"
+        : "Event Goal";
 
       const data = await atomizeGoal(firebaseUser, {
         eventName,
@@ -70,6 +77,33 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
 
       setGeneratedTasks(formattedTasks);
       setTasks(formattedTasks);
+
+      // Save new event to Firestore if creating from atomizer
+      if (selectedEventId === "new-event-atomizer" && profile?.organizationId) {
+        const eventTitle = goalDescription.trim()
+          ? goalDescription.trim().length > 35
+            ? `${goalDescription.trim().slice(0, 35)}...`
+            : goalDescription.trim()
+          : "New Event from Atomizer";
+
+        void createEventFirestore(firebaseUser, profile.organizationId, {
+          title: eventTitle,
+          description: goalDescription.trim(),
+          status: "Planning",
+          startDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          endDate: new Date(Date.now() + 14 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          memberCount: 1,
+          progress: 0,
+          tasks: formattedTasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            priority: t.priority,
+            dueDate: t.dueDate,
+            assignee: { initials: t.assigneeName.split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "AI", color: "bg-blue-500" }
+          }))
+        });
+      }
     } catch (err: unknown) {
       console.error("[Atomizer] Error running Genkit flow:", err);
       setErrorMsg(err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.");
@@ -119,7 +153,11 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
               <label className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
                 Target Event <span className="text-rose-500">*</span>
               </label>
-              <button type="button" className="text-xs font-medium text-blue-600 hover:underline">
+              <button
+                type="button"
+                onClick={() => setSelectedEventId("new-event-atomizer")}
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
                 + Create from Description
               </button>
             </div>
@@ -129,6 +167,7 @@ export function AtomizerForm({ events }: AtomizerFormProps) {
               className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
               <option value="">— Select an event —</option>
+              <option value="new-event-atomizer">New Event from Atomizer (Planning)</option>
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
                   {ev.title} ({ev.status})

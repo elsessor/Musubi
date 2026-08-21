@@ -1,10 +1,10 @@
 import type { NextFunction, Response } from "express";
 
-import { verifyAppJwt } from "../services/auth.service.js";
+import { verifyAppJwtAsync } from "../services/auth.service.js";
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
 
-export function requireAuth(
+export async function requireAuth(
   request: AuthenticatedRequest,
   _response: Response,
   next: NextFunction
@@ -17,7 +17,7 @@ export function requireAuth(
     }
 
     const token = header.slice("Bearer ".length);
-    request.authUser = verifyAppJwt(token);
+    request.authUser = await verifyAppJwtAsync(token);
     next();
   } catch (error) {
     next(error);

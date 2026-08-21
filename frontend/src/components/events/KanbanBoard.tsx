@@ -5,6 +5,9 @@ import { useState } from "react";
 import type { Event, Task, TaskStatus } from "./types";
 import { KanbanColumn } from "./KanbanColumn";
 
+import { useAuthStore } from "@/store/authStore";
+import { updateEventFirestore } from "@/services/events.service";
+
 const STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
 type KanbanBoardProps = {
@@ -13,10 +16,13 @@ type KanbanBoardProps = {
 };
 
 export function KanbanBoard({ event, onBack }: KanbanBoardProps) {
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const [tasks, setTasks] = useState<Task[]>(event.tasks);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [search, setSearch] = useState("");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [addingTaskForStatus, setAddingTaskForStatus] = useState<TaskStatus | null>(null);
 
   const visibleTasks = tasks.filter((t) => {
     const matchesStatus = statusFilter === "All" || t.status === statusFilter;
@@ -30,10 +36,39 @@ export function KanbanBoard({ event, onBack }: KanbanBoardProps) {
 
   function handleDrop(targetStatus: TaskStatus) {
     if (!draggedId) return;
-    setTasks((prev) =>
-      prev.map((t) => (t.id === draggedId ? { ...t, status: targetStatus } : t))
-    );
+    const updatedTasks = tasks.map((t) => (t.id === draggedId ? { ...t, status: targetStatus } : t));
+    setTasks(updatedTasks);
     setDraggedId(null);
+
+    const completed = updatedTasks.filter((t) => t.status === "Completed").length;
+    const newProgress = updatedTasks.length > 0 ? Math.round((completed / updatedTasks.length) * 100) : 0;
+
+    void updateEventFirestore(firebaseUser, event.id, {
+      tasks: updatedTasks,
+      progress: newProgress
+    });
+  }
+
+  async function handleAddTask(status: TaskStatus, title: string) {
+    if (!title.trim()) return;
+    const newTask: Task = {
+      id: crypto.randomUUID(),
+      title: title.trim(),
+      status,
+      priority: "Medium",
+      dueDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      assignee: { initials: "ME", color: "bg-blue-500" }
+    };
+    const updatedTasks = [...tasks, newTask];
+    setTasks(updatedTasks);
+
+    const completed = updatedTasks.filter((t) => t.status === "Completed").length;
+    const newProgress = Math.round((completed / updatedTasks.length) * 100);
+
+    await updateEventFirestore(firebaseUser, event.id, {
+      tasks: updatedTasks,
+      progress: newProgress
+    });
   }
 
   const completedCount = tasks.filter((t) => t.status === "Completed").length;

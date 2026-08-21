@@ -1,5 +1,7 @@
 import type { User } from "firebase/auth";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 
+import { getFirebaseDb } from "../firebase/config";
 import type { BackendLoginResponse, UserRole } from "@/types/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
@@ -306,6 +308,30 @@ export async function getOrganization(user: User, organizationId: string): Promi
   return organization;
 }
 
+export async function updateOrganizationDetails(
+  user: User,
+  organizationId: string,
+  input: { name?: string; type?: string; description?: string; setupStatus?: string }
+): Promise<OrganizationRecord> {
+  const token = await user.getIdToken();
+  const res = await fetch(`${API_BASE_URL}/auth/organizations/${organizationId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(input)
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(typeof errorData.message === "string" ? errorData.message : "Failed to update organization details.");
+  }
+  const data = await res.json();
+  const org = normalizeOrganization(data.organization);
+  if (!org) throw new Error("Updated organization is invalid.");
+  return org;
+}
+
 export async function getOrganizationMembers(user: User, organizationId: string): Promise<OrganizationMember[]> {
   const data = await organizationRequest<{ members?: unknown[] }>(user, `/auth/organizations/${organizationId}/members`);
   return Array.isArray(data.members)
@@ -320,6 +346,44 @@ export async function getOrganizationMembers(user: User, organizationId: string)
         };
       })
     : [];
+}
+
+export function subscribeOrganizationMembersFirestore(
+  organizationId: string | null | undefined,
+  onData: (members: OrganizationMember[]) => void
+) {
+  const targetOrgId = organizationId && organizationId.trim() ? organizationId.trim() : null;
+  if (!targetOrgId) {
+    onData([]);
+    return () => {};
+  }
+  try {
+    const db = getFirebaseDb();
+    const q = query(collection(db, "users"), where("organizationId", "==", targetOrgId));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const members: OrganizationMember[] = snapshot.docs.map((document) => {
+          const data = document.data();
+          return {
+            id: document.id,
+            name: typeof data.fullName === "string" ? data.fullName : typeof data.name === "string" ? data.name : "Unnamed member",
+            role: typeof data.role === "string" ? data.role : "Organization Member",
+            position: typeof data.position === "string" && data.position.trim() ? data.position : typeof data.role === "string" ? data.role : "Organization Member",
+            skills: normalizeStringArray(data.skills)
+          };
+        });
+        onData(members);
+      },
+      (error) => {
+        console.warn("subscribeOrganizationMembersFirestore snapshot error:", error);
+        onData([]);
+      }
+    );
+  } catch {
+    onData([]);
+    return () => {};
+  }
 }
 
 export async function getOrganizationJoinRequests(user: User, organizationId: string): Promise<OrganizationJoinRequest[]> {

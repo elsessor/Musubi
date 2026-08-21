@@ -57,9 +57,13 @@ export function TopHeader({
     };
   }, []);
 
+  const orgPart = organizationName || "University Student Council";
+  const ayPart = role === "Student Leader" || role === "Organization Member" ? academicYear || "AY 2025–2026" : "";
+  const orgAyCombined = [orgPart, ayPart].filter(Boolean).join(" - ");
+
   const subtitle = role === "Admin"
     ? `University Campus · ${greetingDate}`
-    : [organizationName, role === "Student Leader" ? academicYear : "", greetingDate].filter(Boolean).join(" · ");
+    : [orgAyCombined, greetingDate].filter(Boolean).join(" · ");
 
   return (
     <header className="sticky top-0 z-20 flex min-h-[76px] items-center justify-between gap-3 border-b border-slate-200/80 bg-[#f1f4f8]/95 px-4 py-4 backdrop-blur sm:px-6 lg:min-h-[108px] lg:px-9 lg:py-5">
@@ -67,7 +71,7 @@ export function TopHeader({
         <button aria-label="Open navigation" className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-200 md:hidden" onClick={onMenuToggle} type="button"><Menu className="size-6" /></button>
         <div className="min-w-0">
         <h1 className="truncate text-xl font-extrabold tracking-[-0.02em] text-slate-900 sm:text-[25px]">
-          {role === "Admin" ? "Admin Dashboard" : `Welcome, ${name}!${role === "Student Leader" ? " 👋" : ""}`}
+          {role === "Admin" ? "Admin Dashboard" : `Welcome, ${name}${role === "Student Leader" ? " 👋" : ""}`}
         </h1>
         <p className="mt-1 truncate text-sm font-semibold text-slate-500 sm:text-[17px]">{subtitle}</p>
         </div>
