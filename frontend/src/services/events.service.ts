@@ -4,7 +4,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -192,25 +191,4 @@ export async function deleteEventFirestore(eventId: string): Promise<void> {
   const db = getFirebaseDb();
   const docRef = doc(db, "events", eventId);
   await deleteDoc(docRef);
-}
-
-export async function clearMockEventsFirestore(user: User | null, orgId?: string): Promise<void> {
-  const token = await getValidToken(user);
-  if (token && orgId) {
-    await fetch(`${API_BASE_URL}/auth/organizations/${orgId}/events`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    return;
-  }
-  try {
-    const db = getFirebaseDb();
-    const targetOrgId = orgId || "default-org";
-    const q = query(collection(db, "events"), where("orgId", "==", targetOrgId));
-    const snapshot = await getDocs(q);
-    const deletePromises = snapshot.docs.map((docSnap) => deleteDoc(docSnap.ref));
-    await Promise.all(deletePromises);
-  } catch {
-    // Ignore cleanup errors
-  }
 }

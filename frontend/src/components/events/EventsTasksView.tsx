@@ -10,7 +10,7 @@ import type { Event, Task } from "./types";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
-import { clearMockEventsFirestore, createEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
+import { createEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
 
 type Tab = "events" | "atomizer";
 
@@ -171,7 +171,6 @@ export function EventsTasksView() {
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}
             onNewEvent={handleNewEvent}
-            onClearEvents={() => clearMockEventsFirestore(firebaseUser, effectiveOrgId ?? profile?.organizationId ?? undefined)}
           />
         )}
       </div>

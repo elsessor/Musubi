@@ -103,10 +103,9 @@ type EventsDashboardProps = {
   isLeader?: boolean;
   onSelectEvent: (event: Event) => void;
   onNewEvent: () => void;
-  onClearEvents?: () => void;
 };
 
-export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent, onClearEvents }: EventsDashboardProps) {
+export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent }: EventsDashboardProps) {
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
@@ -140,15 +139,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
         </div>
         {isLeader && (
           <div className="flex items-center gap-2">
-            {events.length > 0 && onClearEvents && (
-              <button
-                type="button"
-                onClick={onClearEvents}
-                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50"
-              >
-                Clear All Events
-              </button>
-            )}
             <button
               type="button"
               onClick={onNewEvent}

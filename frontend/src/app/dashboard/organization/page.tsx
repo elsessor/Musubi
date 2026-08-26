@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Bell,
   BriefcaseBusiness,
@@ -20,6 +20,7 @@ import {
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useLogout } from "@/hooks/useLogout";
 import { OrganizationAccessModal } from "@/components/dashboard/OrganizationAccessModal";
+import { CreateCommitteeButton } from "@/components/organization/CreateCommitteeModal";
 import {
   getMyOrganizationJoinRequest,
   getOrganization,
@@ -35,6 +36,7 @@ import {
 } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
+import { subscribeCommitteesFirestore, type CommitteeRecord } from "@/services/committees.service";
 
 type OrganizationTab = "overview" | "members" | "committees" | "announcements";
 
@@ -53,6 +55,7 @@ function formatDate(value: string | null) {
 
 export default function OrganizationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const authLoading = useAuthStore((state) => state.loading);
@@ -61,17 +64,24 @@ export default function OrganizationPage() {
   const [organization, setOrganization] = useState<OrganizationRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<OrganizationTab>("overview");
+  const [activeTab, setActiveTab] = useState<OrganizationTab>(() =>
+    searchParams.get("tab") === "committees" ? "committees" : "overview"
+  );
   const [memberSearch, setMemberSearch] = useState("");
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [joinRequests, setJoinRequests] = useState<OrganizationJoinRequest[]>([]);
   const [myJoinRequest, setMyJoinRequest] = useState<MyOrganizationJoinRequest | null>(null);
   const [reviewingRequestId, setReviewingRequestId] = useState("");
   const [accessModalOpen, setAccessModalOpen] = useState(false);
+  const [committees, setCommittees] = useState<CommitteeRecord[]>([]);
 
   useEffect(() => {
     if (!authLoading && !profile) router.replace("/sign-in");
   }, [authLoading, profile, router]);
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "committees") setActiveTab("committees");
+  }, [searchParams]);
 
   useEffect(() => {
     if (!profile || !firebaseUser) return;
@@ -99,6 +109,14 @@ export default function OrganizationPage() {
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
     };
+  }, [profile?.organizationId]);
+
+  useEffect(() => {
+    if (!profile?.organizationId) {
+      setCommittees([]);
+      return;
+    }
+    return subscribeCommitteesFirestore(profile.organizationId, setCommittees);
   }, [profile?.organizationId]);
 
   useEffect(() => {
@@ -154,7 +172,7 @@ export default function OrganizationPage() {
           <TabButton active={activeTab === "announcements"} icon={Bell} label="Announcements" onClick={() => setActiveTab("announcements")} />
         </div>
 
-        {loading ? <LoadCard message="Loading organization profile..." /> : error ? <ErrorCard message={error} /> : !organization ? myJoinRequest ? <PendingJoinCard organizationName={myJoinRequest.organizationName} /> : <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." /> : activeTab === "overview" ? <Overview organization={organization} members={members} memberCount={members.length} firebaseUser={firebaseUser} onUpdate={setOrganization} onNavigateMembers={() => setActiveTab("members")} /> : activeTab === "members" ? <Members search={memberSearch} members={filteredMembers} onSearch={setMemberSearch} joinRequests={joinRequests} isLeader={profile.role === "Student Leader"} reviewingRequestId={reviewingRequestId} onReview={reviewJoinRequest} /> : <EmptyPanel tab={activeTab} />}
+        {loading ? <LoadCard message="Loading organization profile..." /> : error ? <ErrorCard message={error} /> : !organization ? myJoinRequest ? <PendingJoinCard organizationName={myJoinRequest.organizationName} /> : <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." /> : activeTab === "overview" ? <Overview organization={organization} members={members} memberCount={members.length} firebaseUser={firebaseUser} onUpdate={setOrganization} onNavigateMembers={() => setActiveTab("members")} /> : activeTab === "members" ? <Members search={memberSearch} members={filteredMembers} onSearch={setMemberSearch} joinRequests={joinRequests} isLeader={profile.role === "Student Leader"} reviewingRequestId={reviewingRequestId} onReview={reviewJoinRequest} /> : activeTab === "committees" ? <Committees committees={committees} members={members} isLeader={profile.role === "Student Leader"} organizationId={organization.id} firebaseUser={firebaseUser} onOpenCommittee={(committeeId) => router.push(`/dashboard/organization/committees/${committeeId}`)} /> : <EmptyPanel tab="announcements" />}
       </section>
       {accessModalOpen && firebaseUser && profile.role !== "Admin" ? <OrganizationAccessModal role={profile.role} user={firebaseUser} onClose={() => setAccessModalOpen(false)} onComplete={(updatedProfile) => { setProfile({ ...profile, ...updatedProfile }); setOrganization(null); setMembers([]); setLoading(true); }} /> : null}
     </DashboardLayout>
@@ -484,7 +502,11 @@ function Members({ search, members: visibleMembers, onSearch, joinRequests, isLe
   return <div className="mt-6">{isLeader && joinRequests.length > 0 && <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 className="text-sm font-bold text-amber-950">Pending join requests ({joinRequests.length})</h3><div className="mt-3 space-y-3">{joinRequests.map((request) => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"><div><p className="text-sm font-bold text-slate-900">{request.name}</p><p className="text-xs text-slate-500">{request.position} · {request.email}</p></div><div className="flex gap-2"><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "rejected")} className="h-8 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600">Decline</button><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "accepted")} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">Accept</button></div></div>)}</div></div>}<div className="flex items-center justify-between gap-4"><h2 className="text-[21px] font-bold">Member Management</h2></div><label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3"><Search className="size-4 text-slate-500" /><input className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} /></label><div className="mt-5 overflow-x-auto rounded-2xl border border-[#dce3ed] bg-white"><table className="min-w-[1180px] w-full border-collapse text-left"><thead className="bg-[#e8eef7] text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold">Member Name</th><th className="px-3 py-3 font-semibold">Role</th><th className="px-3 py-3 font-semibold">Committee</th><th className="px-3 py-3 font-semibold">Skills</th><th className="px-3 py-3 font-semibold">Workload</th><th className="px-3 py-3 font-semibold">Reliability</th><th className="px-3 py-3 font-semibold">Availability</th><th className="px-4 py-3" /></tr></thead><tbody>{visibleMembers.map((member) => <tr className="border-t border-[#dfe5ee] text-[13px]" key={member.name}><td className="px-4 py-3"><div className="flex items-center gap-3"><Avatar initials={member.initials} /><span className="font-medium">{member.name}</span></div></td><td className="px-3 py-3 text-slate-500">{member.role}</td><td className="px-3 py-3"><span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] text-violet-700">{member.committee}</span></td><td className="px-3 py-3"><div className="flex max-w-[410px] flex-wrap gap-1">{member.skills.map((skill) => <span className="rounded bg-[#e8eef7] px-2 py-0.5 text-[11px] text-[#214574]" key={skill}>{skill}</span>)}</div></td><td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded bg-slate-100"><div className={`h-full rounded ${member.workload >= 80 ? "bg-rose-500" : member.workload >= 60 ? "bg-amber-400" : "bg-emerald-500"}`} style={{ width: `${member.workload}%` }} /></div><span className="text-[11px] text-slate-500">{member.workload}%</span></div></td><td className="px-3 py-3 text-[11px] font-semibold">{member.reliability}</td><td className="px-3 py-3"><Availability value={member.availability} /></td><td className="px-4 py-3 text-right text-[12px] font-medium text-[#2868ed]">View Profile</td></tr>)}</tbody></table>{visibleMembers.length === 0 && <p className="p-8 text-center text-sm text-slate-500">No members match your search.</p>}</div></div>;
 }
 
-function EmptyPanel({ tab }: { tab: Exclude<OrganizationTab, "overview" | "members"> }) { const label = tab === "committees" ? "Committees" : "Announcements"; const Icon = tab === "committees" ? ClipboardList : Megaphone; return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-center"><Icon className="size-7 text-slate-400" /><h2 className="mt-3 text-lg font-bold">{label}</h2><p className="mt-1 text-sm text-slate-500">{label} will appear here once they are added to your organization.</p></div>; }
+function Committees({ committees, members, isLeader, organizationId, firebaseUser, onOpenCommittee }: { committees: CommitteeRecord[]; members: OrganizationMember[]; isLeader: boolean; organizationId: string; firebaseUser: import("firebase/auth").User | null; onOpenCommittee: (committeeId: string) => void }) {
+  return <div className="mt-6 space-y-5"><div className="flex items-center justify-between gap-4"><div><h2 className="text-[21px] font-bold">Committees</h2><p className="mt-1 text-sm text-slate-500">Teams within your organization.</p></div><div className="flex items-center gap-3"><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{committees.length} total</span>{isLeader && firebaseUser && <CreateCommitteeButton organizationId={organizationId} user={firebaseUser} />}</div></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{committees.map((committee) => <button type="button" onClick={() => onOpenCommittee(committee.id)} key={committee.id} className="rounded-2xl border border-[#dce3ed] bg-white p-5 text-left transition hover:border-blue-300 hover:shadow-sm"><ClipboardList className="size-5 text-blue-600" /><h3 className="mt-3 font-bold text-slate-900">{committee.name}</h3><p className="mt-1 min-h-10 text-sm text-slate-500">{committee.description || "No description provided."}</p><p className="mt-3 text-[11px] font-medium text-slate-400">{members.filter((member) => member.committeeId === committee.id).length} members · Created {formatDate(committee.createdAt)}</p></button>)}</div>{committees.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">No committees yet.</div>}</div>;
+}
+
+function EmptyPanel({ tab }: { tab: "announcements" }) { return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-center"><Megaphone className="size-7 text-slate-400" /><h2 className="mt-3 text-lg font-bold">Announcements</h2><p className="mt-1 text-sm text-slate-500">Announcements will appear here once they are added to your organization.</p></div>; }
 function LoadCard({ message }: { message: string }) { return <div className="mt-6 rounded-2xl border border-[#dce3ed] bg-white p-10 text-center text-sm text-slate-500">{message}</div>; }
 function PendingJoinCard({ organizationName }: { organizationName: string }) { return <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-10 text-center"><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Pending approval</span><h2 className="mt-4 text-lg font-extrabold text-slate-900">Your request to join {organizationName} is pending</h2><p className="mt-2 text-sm text-slate-600">An organization leader must accept your request before you can access this organization.</p></div>; }
 function ErrorCard({ message }: { message: string }) { return <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 p-8 text-center text-sm font-medium text-rose-700">{message}</div>; }

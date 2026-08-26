@@ -28,7 +28,8 @@ import {
   clearEventsForOrg,
   getEventsForUser,
   watchAdminMemberDirectory,
-  watchAuditLogs
+  watchAuditLogs,
+  assignOrganizationMemberToCommittee
 } from "../services/auth.service.js";
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
@@ -327,6 +328,16 @@ export async function updateAdminMemberController(request: Request, response: Re
       update.committeeName = body.committeeName;
     }
     await updateMemberForAdmin(decoded.uid, request.params.memberId, update);
+    response.status(204).send();
+  } catch (error) { next(error); }
+}
+
+export async function assignOrganizationMemberToCommitteeController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const authReq = request as AuthenticatedRequest;
+    const uid = authReq.authUser?.uid;
+    if (!uid) throw new AppError("User authentication is required.", 401);
+    await assignOrganizationMemberToCommittee(uid, request.params.organizationId, request.params.committeeId, request.params.memberId);
     response.status(204).send();
   } catch (error) { next(error); }
 }

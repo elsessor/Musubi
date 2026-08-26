@@ -54,6 +54,8 @@ export type OrganizationMember = {
   role: string;
   position: string;
   skills: string[];
+  committeeId: string | null;
+  committeeName: string | null;
 };
 
 export type OrganizationJoinRequest = {
@@ -342,7 +344,9 @@ export async function getOrganizationMembers(user: User, organizationId: string)
           name: typeof record.name === "string" ? record.name : "Unnamed member",
           role: typeof record.role === "string" ? record.role : "Organization Member",
           position: typeof record.position === "string" ? record.position : "Organization Member",
-          skills: normalizeStringArray(record.skills)
+          skills: normalizeStringArray(record.skills),
+          committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
+          committeeName: typeof record.committeeName === "string" ? record.committeeName : null
         };
       })
     : [];
@@ -370,20 +374,26 @@ export function subscribeOrganizationMembersFirestore(
             name: typeof data.fullName === "string" ? data.fullName : typeof data.name === "string" ? data.name : "Unnamed member",
             role: typeof data.role === "string" ? data.role : "Organization Member",
             position: typeof data.position === "string" && data.position.trim() ? data.position : typeof data.role === "string" ? data.role : "Organization Member",
-            skills: normalizeStringArray(data.skills)
+            skills: normalizeStringArray(data.skills),
+            committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
+            committeeName: typeof data.committeeName === "string" ? data.committeeName : null
           };
         });
         onData(members);
       },
       (error) => {
         console.warn("subscribeOrganizationMembersFirestore snapshot error:", error);
-        onData([]);
+        // Keep the API-loaded member list when client Firestore rules deny this optional listener.
       }
     );
   } catch {
     onData([]);
     return () => {};
   }
+}
+
+export function assignOrganizationMemberToCommittee(user: User, organizationId: string, committeeId: string, memberId: string) {
+  return organizationRequest<void>(user, `/auth/organizations/${organizationId}/committees/${committeeId}/members/${memberId}`, { method: "PATCH" });
 }
 
 export async function getOrganizationJoinRequests(user: User, organizationId: string): Promise<OrganizationJoinRequest[]> {

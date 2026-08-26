@@ -338,8 +338,42 @@ export async function getOrganizationMembers(uid: string, organizationId: string
       name: typeof data.fullName === "string" ? data.fullName : "Unnamed member",
       role: typeof data.role === "string" ? data.role : "Organization Member",
       position: typeof data.position === "string" ? data.position : "Organization Member",
-      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : []
+      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
+      committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
+      committeeName: typeof data.committeeName === "string" ? data.committeeName : null
     };
+  });
+}
+
+export async function assignOrganizationMemberToCommittee(uid: string, organizationId: string, committeeId: string, memberId: string) {
+  const leader = await getCurrentUser(uid);
+  if (leader.role !== "Student Leader" || leader.organizationId !== organizationId) {
+    throw new AppError("Student Leader access for this organization is required.", 403);
+  }
+
+  const [committeeSnapshot, memberSnapshot] = await Promise.all([
+    firestore.collection("committees").doc(committeeId).get(),
+    firestore.collection("users").doc(memberId).get()
+  ]);
+  if (!committeeSnapshot.exists || committeeSnapshot.data()?.orgId !== organizationId) {
+    throw new AppError("Committee was not found in this organization.", 404);
+  }
+  if (!memberSnapshot.exists || memberSnapshot.data()?.organizationId !== organizationId) {
+    throw new AppError("Member was not found in this organization.", 404);
+  }
+
+  const committeeName = typeof committeeSnapshot.data()?.name === "string" ? committeeSnapshot.data()!.name : "Untitled committee";
+  await memberSnapshot.ref.update({ committeeId, committeeName });
+  writeAuditLog({
+    actorUID: uid,
+    actorName: leader.fullName,
+    actorRole: leader.role,
+    action: "Member assigned to committee",
+    actionCategory: "Organization",
+    targetType: "User",
+    targetName: typeof memberSnapshot.data()?.fullName === "string" ? memberSnapshot.data()!.fullName : memberId,
+    orgId: organizationId,
+    changes: { committee: committeeName }
   });
 }
 
