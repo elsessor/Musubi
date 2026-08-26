@@ -1,10 +1,9 @@
 "use client";
 
-import { AlertTriangle, Calendar, CheckCircle2, Loader2, RefreshCw, ShieldAlert, SlidersHorizontal, User, Wrench, Zap } from "lucide-react";
+import { Loader2, SlidersHorizontal, Zap } from "lucide-react";
 import { useState } from "react";
-import { AIFallbackScreen } from "./AIFallbackScreen";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
-import type { Event, GoalDraft, StarterTemplate, Subtask, Task, TaskPriority, TaskStatus } from "./types";
+import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
 import { atomizeGoal } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 
@@ -23,11 +22,6 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
   const [isAtomizing, setIsAtomizing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [activeGoalDraft, setActiveGoalDraft] = useState<GoalDraft | null>(null);
-
-  // MSB-FE-014: AI Fallback & Error State state
-  const [showFallback, setShowFallback] = useState(false);
-  const [fallbackError, setFallbackError] = useState("");
-  const [retryCount, setRetryCount] = useState(3);
 
   async function handleAtomize() {
     if (!goalDescription.trim()) return;
@@ -80,139 +74,12 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
       setActiveGoalDraft(draft);
     } catch (err: unknown) {
       console.error("[Atomizer] Error running Genkit flow:", err);
-      const msg = err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.";
-      setFallbackError(msg);
-      setShowFallback(true);
+      setErrorMsg(err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.");
     } finally {
       setIsAtomizing(false);
     }
   }
-
-  function handleSimulateFailure() {
-    const selectedEvent = events.find((e) => e.id === selectedEventId);
-    const eventName = selectedEvent ? selectedEvent.title : "Campus Culture Week";
-
-    setFallbackError("Genkit AI Gateway timeout after 3 exhausted attempts (504 Gateway Timeout). Semantic Fallback Safeguard automatically triggered.");
-    setRetryCount(3);
-    setShowFallback(true);
-  }
-
-  function handleSimulateMalformedOutput() {
-    const selectedEvent = events.find((e) => e.id === selectedEventId);
-    const eventName = selectedEvent ? selectedEvent.title : "Campus Culture Week";
-
-    const malformedSubtasks: Subtask[] = [
-      {
-        id: `st-mal-1`,
-        title: "Book", // < 5 chars title warning
-        description: "Reserve venue.", // < 10 chars description warning
-        assigneeName: "", // Unassigned warning
-        requiredSkills: [], // Missing skills warning
-        estimatedDays: 2,
-        isLeaderOnly: false,
-        isAiGenerated: true,
-        aiMetadata: { confidenceScore: 52 }, // Low AI confidence <70% warning
-        priority: "High",
-        status: "To Do"
-      },
-      {
-        id: `st-mal-2`,
-        title: "Process Budget & Financial Honorarium Payments",
-        description: "Handle Cash disbursement and legal contract sign-offs for guest performers.",
-        assigneeName: "Beatrice Lim",
-        requiredSkills: ["Finance"],
-        estimatedDays: 4,
-        isLeaderOnly: false, // Governance warning: sensitive keywords without leader restriction
-        isAiGenerated: true,
-        aiMetadata: { confidenceScore: 68 }, // Low confidence warning
-        priority: "Critical",
-        status: "To Do"
-      },
-      {
-        id: `st-mal-3`,
-        title: "Setup Publicity Posters & Campus Social Media Banners",
-        description: "Design promotional graphics, print flyers, and post event announcements on Instagram.",
-        assigneeName: "Marco Dela Cruz",
-        requiredSkills: ["Graphics", "Promotions"],
-        estimatedDays: 3,
-        isLeaderOnly: false,
-        isAiGenerated: true,
-        aiMetadata: { confidenceScore: 92 },
-        priority: "Medium",
-        status: "To Do"
-      }
-    ];
-
-    setActiveGoalDraft({
-      id: `draft-malformed-${Date.now()}`,
-      eventName,
-      description: goalDescription.trim() || "Simulated malformed AI breakdown response for validation testing.",
-      status: "Draft",
-      subtasks: malformedSubtasks,
-      generationSource: "ai"
-    });
-  }
-
-  function handleSelectStarterTemplate(template: StarterTemplate) {
-    const selectedEvent = events.find((e) => e.id === selectedEventId);
-    const eventName = selectedEvent ? selectedEvent.title : "Campus Event";
-
-    const loadedSubtasks: Subtask[] = template.subtasks.map((st, idx) => ({
-      ...st,
-      id: `subtask-tpl-${Date.now()}-${idx}`
-    }));
-
-    setActiveGoalDraft({
-      id: `draft-tpl-${Date.now()}`,
-      eventName,
-      description: goalDescription.trim() || template.description,
-      status: "Draft",
-      subtasks: loadedSubtasks,
-      generationSource: "template"
-    });
-
-    setShowFallback(false);
-  }
-
-  function handleStartFromScratch() {
-    const selectedEvent = events.find((e) => e.id === selectedEventId);
-    const eventName = selectedEvent ? selectedEvent.title : "Campus Event";
-
-    setActiveGoalDraft({
-      id: `draft-manual-${Date.now()}`,
-      eventName,
-      description: goalDescription.trim() || "Manual Goal Breakdown Workspace",
-      status: "Draft",
-      subtasks: [],
-      generationSource: "manual"
-    });
-
-    setShowFallback(false);
-  }
-
-  // 1. Show Fallback Failure Screen if AI generation fails or is triggered
-  if (showFallback) {
-    const selectedEvent = events.find((e) => e.id === selectedEventId);
-    const eventName = selectedEvent ? selectedEvent.title : "Campus Culture Week";
-
-    return (
-      <AIFallbackScreen
-        eventName={eventName}
-        goalDescription={goalDescription}
-        errorMessage={fallbackError}
-        retryCount={retryCount}
-        onSelectTemplate={handleSelectStarterTemplate}
-        onStartFromScratch={handleStartFromScratch}
-        onRetryGeneration={() => {
-          setShowFallback(false);
-          void handleAtomize();
-        }}
-        onBackToForm={() => setShowFallback(false)}
-      />
-    );
-  }
-
-  // 2. If a goal draft is active, show SubtaskReviewScreen
+  // If a goal draft is active, show SubtaskReviewScreen.
   if (activeGoalDraft) {
     return (
       <SubtaskReviewScreen
@@ -260,9 +127,6 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
               <h2 className="text-base font-bold text-slate-900">AI Task Atomizer</h2>
               <span className="inline-flex items-center rounded-full bg-blue-100/70 px-2.5 py-0.5 text-[11px] font-semibold text-blue-600">
                 AI Powered
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                Fallback Safeguard Active
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
