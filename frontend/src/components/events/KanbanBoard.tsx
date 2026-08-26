@@ -21,6 +21,9 @@ import { ReassignTaskModal } from "./ReassignTaskModal";
 import type { Event, EventStatus, Task, TaskStatus } from "./types";
 import type { OrgMemberItem } from "./AddTaskModal";
 
+import { useAuthStore } from "@/store/authStore";
+import { updateEventFirestore } from "@/services/events.service";
+
 const STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
 type KanbanBoardProps = {
@@ -30,6 +33,7 @@ type KanbanBoardProps = {
 };
 
 export function KanbanBoard({ event, onBack, onUpdateEvent }: KanbanBoardProps) {
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const [currentEvent, setCurrentEvent] = useState<Event>(event);
   const [tasks, setTasks] = useState<Task[]>(event.tasks);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -62,6 +66,13 @@ export function KanbanBoard({ event, onBack, onUpdateEvent }: KanbanBoardProps) 
     if (onUpdateEvent) {
       onUpdateEvent(updated);
     }
+    void updateEventFirestore(firebaseUser, event.id, {
+      status: finalStatus,
+      progress: finalProgress,
+      tasks: updatedTasks
+    }).catch((error) => {
+      console.error("Failed to update event:", error);
+    });
   }
 
   function handleAddTask(newTask: Task) {

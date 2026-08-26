@@ -23,6 +23,10 @@ import {
   reviewOrganizationRequest,
   updateMemberForAdmin,
   updateOrganizationForAdmin,
+  createEventForUser,
+  updateEventForUser,
+  clearEventsForOrg,
+  getEventsForUser,
   watchAdminMemberDirectory,
   watchAuditLogs
 } from "../services/auth.service.js";
@@ -406,6 +410,55 @@ export async function atomizeGoalController(request: Request, response: Response
     });
 
     response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createEventController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const result = await createEventForUser(decoded.uid, request.body);
+    response.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateEventController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const result = await updateEventForUser(decoded.uid, request.params.eventId, request.body);
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function clearEventsController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const authReq = request as AuthenticatedRequest;
+    const uid = authReq.authUser?.uid;
+    if (!uid) throw new AppError("User authentication is required.", 401);
+    const result = await clearEventsForOrg(uid, request.params.organizationId);
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getEventsController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const authReq = request as AuthenticatedRequest;
+    const uid = authReq.authUser?.uid;
+    if (!uid) throw new AppError("User authentication is required.", 401);
+    const orgId = request.query.orgId as string | undefined;
+    const events = await getEventsForUser(uid, orgId);
+    response.status(200).json({ events });
   } catch (error) {
     next(error);
   }

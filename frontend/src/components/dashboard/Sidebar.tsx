@@ -115,8 +115,12 @@ export function Sidebar({
           </div>
           {!collapsed ? (
             <div className="min-w-0">
-              <p className="truncate text-[18px] font-extrabold leading-tight tracking-[-0.02em]">AI Workflow &amp; Task Orchestr</p>
-              <p className="mt-1 text-[16px] font-semibold leading-tight text-[#aebdd0]">Admin Panel</p>
+              <p className="truncate text-[18px] font-extrabold leading-tight tracking-[-0.02em]">
+                {role === "Admin" ? "AI Workflow & Task Orchestr" : "Musubi"}
+              </p>
+              <p className="mt-1 text-[16px] font-semibold leading-tight text-[#aebdd0]">
+                {role === "Admin" ? "Admin Panel" : "Campus Organizations"}
+              </p>
             </div>
           ) : null}
         </div>

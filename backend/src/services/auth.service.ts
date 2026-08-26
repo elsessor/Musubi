@@ -121,6 +121,25 @@ export function verifyAppJwt(token: string): JwtPayload {
   }
 }
 
+export async function verifyAppJwtAsync(token: string): Promise<JwtPayload> {
+  try {
+    return jwt.verify(token, env.jwtSecret) as JwtPayload;
+  } catch {
+    try {
+      const decoded = await firebaseAuth.verifyIdToken(token);
+      const user = await getOrCreateUserDocument(decoded.uid);
+      return {
+        uid: user.uid,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId
+      };
+    } catch {
+      throw new AppError("Invalid or expired authorization token.", 401);
+    }
+  }
+}
+
 export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]> {
   const snapshot = await firestore.collection("users").doc(uid).get();
 
@@ -376,8 +395,10 @@ export async function getOrganizationManagementDetail(uid: string, organizationI
 }
 
 export async function updateOrganizationForAdmin(uid: string, organizationId: string, input: { name?: string; type?: string; description?: string; setupStatus?: string }) {
-  const admin = await getCurrentUser(uid);
-  if (admin.role !== "Admin") throw new AppError("Administrator access is required.", 403);
+  const currentUser = await getCurrentUser(uid);
+  if (currentUser.role !== "Admin" && currentUser.organizationId !== organizationId) {
+    throw new AppError("Organization leader or administrator access is required.", 403);
+  }
   const ref = firestore.collection("organizations").doc(organizationId);
   const before = await ref.get();
   if (!before.exists) throw new AppError("Organization was not found.", 404);
@@ -392,8 +413,8 @@ export async function updateOrganizationForAdmin(uid: string, organizationId: st
   if (input.setupStatus !== undefined) {
     writeAuditLog({
       actorUID: uid,
-      actorName: admin.fullName,
-      actorRole: admin.role,
+      actorName: currentUser.fullName,
+      actorRole: currentUser.role,
       action: "Organization status updated",
       actionCategory: "Organization",
       targetType: "Organization",
@@ -404,9 +425,9 @@ export async function updateOrganizationForAdmin(uid: string, organizationId: st
   } else {
     writeAuditLog({
       actorUID: uid,
-      actorName: admin.fullName,
-      actorRole: admin.role,
-      action: "Organization details updated by administrator",
+      actorName: currentUser.fullName,
+      actorRole: currentUser.role,
+      action: currentUser.role === "Admin" ? "Organization details updated by administrator" : "Organization details updated",
       actionCategory: "Organization",
       targetType: "Organization",
       targetName: orgName,
@@ -713,4 +734,87 @@ export async function watchAuditLogs(
     );
 
   return unsubscribe;
+}
+
+export async function createEventForUser(uid: string, input: { orgId?: string; title: string; description?: string; status?: string; startDate?: string; endDate?: string; memberCount?: number; progress?: number; committee?: string; tasks?: any[] }) {
+  const user = await getCurrentUser(uid);
+  const targetOrgId = input.orgId || user.organizationId || "default-org";
+
+  const eventRef = await firestore.collection("events").add({
+    title: input.title.trim(),
+    description: (input.description || "").trim(),
+    status: input.status || "Active",
+    startDate: input.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    endDate: input.endDate || new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    memberCount: typeof input.memberCount === "number" ? input.memberCount : 1,
+    progress: typeof input.progress === "number" ? input.progress : 0,
+    committee: input.committee || "General",
+    tasks: Array.isArray(input.tasks) ? input.tasks : [],
+    orgId: targetOrgId,
+    createdBy: uid,
+    createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  });
+
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "Event created",
+    actionCategory: "Events & Tasks",
+    targetType: "Event",
+    targetName: input.title,
+    orgId: targetOrgId
+  });
+
+  return { id: eventRef.id };
+}
+
+export async function updateEventForUser(uid: string, eventId: string, input: Record<string, any>) {
+  const user = await getCurrentUser(uid);
+  const docRef = firestore.collection("events").doc(eventId);
+  const snap = await docRef.get();
+  if (!snap.exists) throw new AppError("Event not found.", 404);
+
+  const updatePayload: Record<string, any> = { ...input, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() };
+  delete updatePayload.id;
+
+  await docRef.update(updatePayload);
+
+  return { success: true };
+}
+
+export async function clearEventsForOrg(uid: string, organizationId: string) {
+  const user = await getCurrentUser(uid);
+  const targetOrgId = organizationId || user.organizationId || "default-org";
+  const snapshot = await firestore.collection("events").where("orgId", "==", targetOrgId).get();
+  const batch = firestore.batch();
+  snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+  await batch.commit();
+
+  return { success: true };
+}
+
+export async function getEventsForUser(uid: string, orgId?: string) {
+  const user = await getCurrentUser(uid);
+  const targetOrgId = orgId || user.organizationId || "default-org";
+  const snapshot = await firestore.collection("events").where("orgId", "==", targetOrgId).get();
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      title: typeof data.title === "string" ? data.title : "Untitled Event",
+      description: typeof data.description === "string" ? data.description : "",
+      status: ["Active", "Planning", "Completed", "Archived"].includes(data.status)
+        ? data.status
+        : "Planning",
+      startDate: typeof data.startDate === "string" ? data.startDate : "TBD",
+      endDate: typeof data.endDate === "string" ? data.endDate : "TBD",
+      memberCount: typeof data.memberCount === "number" ? data.memberCount : 0,
+      progress: typeof data.progress === "number" ? data.progress : 0,
+      committee: typeof data.committee === "string" ? data.committee : "General",
+      tasks: Array.isArray(data.tasks) ? data.tasks : [],
+      orgId: typeof data.orgId === "string" ? data.orgId : null,
+      createdBy: typeof data.createdBy === "string" ? data.createdBy : null
+    };
+  });
 }

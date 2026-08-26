@@ -65,10 +65,12 @@ export function subscribeAuditLogsFirestore(
         callbacks.onData(logs);
       },
       (err) => {
+        callbacks.onData([]);
         callbacks.onError(err);
       }
     );
   } catch (error) {
+    callbacks.onData([]);
     callbacks.onError(error instanceof Error ? error : new Error(String(error)));
     return () => {};
   }
