@@ -54,6 +54,8 @@ export type OrganizationMember = {
   role: string;
   position: string;
   skills: string[];
+  committeeId?: string | null;
+  committeeName?: string | null;
 };
 
 export type OrganizationJoinRequest = {
@@ -75,8 +77,12 @@ export type OrganizationRecord = OrganizationDirectoryOption;
 export type OrganizationCommitteeRecord = {
   id: string;
   name: string;
-  headMemberId: string | null;
+  headMemberUID: string | null;
+  /** @deprecated Compatibility alias for existing committee-card rendering. */
+  headMemberId?: string | null;
   description: string;
+  /** Members are stored on user documents, not committee documents. */
+  memberIds?: string[];
 };
 
 export type OrganizationManagementDetail = {
@@ -342,7 +348,9 @@ export async function getOrganizationMembers(user: User, organizationId: string)
           name: typeof record.name === "string" ? record.name : "Unnamed member",
           role: typeof record.role === "string" ? record.role : "Organization Member",
           position: typeof record.position === "string" ? record.position : "Organization Member",
-          skills: normalizeStringArray(record.skills)
+          skills: normalizeStringArray(record.skills),
+          committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
+          committeeName: typeof record.committeeName === "string" ? record.committeeName : null
         };
       })
     : [];
@@ -370,7 +378,9 @@ export function subscribeOrganizationMembersFirestore(
             name: typeof data.fullName === "string" ? data.fullName : typeof data.name === "string" ? data.name : "Unnamed member",
             role: typeof data.role === "string" ? data.role : "Organization Member",
             position: typeof data.position === "string" && data.position.trim() ? data.position : typeof data.role === "string" ? data.role : "Organization Member",
-            skills: normalizeStringArray(data.skills)
+            skills: normalizeStringArray(data.skills),
+            committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
+            committeeName: typeof data.committeeName === "string" ? data.committeeName : null
           };
         });
         onData(members);
@@ -426,6 +436,23 @@ export function reviewOrganizationJoinRequest(user: User, organizationId: string
 
 export async function getOrganizationManagementDetail(user: User, organizationId: string): Promise<OrganizationManagementDetail> {
   return organizationRequest<OrganizationManagementDetail>(user, `/auth/organizations/${organizationId}/management`);
+}
+
+export async function getOrganizationCommittees(user: User, organizationId: string): Promise<OrganizationCommitteeRecord[]> {
+  const data = await organizationRequest<{ committees?: unknown[] }>(user, `/auth/organizations/${organizationId}/committees`);
+  return Array.isArray(data.committees) ? data.committees.map((item) => {
+    const record = isRecord(item) ? item : {};
+    const headMemberUID = typeof record.headMemberUID === "string" ? record.headMemberUID : null;
+    return { id: typeof record.id === "string" ? record.id : crypto.randomUUID(), name: typeof record.name === "string" ? record.name : "Untitled committee", description: typeof record.description === "string" ? record.description : "", headMemberUID, headMemberId: headMemberUID };
+  }) : [];
+}
+
+export function createOrganizationCommittee(user: User, organizationId: string, input: { name: string; description: string; headMemberId: string | null; memberIds: string[] }) {
+  return organizationRequest<{ committee: OrganizationCommitteeRecord }>(user, `/auth/organizations/${organizationId}/committees`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function addOrganizationCommitteeMembers(user: User, organizationId: string, committeeId: string, memberIds: string[]) {
+  return organizationRequest<{ memberIds: string[] }>(user, `/auth/organizations/${organizationId}/committees/${committeeId}/members`, { method: "POST", body: JSON.stringify({ memberIds }) });
 }
 
 export function createOrganization(

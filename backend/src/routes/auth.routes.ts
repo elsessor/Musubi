@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { adminMembersController, adminMembersStreamController, atomizeGoalController, auditLogsController, auditLogsStreamController, bulkUpdateAdminMembersRoleController, clearEventsController, createEventController, createOrganizationController, getEventsController, joinOrganizationController, loginController, meController, myOrganizationJoinRequestController, onboardingController, organizationController, organizationDirectoryController, organizationJoinRequestsController, organizationManagementDetailController, organizationMembersController, organizationRequestsController, organizationsController, reviewOrganizationJoinRequestController, reviewOrganizationRequestController, updateAdminMemberController, updateEventController, updateOrganizationController } from "../controllers/auth.controller.js";
+import { addOrganizationCommitteeMembersController, adminMembersController, adminMembersStreamController, atomizeGoalController, auditLogsController, auditLogsStreamController, bulkUpdateAdminMembersRoleController, clearEventsController, createEventController, createOrganizationCommitteeController, createOrganizationController, getEventsController, joinOrganizationController, loginController, meController, myOrganizationJoinRequestController, onboardingController, organizationCommitteesController, organizationController, organizationDirectoryController, organizationJoinRequestsController, organizationManagementDetailController, organizationMembersController, organizationRequestsController, organizationsController, reviewOrganizationJoinRequestController, reviewOrganizationRequestController, updateAdminMemberController, updateEventController, updateOrganizationController } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 
 export const authRouter = Router();
@@ -27,6 +27,9 @@ authRouter.get("/audit-logs/stream", auditLogsStreamController);
 authRouter.patch("/members/bulk-role", bulkUpdateAdminMembersRoleController);
 authRouter.patch("/members/:memberId", updateAdminMemberController);
 authRouter.get("/organizations/:organizationId/members", organizationMembersController);
+authRouter.get("/organizations/:organizationId/committees", organizationCommitteesController);
+authRouter.post("/organizations/:organizationId/committees", createOrganizationCommitteeController);
+authRouter.post("/organizations/:organizationId/committees/:committeeId/members", addOrganizationCommitteeMembersController);
 authRouter.get("/organizations/:organizationId/join-requests", organizationJoinRequestsController);
 authRouter.patch("/organizations/:organizationId/join-requests/:requestId", reviewOrganizationJoinRequestController);
 authRouter.get("/organizations/:organizationId", organizationController);

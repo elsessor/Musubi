@@ -53,6 +53,7 @@ function buildDashboardUser(profile: AuthUserProfile | null) {
   const role = profile?.role ?? "Student Leader";
 
   return {
+    id: profile?.uid ?? null,
     name: profile?.fullName ?? "Hans San Miguel",
     role,
     roleLabel: profile?.position ?? (role === "Student Leader" ? "President" : role),
@@ -109,6 +110,7 @@ export function DashboardPage() {
 
         if (!cancelled) {
           setDashboardUser({
+            id: uid,
             name: fullName,
             role,
             roleLabel: typeof data?.position === "string" && data.position.trim() ? data.position : (role === "Student Leader" ? "President" : role),

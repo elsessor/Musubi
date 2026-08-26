@@ -6,12 +6,15 @@ import {
   bulkUpdateMemberRolesForAdmin,
   completeUserOnboarding,
   createOrganization,
+  createOrganizationCommittee,
+  addMembersToOrganizationCommittee,
   getAdminMemberDirectory,
   getAuditLogs,
   getCurrentUser,
   getMyOrganizationJoinRequest,
   getOrganizationDirectory,
   getOrganizationForUser,
+  getOrganizationCommittees,
   getOrganizationJoinRequests,
   getOrganizationManagementDetail,
   getOrganizationMembers,
@@ -251,6 +254,38 @@ export async function organizationManagementDetailController(request: Request, r
     if (!token) throw new AppError("Firebase ID token is required.", 400);
     const decoded = await firebaseAuth.verifyIdToken(token);
     response.status(200).json(await getOrganizationManagementDetail(decoded.uid, request.params.organizationId));
+  } catch (error) { next(error); }
+}
+
+export async function organizationCommitteesController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    response.status(200).json({ committees: await getOrganizationCommittees(decoded.uid, request.params.organizationId) });
+  } catch (error) { next(error); }
+}
+
+export async function createOrganizationCommitteeController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    const body = request.body as Record<string, unknown>;
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    if (typeof body.name !== "string" || !body.name.trim() || typeof body.description !== "string") throw new AppError("A committee name and description are required.", 400);
+    if (!(typeof body.headMemberId === "string" || body.headMemberId === null)) throw new AppError("Invalid committee head.", 400);
+    if (!Array.isArray(body.memberIds) || !body.memberIds.every((id) => typeof id === "string")) throw new AppError("Committee members are required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    response.status(201).json({ committee: await createOrganizationCommittee(decoded.uid, request.params.organizationId, { name: body.name, description: body.description, headMemberId: body.headMemberId, memberIds: body.memberIds }) });
+  } catch (error) { next(error); }
+}
+
+export async function addOrganizationCommitteeMembersController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request); const body = request.body as Record<string, unknown>;
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    if (!Array.isArray(body.memberIds) || !body.memberIds.length || !body.memberIds.every((id) => typeof id === "string")) throw new AppError("Select at least one member.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    response.status(200).json(await addMembersToOrganizationCommittee(decoded.uid, request.params.organizationId, request.params.committeeId, body.memberIds));
   } catch (error) { next(error); }
 }
 

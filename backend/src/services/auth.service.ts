@@ -338,9 +338,76 @@ export async function getOrganizationMembers(uid: string, organizationId: string
       name: typeof data.fullName === "string" ? data.fullName : "Unnamed member",
       role: typeof data.role === "string" ? data.role : "Organization Member",
       position: typeof data.position === "string" ? data.position : "Organization Member",
-      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : []
+      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
+      committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
+      committeeName: typeof data.committeeName === "string" ? data.committeeName : null
     };
   });
+}
+
+export async function getOrganizationCommittees(uid: string, organizationId: string) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to these committees.", 403);
+  const organizationRef = firestore.collection("organizations").doc(organizationId);
+  const snapshot = await firestore.collection("committees").where("orgId", "==", organizationRef).get();
+  return snapshot.docs.map((document) => {
+    const data = document.data();
+    const createdAt = data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0;
+    return { id: document.id, name: typeof data.name === "string" ? data.name : "Untitled committee", description: typeof data.description === "string" ? data.description : "", headMemberUID: typeof data.headMemberUID === "string" ? data.headMemberUID : null, createdAt };
+  }).sort((left, right) => left.createdAt - right.createdAt).map(({ createdAt: _createdAt, ...committee }) => committee);
+}
+
+export async function createOrganizationCommittee(
+  uid: string,
+  organizationId: string,
+  input: { name: string; description: string; headMemberId: string | null; memberIds: string[] }
+) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Student Leader" || user.organizationId !== organizationId) {
+    throw new AppError("Only this organization's student leader can create committees.", 403);
+  }
+
+  const organizationRef = firestore.collection("organizations").doc(organizationId);
+  if (!(await organizationRef.get()).exists) throw new AppError("Organization was not found.", 404);
+
+  const memberIds = Array.from(new Set(input.memberIds));
+  if (input.headMemberId && !memberIds.includes(input.headMemberId)) memberIds.unshift(input.headMemberId);
+  const memberSnapshots = await Promise.all(memberIds.map((memberId) => firestore.collection("users").doc(memberId).get()));
+  if (memberSnapshots.some((snapshot) => !snapshot.exists || snapshot.data()?.organizationId !== organizationId)) {
+    throw new AppError("Every committee member must belong to this organization.", 400);
+  }
+
+  const committeeRef = firestore.collection("committees").doc();
+  const batch = firestore.batch();
+  batch.set(committeeRef, {
+    orgId: organizationRef,
+    name: input.name.trim(),
+    description: input.description.trim(),
+    headMemberUID: input.headMemberId,
+    createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  });
+  for (const snapshot of memberSnapshots) {
+    batch.set(snapshot.ref, { committeeId: committeeRef.id, committeeName: input.name.trim() }, { merge: true });
+  }
+  await batch.commit();
+  writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role, action: "Committee created", actionCategory: "Organization", targetType: "Committee", targetName: input.name.trim(), orgId: organizationId });
+  return { id: committeeRef.id, name: input.name.trim(), description: input.description.trim(), headMemberUID: input.headMemberId };
+}
+
+export async function addMembersToOrganizationCommittee(uid: string, organizationId: string, committeeId: string, memberIds: string[]) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Student Leader" || user.organizationId !== organizationId) throw new AppError("Only this organization's student leader can manage committee members.", 403);
+  const organizationRef = firestore.collection("organizations").doc(organizationId);
+  const committeeSnapshot = await firestore.collection("committees").doc(committeeId).get();
+  if (!committeeSnapshot.exists || committeeSnapshot.data()?.orgId?.path !== organizationRef.path) throw new AppError("Committee was not found.", 404);
+  const committeeName = typeof committeeSnapshot.data()?.name === "string" ? committeeSnapshot.data()!.name : "Committee";
+  const uniqueMemberIds = Array.from(new Set(memberIds));
+  const members = await Promise.all(uniqueMemberIds.map((memberId) => firestore.collection("users").doc(memberId).get()));
+  if (members.some((member) => !member.exists || member.data()?.organizationId !== organizationId)) throw new AppError("Every selected user must belong to this organization.", 400);
+  const batch = firestore.batch();
+  members.forEach((member) => batch.set(member.ref, { committeeId, committeeName }, { merge: true }));
+  await batch.commit();
+  return { memberIds: uniqueMemberIds };
 }
 
 function normalizeOrganization(id: string, data: FirebaseFirestore.DocumentData) {

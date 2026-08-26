@@ -75,6 +75,7 @@ export function DashboardLayout({
           notificationCount={notificationCount}
           organizationName={user.organizationName}
           role={user.role}
+          userId={user.id}
           onLogout={onLogout}
           onMenuToggle={() => setMobileSidebarOpen(true)}
         />
