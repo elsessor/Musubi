@@ -1,7 +1,7 @@
 // Events & Tasks — shared data models
 
-export type EventStatus = "Active" | "Planning" | "Completed" | "Archived";
-export type TaskStatus = "To Do" | "In Progress" | "In Review" | "Completed";
+export type EventStatus = "Active" | "Planning" | "Completed" | "Archived" | (string & {});
+export type TaskStatus = "To Do" | "In Progress" | "In Review" | "Completed" | (string & {});
 export type TaskPriority = "Low" | "Medium" | "High" | "Critical";
 
 export type Assignee = {

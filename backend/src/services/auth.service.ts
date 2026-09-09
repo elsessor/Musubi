@@ -107,8 +107,8 @@ export async function loginWithFirebaseToken(idToken: string): Promise<LoginResp
       position: user.position,
       organizationId: user.organizationId,
       profilePicture: user.profilePicture
-      ,skills: user.skills
-      ,onboardingCompleted: user.onboardingCompleted
+      , skills: user.skills
+      , onboardingCompleted: user.onboardingCompleted
     }
   };
 }
@@ -157,8 +157,8 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     position: user.position,
     organizationId: user.organizationId,
     profilePicture: user.profilePicture
-    ,skills: user.skills
-    ,onboardingCompleted: user.onboardingCompleted
+    , skills: user.skills
+    , onboardingCompleted: user.onboardingCompleted
   };
 }
 
@@ -881,14 +881,14 @@ export async function getEventsForUser(uid: string, orgId?: string) {
       committee: typeof data.committee === "string" ? data.committee : "General",
       tasks: Array.isArray(data.tasks)
         ? data.tasks.map((t: any) => ({
-            ...t,
-            title: typeof t.title === "string" && t.title.trim()
-              ? t.title
-              : typeof t.description === "string" && t.description.trim()
+          ...t,
+          title: typeof t.title === "string" && t.title.trim()
+            ? t.title
+            : typeof t.description === "string" && t.description.trim()
               ? t.description
               : "Untitled Subtask",
-            description: typeof t.description === "string" ? t.description : ""
-          }))
+          description: typeof t.description === "string" ? t.description : ""
+        }))
         : [],
       orgId: typeof data.orgId === "string" ? data.orgId : null,
       createdBy: typeof data.createdBy === "string" ? data.createdBy : null

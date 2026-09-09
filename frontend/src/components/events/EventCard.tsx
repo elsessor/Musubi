@@ -2,21 +2,16 @@
 
 import { Calendar, Plus, Users } from "lucide-react";
 import type { Event, EventStatus } from "./types";
-
-const statusConfig: Record<EventStatus, { label: string; dot: string; badge: string; text: string }> = {
-  Active:    { label: "Active",    dot: "bg-blue-500",   badge: "bg-blue-50 text-blue-600 ring-blue-200",    text: "text-blue-600"  },
-  Planning:  { label: "Planning",  dot: "bg-amber-400",  badge: "bg-amber-50 text-amber-700 ring-amber-200",  text: "text-amber-600" },
-  Completed: { label: "Completed", dot: "bg-emerald-500",badge: "bg-emerald-50 text-emerald-700 ring-emerald-200", text: "text-emerald-600" },
-  Archived:  { label: "Archived",  dot: "bg-slate-400",  badge: "bg-slate-100 text-slate-600 ring-slate-200", text: "text-slate-500"  }
-};
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
 type EventCardProps = {
   event: Event;
   onClick: (event: Event) => void;
+  customStatuses?: CustomStatusConfig[];
 };
 
-export function EventCard({ event, onClick }: EventCardProps) {
-  const cfg = statusConfig[event.status];
+export function EventCard({ event, onClick, customStatuses }: EventCardProps) {
+  const theme = getStatusTheme(event.status, customStatuses);
   const taskCount = event.tasks.length;
 
   return (
@@ -39,8 +34,8 @@ export function EventCard({ event, onClick }: EventCardProps) {
               {event.committee}
             </span>
           )}
-          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${cfg.badge}`}>
-            {cfg.label}
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${theme.badge}`}>
+            {event.status}
           </span>
         </div>
       </div>
@@ -70,7 +65,7 @@ export function EventCard({ event, onClick }: EventCardProps) {
       <div className="mt-4">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
           <div
-            className="h-full rounded-full bg-blue-500 transition-all"
+            className={`h-full rounded-full ${theme.dot} transition-all`}
             style={{ width: `${event.progress}%` }}
           />
         </div>

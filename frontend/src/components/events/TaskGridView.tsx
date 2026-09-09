@@ -3,30 +3,30 @@
 import { Calendar, CheckCircle2, ShieldAlert, Sparkles, AlertTriangle, ChevronDown } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { useState } from "react";
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
 const priorityConfig: Record<TaskPriority, { label: string; classes: string }> = {
-  Low:      { label: "Low",      classes: "bg-slate-100 text-slate-600 ring-slate-200" },
-  Medium:   { label: "Medium",   classes: "bg-blue-50 text-blue-600 ring-blue-200" },
-  High:     { label: "High",     classes: "bg-amber-50 text-amber-700 ring-amber-200" },
+  Low: { label: "Low", classes: "bg-slate-100 text-slate-600 ring-slate-200" },
+  Medium: { label: "Medium", classes: "bg-blue-50 text-blue-600 ring-blue-200" },
+  High: { label: "High", classes: "bg-amber-50 text-amber-700 ring-amber-200" },
   Critical: { label: "Critical", classes: "bg-rose-50 text-rose-600 ring-rose-200" }
 };
 
-const statusConfig: Record<TaskStatus, { label: string; classes: string; dot: string }> = {
-  "To Do":       { label: "To Do",       classes: "bg-slate-100 text-slate-700 border-slate-200", dot: "bg-slate-400" },
-  "In Progress": { label: "In Progress", classes: "bg-blue-50 text-blue-700 border-blue-200",   dot: "bg-blue-500" },
-  "In Review":   { label: "In Review",   classes: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" },
-  "Completed":   { label: "Completed",   classes: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-};
-
-const STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
+const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
 type TaskGridViewProps = {
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
+  customStatuses?: CustomStatusConfig[];
 };
 
-export function TaskGridView({ tasks, onUpdateStatus }: TaskGridViewProps) {
+export function TaskGridView({ tasks, onUpdateStatus, customStatuses }: TaskGridViewProps) {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
+  const allStatuses: TaskStatus[] = [
+    ...DEFAULT_STATUSES,
+    ...(customStatuses ? customStatuses.map((cs) => cs.name as TaskStatus) : [])
+  ];
 
   if (tasks.length === 0) {
     return (
@@ -41,7 +41,7 @@ export function TaskGridView({ tasks, onUpdateStatus }: TaskGridViewProps) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {tasks.map((task) => {
         const pCfg = priorityConfig[task.priority || "Medium"];
-        const sCfg = statusConfig[task.status] || statusConfig["To Do"];
+        const theme = getStatusTheme(task.status, customStatuses);
 
         return (
           <div
@@ -68,31 +68,34 @@ export function TaskGridView({ tasks, onUpdateStatus }: TaskGridViewProps) {
                   <button
                     type="button"
                     onClick={() => setOpenDropdownId(openDropdownId === task.id ? null : task.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition-colors ${sCfg.classes}`}
+                    className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition-colors ${theme.badge}`}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full ${sCfg.dot}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />
                     {task.status}
                     <ChevronDown size={12} className="opacity-60" />
                   </button>
 
                   {openDropdownId === task.id && (
-                    <div className="absolute right-0 top-full z-20 mt-1 w-36 rounded-xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
-                      {STATUSES.map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => {
-                            onUpdateStatus(task.id, st);
-                            setOpenDropdownId(null);
-                          }}
-                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs font-medium text-left transition-colors hover:bg-slate-50 ${
-                            task.status === st ? "font-bold text-blue-600" : "text-slate-700"
-                          }`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${statusConfig[st].dot}`} />
-                          {st}
-                        </button>
-                      ))}
+                    <div className="absolute right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto w-36 rounded-xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
+                      {allStatuses.map((st) => {
+                        const stTheme = getStatusTheme(st, customStatuses);
+                        return (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => {
+                              onUpdateStatus(task.id, st);
+                              setOpenDropdownId(null);
+                            }}
+                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs font-medium text-left transition-colors hover:bg-slate-50 ${
+                              task.status === st ? "font-bold text-blue-600" : "text-slate-700"
+                            }`}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${stTheme.dot}`} />
+                            {st}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

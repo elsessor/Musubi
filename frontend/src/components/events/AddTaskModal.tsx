@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, ClipboardList, Plus, ShieldAlert, UserCheck, X } from "lucide-react";
 import type { Event, Task, TaskPriority, TaskStatus } from "./types";
+import type { CustomStatusConfig } from "./statusUtils";
 import { getOrganizationCommittees, getOrganizationMembers, type OrganizationCommitteeRecord, type OrganizationMember } from "@/services/auth.service";
 import { updateEventFirestore } from "@/services/events.service";
 import { useAuthStore } from "@/store/authStore";
@@ -20,6 +21,8 @@ export type AddTaskModalProps = {
   members?: OrganizationMember[];
   /** Callback triggered after successfully adding a subtask */
   onTaskAdded?: (newTask: Task, eventId: string) => void;
+  /** Custom task status configurations */
+  customStatuses?: CustomStatusConfig[];
 };
 
 export function AddTaskModal({
@@ -29,7 +32,8 @@ export function AddTaskModal({
   events = [],
   defaultStatus = "To Do",
   members: propMembers,
-  onTaskAdded
+  onTaskAdded,
+  customStatuses = []
 }: AddTaskModalProps) {
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
@@ -83,7 +87,7 @@ export function AddTaskModal({
           setTaskCommittee(comms[0].name);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     if (propMembers && propMembers.length > 0) {
       setMembers(propMembers);
@@ -93,7 +97,7 @@ export function AddTaskModal({
     setLoadingMembers(true);
     getOrganizationMembers(firebaseUser, profile.organizationId)
       .then((m) => setMembers(m))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingMembers(false));
   }, [isOpen, propMembers, firebaseUser, profile?.organizationId, taskCommittee]);
 
@@ -123,8 +127,8 @@ export function AddTaskModal({
       const initials = assignedMember
         ? assignedMember.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase()
         : profile?.fullName
-        ? profile.fullName.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase()
-        : "ME";
+          ? profile.fullName.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase()
+          : "ME";
 
       const formattedDueDate = deadline
         ? new Date(deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -150,13 +154,13 @@ export function AddTaskModal({
         committee: taskCommittee,
         nudges: enableNudge
           ? [
-              {
-                nudgeUID: `nudge_${Date.now()}`,
-                triggerDate: deadline || new Date().toISOString(),
-                nudgeType: "deadline_reminder",
-                sent: false
-              }
-            ]
+            {
+              nudgeUID: `nudge_${Date.now()}`,
+              triggerDate: deadline || new Date().toISOString(),
+              nudgeType: "deadline_reminder",
+              sent: false
+            }
+          ]
           : []
       };
 
@@ -340,6 +344,11 @@ export function AddTaskModal({
                 <option value="In Progress">In Progress</option>
                 <option value="In Review">In Review</option>
                 <option value="Completed">Completed</option>
+                {customStatuses.map((cs) => (
+                  <option key={cs.name} value={cs.name}>
+                    {cs.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -438,11 +447,10 @@ export function AddTaskModal({
             <button
               type="submit"
               disabled={submitting || !description.trim()}
-              className={`w-full flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold text-white transition ${
-                description.trim() && !submitting
+              className={`w-full flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold text-white transition ${description.trim() && !submitting
                   ? "bg-[#213f68] hover:bg-[#193254] active:scale-[0.98]"
                   : "bg-slate-300 cursor-not-allowed opacity-70"
-              }`}
+                }`}
             >
               {submitting ? "Embedding..." : "Add Subtask"}
             </button>

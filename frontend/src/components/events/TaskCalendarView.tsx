@@ -3,23 +3,18 @@
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2, Clock, Plus } from "lucide-react";
 import type { Task, TaskStatus } from "./types";
 import { useState } from "react";
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const statusConfig: Record<TaskStatus, { label: string; bg: string; text: string; border: string }> = {
-  "To Do":       { label: "To Do",       bg: "bg-slate-100",   text: "text-slate-700", border: "border-slate-200" },
-  "In Progress": { label: "In Progress", bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  "In Review":   { label: "In Review",   bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
-  "Completed":   { label: "Completed",   bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-};
 
 type TaskCalendarViewProps = {
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
   onAddTask?: () => void;
+  customStatuses?: CustomStatusConfig[];
 };
 
-export function TaskCalendarView({ tasks, onUpdateStatus, onAddTask }: TaskCalendarViewProps) {
+export function TaskCalendarView({ tasks, onUpdateStatus, onAddTask, customStatuses }: TaskCalendarViewProps) {
   // Default to August 2026 (matching event timelines in mock data)
   const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -163,13 +158,13 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onAddTask }: TaskCalen
               {/* Tasks list inside day box */}
               <div className="mt-1.5 flex flex-col gap-1 overflow-y-auto max-h-[80px]">
                 {dayTasks.map((t) => {
-                  const s = statusConfig[t.status] || statusConfig["To Do"];
+                  const theme = getStatusTheme(t.status, customStatuses);
                   return (
                     <button
                       key={t.id}
                       type="button"
                       onClick={() => setSelectedTask(t)}
-                      className={`group/task flex items-center justify-between rounded-lg border px-2 py-1 text-left text-[11px] font-semibold transition-all ${s.bg} ${s.text} ${s.border} hover:opacity-90`}
+                      className={`group/task flex items-center justify-between rounded-lg border px-2 py-1 text-left text-[11px] font-semibold transition-all ${theme.bg} ${theme.text} ${theme.border} hover:opacity-90`}
                       title={`${t.title} (${t.status})`}
                     >
                       <span className="truncate">{t.title}</span>

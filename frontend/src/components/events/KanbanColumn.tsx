@@ -3,13 +3,7 @@
 import { Plus } from "lucide-react";
 import type { Task, TaskStatus } from "./types";
 import { TaskCard } from "./TaskCard";
-
-const columnConfig: Record<TaskStatus, { dot: string; header: string }> = {
-  "To Do":       { dot: "bg-slate-400",   header: "text-slate-700" },
-  "In Progress": { dot: "bg-blue-500",    header: "text-blue-700" },
-  "In Review":   { dot: "bg-amber-400",   header: "text-amber-700" },
-  "Completed":   { dot: "bg-emerald-500", header: "text-emerald-700" }
-};
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
 type KanbanColumnProps = {
   status: TaskStatus;
@@ -17,10 +11,11 @@ type KanbanColumnProps = {
   onAddTask?: () => void;
   onDragStart?: (taskId: string) => void;
   onDrop?: (status: TaskStatus) => void;
+  customStatuses?: CustomStatusConfig[];
 };
 
-export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop }: KanbanColumnProps) {
-  const cfg = columnConfig[status];
+export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop, customStatuses }: KanbanColumnProps) {
+  const theme = getStatusTheme(status, customStatuses);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -39,8 +34,8 @@ export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop }: 
     >
       {/* Column header */}
       <div className="flex items-center gap-2 px-4 py-3.5">
-        <span className={`h-2 w-2 rounded-full ${cfg.dot}`} />
-        <span className={`text-sm font-semibold ${cfg.header}`}>{status}</span>
+        <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
+        <span className={`text-sm font-semibold ${theme.text}`}>{status}</span>
         <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">
           {tasks.length}
         </span>

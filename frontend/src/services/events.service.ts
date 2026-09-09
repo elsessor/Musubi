@@ -45,14 +45,14 @@ export function normalizeEvent(id: string, data: Record<string, any>): Event {
     committee: typeof data.committee === "string" ? data.committee : "General",
     tasks: Array.isArray(data.tasks)
       ? data.tasks.map((t: any) => ({
-          ...t,
-          title: typeof t.title === "string" && t.title.trim()
-            ? t.title
-            : typeof t.description === "string" && t.description.trim()
+        ...t,
+        title: typeof t.title === "string" && t.title.trim()
+          ? t.title
+          : typeof t.description === "string" && t.description.trim()
             ? t.description
             : "Untitled Subtask",
-          description: typeof t.description === "string" ? t.description : ""
-        }))
+        description: typeof t.description === "string" ? t.description : ""
+      }))
       : []
   };
 }
@@ -115,14 +115,14 @@ export function subscribeEventsFirestore(
             onData(events);
           }
         },
-        () => {}
+        () => { }
       );
       return () => {
         clearInterval(interval);
         unsubscribe();
       };
     }
-  } catch {}
+  } catch { }
 
   return () => {
     clearInterval(interval);

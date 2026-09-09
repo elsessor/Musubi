@@ -163,7 +163,7 @@ export function EventsTasksView() {
         {currentTab === "atomizer" && isLeader ? (
           <AtomizerForm events={events} />
         ) : selectedEvent ? (
-          <KanbanBoard event={selectedEvent} onBack={handleBack} committees={orgCommittees} />
+          <KanbanBoard event={selectedEvent} onBack={handleBack} committees={orgCommittees} isLeader={isLeader} />
         ) : (
           <EventsDashboard
             events={events}

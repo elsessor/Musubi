@@ -3,24 +3,30 @@
 import { Calendar, CheckCircle, ChevronDown, ChevronUp, Clock, ShieldAlert, Sparkles, AlertTriangle, Bell, User } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { useState } from "react";
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
 const priorityConfig: Record<TaskPriority, { label: string; classes: string }> = {
-  Low:      { label: "Low",      classes: "bg-slate-100 text-slate-600 ring-slate-200" },
-  Medium:   { label: "Medium",   classes: "bg-blue-50 text-blue-600 ring-blue-200" },
-  High:     { label: "High",     classes: "bg-amber-50 text-amber-700 ring-amber-200" },
+  Low: { label: "Low", classes: "bg-slate-100 text-slate-600 ring-slate-200" },
+  Medium: { label: "Medium", classes: "bg-blue-50 text-blue-600 ring-blue-200" },
+  High: { label: "High", classes: "bg-amber-50 text-amber-700 ring-amber-200" },
   Critical: { label: "Critical", classes: "bg-rose-50 text-rose-600 ring-rose-200" }
 };
 
-const STATUS_ORDER: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
+const DEFAULT_STATUS_ORDER: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
 type TaskExpandedViewProps = {
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
+  customStatuses?: CustomStatusConfig[];
 };
 
-export function TaskExpandedView({ tasks, onUpdateStatus }: TaskExpandedViewProps) {
-  // All tasks expanded by default in expanded view
+export function TaskExpandedView({ tasks, onUpdateStatus, customStatuses }: TaskExpandedViewProps) {
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<string, boolean>>({});
+
+  const allStatuses: TaskStatus[] = [
+    ...DEFAULT_STATUS_ORDER,
+    ...(customStatuses ? customStatuses.map((cs) => cs.name as TaskStatus) : [])
+  ];
 
   function toggleTask(id: string) {
     setExpandedTaskIds((prev) => ({ ...prev, [id]: prev[id] === undefined ? false : !prev[id] }));
@@ -38,23 +44,15 @@ export function TaskExpandedView({ tasks, onUpdateStatus }: TaskExpandedViewProp
   return (
     <div className="flex flex-col gap-4">
       {tasks.map((task) => {
-        const isExpanded = expandedTaskIds[task.id] !== false; // Default true
+        const isExpanded = expandedTaskIds[task.id] !== false;
         const pCfg = priorityConfig[task.priority || "Medium"];
-        const currentStatusIndex = STATUS_ORDER.indexOf(task.status);
-
-        const statusColor =
-          task.status === "Completed"
-            ? "border-l-emerald-500"
-            : task.status === "In Progress"
-            ? "border-l-blue-500"
-            : task.status === "In Review"
-            ? "border-l-purple-500"
-            : "border-l-slate-400";
+        const theme = getStatusTheme(task.status, customStatuses);
+        const currentStatusIndex = allStatuses.indexOf(task.status);
 
         return (
           <div
             key={task.id}
-            className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 ${statusColor} bg-white shadow-sm transition-all hover:border-slate-300 hover:shadow-md`}
+            className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 ${theme.border} bg-white shadow-sm transition-all hover:border-slate-300 hover:shadow-md`}
           >
             {/* Main Header / Summary Row */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -79,6 +77,9 @@ export function TaskExpandedView({ tasks, onUpdateStatus }: TaskExpandedViewProp
                         {task.committee}
                       </span>
                     )}
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${theme.badge}`}>
+                      {task.status}
+                    </span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span className="flex items-center gap-1">
@@ -96,8 +97,8 @@ export function TaskExpandedView({ tasks, onUpdateStatus }: TaskExpandedViewProp
               {/* Status stepper & Actions */}
               <div className="flex items-center gap-3">
                 {/* Status stepper pills */}
-                <div className="hidden sm:flex items-center gap-1 rounded-xl bg-slate-50 p-1 border border-slate-200">
-                  {STATUS_ORDER.map((st, idx) => {
+                <div className="hidden sm:flex items-center gap-1 rounded-xl bg-slate-50 p-1 border border-slate-200 flex-wrap">
+                  {allStatuses.map((st, idx) => {
                     const isActive = task.status === st;
                     const isPassed = idx <= currentStatusIndex;
                     return (
@@ -151,57 +152,45 @@ export function TaskExpandedView({ tasks, onUpdateStatus }: TaskExpandedViewProp
                       <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}>
                         {task.assignee?.initials || "ME"}
                       </span>
-                      <span className="text-xs font-semibold text-slate-800">
+                      <span className="text-xs font-bold text-slate-800 truncate">
                         {task.assignedMemberName || "Unassigned"}
                       </span>
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold text-slate-400">AI Match Score</span>
-                    <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-indigo-600">
-                      <Sparkles size={14} />
-                      {typeof task.matchPercentage === "number" ? `${task.matchPercentage}% Match` : "N/A"}
+                    <span className="text-[11px] font-semibold text-slate-400">Current Status</span>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
+                      <span className="text-xs font-bold text-slate-800">{task.status}</span>
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold text-slate-400">Access Level</span>
-                    <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
-                      <ShieldAlert size={14} className="text-amber-500" />
-                      {task.isLeaderOnly ? "Leader Only" : "All Members"}
+                    <span className="text-[11px] font-semibold text-slate-400">Match & Security</span>
+                    <div className="mt-1 flex items-center gap-2">
+                      {task.isLeaderOnly ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600">
+                          <ShieldAlert size={12} /> Leader Only
+                        </span>
+                      ) : typeof task.matchPercentage === "number" ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600">
+                          <Sparkles size={12} /> {task.matchPercentage}% Match
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium text-slate-500">Standard Task</span>
+                      )}
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold text-slate-400">Dependencies</span>
-                    <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                      <AlertTriangle size={14} className={task.blockedBy ? "text-rose-500" : "text-slate-400"} />
-                      {task.blockedBy ? `Blocked by ${task.blockedBy} task(s)` : "No Blockers"}
+                    <span className="text-[11px] font-semibold text-slate-400">Task Nudges</span>
+                    <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                      <Bell size={12} className="text-blue-500" />
+                      {task.nudges?.length || 0} Nudges Configured
                     </div>
                   </div>
                 </div>
-
-                {/* Nudges List (if nudges present) */}
-                {task.nudges && task.nudges.length > 0 && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-                    <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
-                      <Bell size={14} className="text-amber-600" />
-                      Automated Nudges & Reminders ({task.nudges.length})
-                    </div>
-                    <div className="mt-2 space-y-1.5">
-                      {task.nudges.map((nudge, idx) => (
-                        <div key={nudge.nudgeUID || idx} className="flex items-center justify-between text-xs text-amber-900 bg-white/80 px-3 py-1.5 rounded-lg border border-amber-200/60">
-                          <span>Type: <strong className="font-semibold">{nudge.nudgeType}</strong></span>
-                          <span>Trigger: {nudge.triggerDate}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${nudge.sent ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                            {nudge.sent ? "Sent" : "Scheduled"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>

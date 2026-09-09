@@ -433,7 +433,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
                                 <div className="space-y-2">
                                   {log.changes.field ? (
                                     <p className="font-semibold text-slate-800 text-xs">
-                                      Modified Field: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-blue-700 font-mono text-[11px]">{log.changes.field}</code>
+                                      Modified Field: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-blue-700 font-mono text-[11px]">{String(log.changes.field)}</code>
                                     </p>
                                   ) : null}
                                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
