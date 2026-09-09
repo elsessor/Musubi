@@ -19,13 +19,12 @@ import { useAuthStore } from "@/store/authStore";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 
 async function getValidToken(user: User | null): Promise<string> {
-  const storeToken = useAuthStore.getState().token;
-  if (storeToken) return storeToken;
-  if (user) {
+  const firebaseUser = user || useAuthStore.getState().firebaseUser;
+  if (firebaseUser) {
     try {
-      return await user.getIdToken(true);
+      return await firebaseUser.getIdToken();
     } catch {
-      return await user.getIdToken();
+      return "";
     }
   }
   return "";

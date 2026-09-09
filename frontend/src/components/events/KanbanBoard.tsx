@@ -1,44 +1,105 @@
 "use client";
 
-import { Calendar, ChevronLeft, Filter, LayoutGrid, Plus, Search, Users } from "lucide-react";
-import { useState } from "react";
+import {
+  Calendar,
+  ChevronLeft,
+  Columns3,
+  Filter,
+  LayoutGrid,
+  Plus,
+  Rows,
+  Search,
+  SlidersHorizontal,
+  Table,
+  Users
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Event, Task, TaskStatus } from "./types";
 import { KanbanColumn } from "./KanbanColumn";
+import { TaskGridView } from "./TaskGridView";
+import { TaskTableView } from "./TaskTableView";
+import { TaskExpandedView } from "./TaskExpandedView";
+import { TaskCalendarView } from "./TaskCalendarView";
 
 import { useAuthStore } from "@/store/authStore";
 import { updateEventFirestore } from "@/services/events.service";
 
+import { AddTaskModal } from "./AddTaskModal";
+
 const STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
+
+type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
+
+const TASK_FILTERS: { label: string; key: TaskStatus | "All" }[] = [
+  { label: "All Tasks", key: "All" },
+  { label: "To Do", key: "To Do" },
+  { label: "In Progress", key: "In Progress" },
+  { label: "In Review", key: "In Review" },
+  { label: "Completed", key: "Completed" }
+];
+
+const TASK_STATUS_DOT: Record<TaskStatus, string> = {
+  "To Do":       "bg-slate-400",
+  "In Progress": "bg-blue-500",
+  "In Review":   "bg-purple-500",
+  "Completed":   "bg-emerald-500"
+};
+
+const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ size?: number }> }[] = [
+  { mode: "grid",     title: "Grid View",       icon: LayoutGrid },
+  { mode: "table",    title: "Table View",      icon: Table },
+  { mode: "expanded", title: "Expanded View",   icon: Rows },
+  { mode: "kanban",   title: "Kanban Columns",  icon: Columns3 },
+  { mode: "calendar", title: "Calendar View",  icon: Calendar }
+];
 
 type KanbanBoardProps = {
   event: Event;
   onBack: () => void;
+  committees?: { id: string; name: string }[];
 };
 
-export function KanbanBoard({ event, onBack }: KanbanBoardProps) {
+export function KanbanBoard({ event, onBack, committees = [] }: KanbanBoardProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
-  const [tasks, setTasks] = useState<Task[]>(event.tasks);
+  const [tasks, setTasks] = useState<Task[]>(event.tasks || []);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
+  const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [search, setSearch] = useState("");
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [addingTaskForStatus, setAddingTaskForStatus] = useState<TaskStatus | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+
+  // AddTaskModal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalDefaultStatus, setModalDefaultStatus] = useState<TaskStatus>("To Do");
+
+  // Keep internal tasks in sync when event prop changes
+  useEffect(() => {
+    setTasks(event.tasks || []);
+  }, [event.tasks]);
+
+  const fetchedNames = committees.map((c) => c.name);
+  const taskNames = tasks.map((t) => t.committee).filter((c): c is string => Boolean(c));
+  const allCommitteeNames = Array.from(
+    new Set([...fetchedNames, ...taskNames, ...(event.committee ? [event.committee] : [])])
+  );
 
   const visibleTasks = tasks.filter((t) => {
     const matchesStatus = statusFilter === "All" || t.status === statusFilter;
-    const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
-    return matchesStatus && matchesSearch;
+    const matchesSearch = (t.title || "").toLowerCase().includes(search.toLowerCase()) ||
+                          (t.description || "").toLowerCase().includes(search.toLowerCase());
+    const matchesCommittee =
+      selectedCommittee === "All" ||
+      (t.committee || event.committee || "").toLowerCase() === selectedCommittee.toLowerCase();
+    return matchesStatus && matchesSearch && matchesCommittee;
   });
 
   function getColumnTasks(status: TaskStatus) {
     return visibleTasks.filter((t) => t.status === status);
   }
 
-  function handleDrop(targetStatus: TaskStatus) {
-    if (!draggedId) return;
-    const updatedTasks = tasks.map((t) => (t.id === draggedId ? { ...t, status: targetStatus } : t));
+  function handleUpdateTaskStatus(taskId: string, targetStatus: TaskStatus) {
+    const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: targetStatus } : t));
     setTasks(updatedTasks);
-    setDraggedId(null);
 
     const completed = updatedTasks.filter((t) => t.status === "Completed").length;
     const newProgress = updatedTasks.length > 0 ? Math.round((completed / updatedTasks.length) * 100) : 0;
@@ -49,26 +110,19 @@ export function KanbanBoard({ event, onBack }: KanbanBoardProps) {
     });
   }
 
-  async function handleAddTask(status: TaskStatus, title: string) {
-    if (!title.trim()) return;
-    const newTask: Task = {
-      id: crypto.randomUUID(),
-      title: title.trim(),
-      status,
-      priority: "Medium",
-      dueDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      assignee: { initials: "ME", color: "bg-blue-500" }
-    };
-    const updatedTasks = [...tasks, newTask];
-    setTasks(updatedTasks);
+  function handleDrop(targetStatus: TaskStatus) {
+    if (!draggedId) return;
+    handleUpdateTaskStatus(draggedId, targetStatus);
+    setDraggedId(null);
+  }
 
-    const completed = updatedTasks.filter((t) => t.status === "Completed").length;
-    const newProgress = Math.round((completed / updatedTasks.length) * 100);
+  function handleOpenAddTask(status?: TaskStatus) {
+    setModalDefaultStatus(status || "To Do");
+    setIsModalOpen(true);
+  }
 
-    await updateEventFirestore(firebaseUser, event.id, {
-      tasks: updatedTasks,
-      progress: newProgress
-    });
+  function handleTaskAdded(newTask: Task) {
+    setTasks((prev) => [...prev, newTask]);
   }
 
   const completedCount = tasks.filter((t) => t.status === "Completed").length;
@@ -111,7 +165,9 @@ export function KanbanBoard({ event, onBack }: KanbanBoardProps) {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-bold text-slate-900">{event.progress}%</p>
+            <p className="text-3xl font-bold text-slate-900">
+              {tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : event.progress}%
+            </p>
             <p className="text-xs text-slate-500">complete</p>
           </div>
         </div>
@@ -119,100 +175,173 @@ export function KanbanBoard({ event, onBack }: KanbanBoardProps) {
         <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-100">
           <div
             className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all"
-            style={{ width: `${event.progress}%` }}
+            style={{ width: `${tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : event.progress}%` }}
           />
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {/* Status filter pills */}
-        <div className="flex items-center gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
-          {(["All", ...STATUSES] as const).map((s) => {
-            const count = s === "All" ? tasks.length : tasks.filter((t) => t.status === s).length;
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setStatusFilter(s)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                  statusFilter === s
-                    ? "bg-slate-900 text-white shadow"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {s} <span className="ml-0.5 opacity-70">{count}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Filter bar & View toggles (matching EventsDashboard styling 1-to-1) */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Committee filter */}
+          <div className="relative flex items-center">
+            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
+            <select
+              value={selectedCommittee}
+              onChange={(e) => setSelectedCommittee(e.target.value)}
+              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
+            >
+              <option value="All">All Committees</option>
+              {allCommitteeNames.map((commName) => (
+                <option key={commName} value={commName}>
+                  {commName}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        {/* Committee pill */}
-        <button type="button" className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">
-          <Filter size={12} />
-          All Committees
-        </button>
-
-        {/* Search */}
-        <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tasks..."
-            className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs text-slate-700 shadow-sm ring-1 ring-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-        </div>
-
-        {/* Right controls */}
-        <div className="ml-auto flex items-center gap-2">
-          <button type="button" className="rounded-xl bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">
-            ⚡ Workflow
-          </button>
-          <button type="button" className="rounded-xl bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">
-            ◈ Statuses
-          </button>
-          <button type="button" className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700">
-            <Plus size={13} />
-            Add Task
-          </button>
-          <div className="flex items-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-            <button type="button" className="px-2.5 py-2 text-slate-600 hover:text-blue-600">
-              <LayoutGrid size={14} />
-            </button>
+          {/* Status filter pills */}
+          <div className="flex flex-wrap items-center gap-1">
+            {TASK_FILTERS.map(({ label, key }) => {
+              const count = key === "All" ? tasks.length : tasks.filter((t) => t.status === key).length;
+              const isActive = statusFilter === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setStatusFilter(key)}
+                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
+                    isActive
+                      ? "bg-slate-900 text-white shadow"
+                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {key !== "All" && (
+                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white/70" : TASK_STATUS_DOT[key as TaskStatus]}`} />
+                  )}
+                  {label}
+                  <span className={`${isActive ? "text-white/70" : "text-slate-400"}`}>{count}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
-      </div>
 
-      {/* Kanban board — horizontal scroll */}
-      <div className="flex flex-1 gap-4 overflow-x-auto pb-4">
-        {STATUSES.map((status) => (
-          <KanbanColumn
-            key={status}
-            status={status}
-            tasks={getColumnTasks(status)}
-            onAddTask={() => {}}
-            onDragStart={(id) => setDraggedId(id)}
-            onDrop={handleDrop}
-          />
-        ))}
+        {/* Right side: Search, 5 View mode icon buttons & Add task */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Search */}
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tasks..."
+              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs text-slate-700 shadow-sm ring-1 ring-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
 
-        {/* + New Status column */}
-        <div className="flex min-w-[64px] flex-col items-center justify-start pt-12">
+          {/* 5 View Mode Icon Buttons (Identical to Events Dashboard) */}
+          <div className="flex items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+            {VIEW_MODES.map(({ mode, title, icon: Icon }) => (
+              <button
+                key={mode}
+                type="button"
+                title={title}
+                onClick={() => setViewMode(mode)}
+                className={`rounded-lg p-2 transition-all ${
+                  viewMode === mode
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                }`}
+              >
+                <Icon size={14} />
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
-            className="flex flex-col items-center gap-1 rounded-xl p-4 text-slate-400 transition-colors hover:bg-white hover:text-slate-600 hover:shadow-sm"
+            onClick={() => handleOpenAddTask("To Do")}
+            className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-700 transition-colors"
           >
-            <Plus size={18} />
-            <span className="text-[10px] font-medium">New<br />Status</span>
+            <Plus size={14} />
+            Add Task
           </button>
         </div>
+      </div>
+
+      {/* Main View Area */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {viewMode === "grid" && (
+          <TaskGridView
+            tasks={visibleTasks}
+            onUpdateStatus={handleUpdateTaskStatus}
+          />
+        )}
+
+        {viewMode === "table" && (
+          <TaskTableView
+            tasks={visibleTasks}
+            onUpdateStatus={handleUpdateTaskStatus}
+          />
+        )}
+
+        {viewMode === "expanded" && (
+          <TaskExpandedView
+            tasks={visibleTasks}
+            onUpdateStatus={handleUpdateTaskStatus}
+          />
+        )}
+
+        {viewMode === "kanban" && (
+          <div className="flex h-full gap-4 overflow-x-auto pb-4">
+            {STATUSES.map((status) => (
+              <KanbanColumn
+                key={status}
+                status={status}
+                tasks={getColumnTasks(status)}
+                onAddTask={() => handleOpenAddTask(status)}
+                onDragStart={(id) => setDraggedId(id)}
+                onDrop={handleDrop}
+              />
+            ))}
+
+            {/* + New Status column */}
+            <div className="flex min-w-[64px] flex-col items-center justify-start pt-12">
+              <button
+                type="button"
+                className="flex flex-col items-center gap-1 rounded-xl p-4 text-slate-400 transition-colors hover:bg-white hover:text-slate-600 hover:shadow-sm"
+              >
+                <Plus size={18} />
+                <span className="text-[10px] font-medium">New<br />Status</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {viewMode === "calendar" && (
+          <TaskCalendarView
+            tasks={visibleTasks}
+            onUpdateStatus={handleUpdateTaskStatus}
+            onAddTask={() => handleOpenAddTask("To Do")}
+          />
+        )}
       </div>
 
       {/* Completion summary footer */}
-      <p className="mt-2 text-center text-xs text-slate-400">
+      <p className="mt-3 text-center text-xs text-slate-400">
         {completedCount} of {tasks.length} tasks completed
       </p>
+
+      {/* Add Task Modal */}
+      <AddTaskModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        eventId={event.id}
+        events={[event]}
+        defaultStatus={modalDefaultStatus}
+        onTaskAdded={handleTaskAdded}
+      />
     </div>
   );
 }

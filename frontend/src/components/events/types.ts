@@ -9,6 +9,25 @@ export type Assignee = {
   color: string; // tailwind bg class
 };
 
+export type Nudge = {
+  nudgeUID: string;
+  triggerDate: string;
+  nudgeType: string;
+  sent: boolean;
+};
+
+export type Subtask = {
+  subtaskUID: string;
+  assignedMemberUID?: string | null;
+  assignedMemberName?: string | null;
+  description: string;
+  deadline?: string;
+  status: TaskStatus;
+  matchPercentage?: number;
+  isLeaderOnly?: boolean;
+  nudges?: Nudge[];
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -17,6 +36,16 @@ export type Task = {
   dueDate: string;
   assignee: Assignee;
   blockedBy?: number;
+  // Embedded subtask fields matching goal schema
+  subtaskUID?: string;
+  assignedMemberUID?: string | null;
+  assignedMemberName?: string | null;
+  description?: string;
+  deadline?: string;
+  matchPercentage?: number;
+  isLeaderOnly?: boolean;
+  committee?: string;
+  nudges?: Nudge[];
 };
 
 export type Event = {

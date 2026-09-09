@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Calendar } from "lucide-react";
+import { AlertTriangle, Calendar, ShieldAlert, Sparkles } from "lucide-react";
 import type { Task, TaskPriority } from "./types";
 
 const priorityConfig: Record<TaskPriority, { label: string; classes: string }> = {
@@ -16,7 +16,7 @@ type TaskCardProps = {
 };
 
 export function TaskCard({ task, onDragStart }: TaskCardProps) {
-  const pCfg = priorityConfig[task.priority];
+  const pCfg = priorityConfig[task.priority || "Medium"];
 
   return (
     <div
@@ -24,19 +24,35 @@ export function TaskCard({ task, onDragStart }: TaskCardProps) {
       onDragStart={() => onDragStart?.(task.id)}
       className="group flex cursor-grab flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md active:cursor-grabbing"
     >
-      {/* Blocker alert */}
-      {task.blockedBy && task.blockedBy > 0 ? (
-        <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-          <AlertTriangle size={12} className="shrink-0 text-amber-500" />
-          Blocked by {task.blockedBy} {task.blockedBy === 1 ? "task" : "tasks"}
-        </div>
-      ) : null}
+      {/* Badges / Alerts */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {task.isLeaderOnly ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-200/80">
+            <ShieldAlert size={11} className="text-amber-500" />
+            Leader Only
+          </span>
+        ) : null}
+
+        {typeof task.matchPercentage === "number" && task.matchPercentage > 0 ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-indigo-200/60">
+            <Sparkles size={10} className="text-indigo-500" />
+            {task.matchPercentage}% Match
+          </span>
+        ) : null}
+
+        {task.blockedBy && task.blockedBy > 0 ? (
+          <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+            <AlertTriangle size={12} className="shrink-0 text-amber-500" />
+            Blocked by {task.blockedBy} {task.blockedBy === 1 ? "task" : "tasks"}
+          </div>
+        ) : null}
+      </div>
 
       {/* Title */}
-      <p className="text-[13px] font-medium leading-snug text-slate-800">{task.title}</p>
+      <p className="text-[13px] font-medium leading-snug text-slate-800">{task.title || task.description}</p>
 
       {/* Priority + meta row */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 pt-0.5">
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${pCfg.classes}`}>
           <span className="h-1.5 w-1.5 rounded-full bg-current" />
           {pCfg.label}
@@ -48,10 +64,10 @@ export function TaskCard({ task, onDragStart }: TaskCardProps) {
             {task.dueDate}
           </span>
           <span
-            className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee.color}`}
-            title={task.assignee.initials}
+            className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
+            title={task.assignedMemberName || task.assignee?.initials || "ME"}
           >
-            {task.assignee.initials}
+            {task.assignee?.initials || "ME"}
           </span>
         </div>
       </div>

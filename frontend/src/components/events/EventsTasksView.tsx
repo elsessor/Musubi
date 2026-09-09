@@ -10,7 +10,8 @@ import type { Event } from "./types";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
-import { clearMockEventsFirestore, createEventFirestore, subscribeEventsFirestore } from "@/services/events.service";
+import { createEventFirestore, subscribeEventsFirestore } from "@/services/events.service";
+import { getOrganizationCommittees, type OrganizationCommitteeRecord } from "@/services/auth.service";
 
 type Tab = "events" | "atomizer";
 
@@ -23,8 +24,9 @@ export function EventsTasksView() {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(profile?.organizationId ?? null);
+  const [orgCommittees, setOrgCommittees] = useState<OrganizationCommitteeRecord[]>([]);
 
-  // Modal state
+  // Event Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -64,6 +66,20 @@ export function EventsTasksView() {
     };
   }, [firebaseUser, effectiveOrgId]);
 
+  useEffect(() => {
+    if (!firebaseUser || !effectiveOrgId) return;
+    getOrganizationCommittees(firebaseUser, effectiveOrgId)
+      .then((commList) => {
+        setOrgCommittees(commList);
+        if (commList.length > 0) {
+          setCommittee(commList[0].name);
+        }
+      })
+      .catch(() => {
+        setOrgCommittees([]);
+      });
+  }, [firebaseUser, effectiveOrgId]);
+
   const currentTab = isLeader ? activeTab : "events";
 
   function handleSelectEvent(event: Event) {
@@ -76,6 +92,9 @@ export function EventsTasksView() {
   }
 
   function handleNewEvent() {
+    if (orgCommittees.length > 0) {
+      setCommittee(orgCommittees[0].name);
+    }
     setIsModalOpen(true);
   }
 
@@ -119,22 +138,24 @@ export function EventsTasksView() {
   return (
     <div className="flex h-full flex-col">
       {/* Tab navigation */}
-      <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
-        <TabButton
-          icon={<CalendarDays size={14} />}
-          label="Events & Tasks"
-          active={currentTab === "events"}
-          onClick={() => { setActiveTab("events"); }}
-        />
-        {isLeader && (
+      <div className="mb-5 flex items-center justify-between border-b border-slate-200">
+        <div className="flex items-center gap-1">
           <TabButton
-            icon={<Zap size={14} className="text-blue-500" />}
-            label="AI Task Atomizer"
-            badge="AI"
-            active={currentTab === "atomizer"}
-            onClick={() => { setActiveTab("atomizer"); setSelectedEvent(null); }}
+            icon={<CalendarDays size={14} />}
+            label="Events & Tasks"
+            active={currentTab === "events"}
+            onClick={() => { setActiveTab("events"); }}
           />
-        )}
+          {isLeader && (
+            <TabButton
+              icon={<Zap size={14} className="text-blue-500" />}
+              label="AI Task Atomizer"
+              badge="AI"
+              active={currentTab === "atomizer"}
+              onClick={() => { setActiveTab("atomizer"); setSelectedEvent(null); }}
+            />
+          )}
+        </div>
       </div>
 
       {/* View content */}
@@ -142,14 +163,14 @@ export function EventsTasksView() {
         {currentTab === "atomizer" && isLeader ? (
           <AtomizerForm events={events} />
         ) : selectedEvent ? (
-          <KanbanBoard event={selectedEvent} onBack={handleBack} />
+          <KanbanBoard event={selectedEvent} onBack={handleBack} committees={orgCommittees} />
         ) : (
           <EventsDashboard
             events={events}
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}
             onNewEvent={handleNewEvent}
-            onClearEvents={() => clearMockEventsFirestore(firebaseUser, effectiveOrgId || profile?.organizationId)}
+            committees={orgCommittees}
           />
         )}
       </div>
@@ -206,6 +227,34 @@ export function EventsTasksView() {
                   placeholder="What is this event about?"
                   className="w-full resize-none rounded-xl border border-slate-200/60 bg-[#F0F4F8] p-3.5 text-xs text-slate-800 placeholder:text-slate-400 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
                 />
+              </div>
+
+              {/* COMMITTEE */}
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
+                  ASSIGNED COMMITTEE
+                </label>
+                <select
+                  value={committee}
+                  onChange={(e) => setCommittee(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-xs text-slate-800 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                >
+                  {orgCommittees.length > 0 ? (
+                    orgCommittees.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Executive">Executive</option>
+                      <option value="Logistics">Logistics</option>
+                      <option value="Marketing">Marketing</option>
+                      <option value="Finance">Finance</option>
+                      <option value="General">General</option>
+                    </>
+                  )}
+                </select>
               </div>
 
               {/* START DATE & END DATE */}

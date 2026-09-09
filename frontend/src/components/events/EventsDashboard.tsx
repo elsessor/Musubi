@@ -101,11 +101,12 @@ type EventsDashboardProps = {
   isLeader?: boolean;
   onSelectEvent: (event: Event) => void;
   onNewEvent: () => void;
-  onClearEvents?: () => void;
+  committees?: { id: string; name: string }[];
 };
 
-export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent, onClearEvents }: EventsDashboardProps) {
+export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent, committees = [] }: EventsDashboardProps) {
   const [filter, setFilter] = useState<StatusFilter>("All");
+  const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
 
@@ -113,7 +114,17 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
   const planningCount  = events.filter((e) => e.status === "Planning").length;
   const completedCount = events.filter((e) => e.status === "Completed").length;
 
-  const visible = filter === "All" ? events : events.filter((e) => e.status === filter);
+  const fetchedNames = committees.map((c) => c.name);
+  const eventNames = events.map((e) => e.committee).filter((c): c is string => Boolean(c));
+  const allCommitteeNames = Array.from(new Set([...fetchedNames, ...eventNames]));
+
+  const visible = events.filter((e) => {
+    const matchesStatus = filter === "All" || e.status === filter;
+    const matchesCommittee =
+      selectedCommittee === "All" ||
+      (e.committee || "").toLowerCase() === selectedCommittee.toLowerCase();
+    return matchesStatus && matchesCommittee;
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -138,15 +149,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
         </div>
         {isLeader && (
           <div className="flex items-center gap-2">
-            {events.length > 0 && onClearEvents && (
-              <button
-                type="button"
-                onClick={onClearEvents}
-                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50"
-              >
-                Clear All Events
-              </button>
-            )}
             <button
               type="button"
               onClick={onNewEvent}
@@ -163,10 +165,21 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <button type="button" className="flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">
-            <SlidersHorizontal size={12} />
-            All Committees
-          </button>
+          <div className="relative flex items-center">
+            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
+            <select
+              value={selectedCommittee}
+              onChange={(e) => setSelectedCommittee(e.target.value)}
+              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
+            >
+              <option value="All">All Committees</option>
+              {allCommitteeNames.map((commName) => (
+                <option key={commName} value={commName}>
+                  {commName}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">
@@ -232,6 +245,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-3.5">EVENT</th>
+                <th className="px-4 py-3.5">COMMITTEE</th>
                 <th className="px-4 py-3.5">STATUS</th>
                 <th className="px-4 py-3.5">PROGRESS</th>
                 <th className="px-4 py-3.5">START DATE</th>
@@ -251,6 +265,11 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                       {event.title}
                     </p>
                     <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">{event.description}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="inline-flex rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700 border border-violet-200">
+                      {event.committee || "General"}
+                    </span>
                   </td>
                   <td className="px-4 py-4">
                     <span
@@ -332,17 +351,24 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                       <p className="mt-0.5 text-xs text-slate-500">{event.description}</p>
                     </div>
                   </div>
-                  <span
-                    className={`rounded-full px-3 py-0.5 text-[11px] font-semibold ${
-                      event.status === "Active"
-                        ? "bg-blue-50 text-blue-600 border border-blue-200"
-                        : event.status === "Completed"
-                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                        : "bg-amber-50 text-amber-600 border border-amber-200"
-                    }`}
-                  >
-                    {event.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {event.committee && (
+                      <span className="rounded-full bg-violet-50 px-3 py-0.5 text-[11px] font-semibold text-violet-700 border border-violet-200">
+                        {event.committee}
+                      </span>
+                    )}
+                    <span
+                      className={`rounded-full px-3 py-0.5 text-[11px] font-semibold ${
+                        event.status === "Active"
+                          ? "bg-blue-50 text-blue-600 border border-blue-200"
+                          : event.status === "Completed"
+                          ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                          : "bg-amber-50 text-amber-600 border border-amber-200"
+                      }`}
+                    >
+                      {event.status}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-4">
