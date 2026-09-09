@@ -99,11 +99,11 @@ export function TaskGridView({ tasks, onUpdateStatus }: TaskGridViewProps) {
               </div>
 
               {/* Title & Description */}
-              <h3 className="text-sm font-semibold leading-snug text-slate-900 line-clamp-2">
+              <h3 className="text-sm font-bold leading-snug text-slate-900 line-clamp-2">
                 {task.title || task.description}
               </h3>
 
-              {task.description && task.title && (
+              {task.description && task.title && task.description.trim() !== task.title.trim() && (
                 <p className="mt-1 text-xs text-slate-500 line-clamp-2">{task.description}</p>
               )}
 

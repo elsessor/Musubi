@@ -62,7 +62,7 @@ export function TaskTableView({ tasks, onUpdateStatus }: TaskTableViewProps) {
                 {/* Title & Description */}
                 <td className="px-5 py-3.5">
                   <div className="font-semibold text-slate-900">{task.title || task.description}</div>
-                  {task.description && task.title && (
+                  {task.description && task.title && task.description.trim() !== task.title.trim() && (
                     <div className="mt-0.5 text-[11px] text-slate-400 line-clamp-1">{task.description}</div>
                   )}
                 </td>

@@ -18,6 +18,7 @@ export type Nudge = {
 
 export type Subtask = {
   subtaskUID: string;
+  title?: string;
   assignedMemberUID?: string | null;
   assignedMemberName?: string | null;
   description: string;

@@ -37,6 +37,7 @@ export function AddTaskModal({
   const [selectedEventId, setSelectedEventId] = useState<string>(
     eventId || (events.length > 0 ? events[0].id : "")
   );
+  const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignedMemberUID, setAssignedMemberUID] = useState<string>("");
   const [taskCommittee, setTaskCommittee] = useState<string>("General");
@@ -102,8 +103,8 @@ export function AddTaskModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!description.trim()) {
-      setError("Please provide a subtask description.");
+    if (!title.trim()) {
+      setError("Please provide a subtask title.");
       return;
     }
 
@@ -132,7 +133,7 @@ export function AddTaskModal({
       const newSubtask: Task = {
         id: subtaskUID,
         subtaskUID,
-        title: description.trim(),
+        title: title.trim(),
         description: description.trim(),
         status,
         priority,
@@ -176,6 +177,7 @@ export function AddTaskModal({
       onTaskAdded?.(newSubtask, targetId);
 
       // Reset & Close
+      setTitle("");
       setDescription("");
       setError("");
       onClose();
@@ -246,13 +248,27 @@ export function AddTaskModal({
             </div>
           ) : null}
 
+          {/* Subtask Title */}
+          <div>
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              SUBTASK TITLE <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder='e.g. "Prepare venue setup & equipment"'
+              className="w-full rounded-xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
           {/* Subtask Description */}
           <div>
             <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              SUBTASK DESCRIPTION <span className="text-rose-500">*</span>
+              SUBTASK DESCRIPTION
             </label>
             <textarea
-              required
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}

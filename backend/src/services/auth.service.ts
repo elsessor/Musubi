@@ -879,7 +879,17 @@ export async function getEventsForUser(uid: string, orgId?: string) {
       memberCount: typeof data.memberCount === "number" ? data.memberCount : 0,
       progress: typeof data.progress === "number" ? data.progress : 0,
       committee: typeof data.committee === "string" ? data.committee : "General",
-      tasks: Array.isArray(data.tasks) ? data.tasks : [],
+      tasks: Array.isArray(data.tasks)
+        ? data.tasks.map((t: any) => ({
+            ...t,
+            title: typeof t.title === "string" && t.title.trim()
+              ? t.title
+              : typeof t.description === "string" && t.description.trim()
+              ? t.description
+              : "Untitled Subtask",
+            description: typeof t.description === "string" ? t.description : ""
+          }))
+        : [],
       orgId: typeof data.orgId === "string" ? data.orgId : null,
       createdBy: typeof data.createdBy === "string" ? data.createdBy : null
     };

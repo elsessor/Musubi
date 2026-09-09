@@ -48,8 +48,13 @@ export function TaskCard({ task, onDragStart }: TaskCardProps) {
         ) : null}
       </div>
 
-      {/* Title */}
-      <p className="text-[13px] font-medium leading-snug text-slate-800">{task.title || task.description}</p>
+      {/* Title & Description */}
+      <div>
+        <p className="text-[13px] font-bold leading-snug text-slate-900">{task.title || task.description}</p>
+        {task.description && task.title && task.description.trim() !== task.title.trim() ? (
+          <p className="mt-0.5 text-xs text-slate-500 line-clamp-2">{task.description}</p>
+        ) : null}
+      </div>
 
       {/* Priority + meta row */}
       <div className="flex items-center gap-2 pt-0.5">
