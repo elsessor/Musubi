@@ -132,18 +132,16 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onAddTask, customStatu
           return (
             <div
               key={`day-${cell.dayNum}`}
-              className={`group flex min-h-[100px] flex-col rounded-xl border p-2 transition-all ${
-                isToday
-                  ? "border-blue-300 bg-blue-50/30 ring-2 ring-blue-400/20"
-                  : "border-slate-100 bg-white hover:border-slate-200 hover:shadow-2xs"
-              }`}
+              className={`group flex min-h-[100px] flex-col rounded-xl border p-2 transition-all ${isToday
+                ? "border-blue-300 bg-blue-50/30 ring-2 ring-blue-400/20"
+                : "border-slate-100 bg-white hover:border-slate-200 hover:shadow-2xs"
+                }`}
             >
               {/* Day header */}
               <div className="flex items-center justify-between">
                 <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                    isToday ? "bg-blue-600 text-white" : "text-slate-700"
-                  }`}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${isToday ? "bg-blue-600 text-white" : "text-slate-700"
+                    }`}
                 >
                   {cell.dayNum}
                 </span>

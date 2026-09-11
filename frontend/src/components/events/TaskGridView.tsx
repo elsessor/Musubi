@@ -87,9 +87,8 @@ export function TaskGridView({ tasks, onUpdateStatus, customStatuses }: TaskGrid
                               onUpdateStatus(task.id, st);
                               setOpenDropdownId(null);
                             }}
-                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs font-medium text-left transition-colors hover:bg-slate-50 ${
-                              task.status === st ? "font-bold text-blue-600" : "text-slate-700"
-                            }`}
+                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs font-medium text-left transition-colors hover:bg-slate-50 ${task.status === st ? "font-bold text-blue-600" : "text-slate-700"
+                              }`}
                           >
                             <span className={`h-1.5 w-1.5 rounded-full ${stTheme.dot}`} />
                             {st}

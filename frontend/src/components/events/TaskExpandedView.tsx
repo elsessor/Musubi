@@ -106,13 +106,12 @@ export function TaskExpandedView({ tasks, onUpdateStatus, customStatuses }: Task
                         key={st}
                         type="button"
                         onClick={() => onUpdateStatus(task.id, st)}
-                        className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
-                          isActive
-                            ? "bg-slate-900 text-white shadow-xs"
-                            : isPassed
+                        className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${isActive
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : isPassed
                             ? "text-slate-700 hover:bg-slate-200/60"
                             : "text-slate-400 hover:bg-slate-200/40"
-                        }`}
+                          }`}
                       >
                         {st}
                       </button>
