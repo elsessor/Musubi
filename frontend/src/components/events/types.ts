@@ -1,13 +1,20 @@
 // Events & Tasks — shared data models
 
-export type EventStatus = "Active" | "Planning" | "Completed" | "Cancelled" | "Archived";
-export type TaskStatus = "To Do" | "In Progress" | "In Review" | "Completed";
+export type EventStatus = "Active" | "Planning" | "Completed" | "Cancelled" | "Archived" | (string & {});
+export type TaskStatus = "To Do" | "In Progress" | "In Review" | "Completed" | (string & {});
 export type TaskPriority = "Low" | "Medium" | "High" | "Critical";
 
 export type Assignee = {
   initials: string;
   color: string; // tailwind bg class
   name?: string;
+};
+
+export type Nudge = {
+  nudgeUID: string;
+  triggerDate: string;
+  nudgeType: string;
+  sent: boolean;
 };
 
 export type Task = {
@@ -22,6 +29,15 @@ export type Task = {
   isLeaderOnly?: boolean;
   isAiGenerated?: boolean;
   blockedBy?: number;
+
+  // Embedded subtask fields matching goal schema
+  subtaskUID?: string;
+  assignedMemberUID?: string | null;
+  assignedMemberName?: string | null;
+  deadline?: string;
+  matchPercentage?: number;
+  committee?: string;
+  nudges?: Nudge[];
 };
 
 export type Event = {
@@ -96,5 +112,3 @@ export type StarterTemplate = {
   iconName: string;
   subtasks: Array<Omit<Subtask, "id">>;
 };
-
-
