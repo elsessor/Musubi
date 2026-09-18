@@ -449,6 +449,7 @@ function normalizeOrganization(id: string, data: FirebaseFirestore.DocumentData)
 async function requireAdmin(uid: string) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Admin") throw new AppError("Administrator access is required.", 403);
+  return user;
 }
 
 export async function getOrganizationsForAdmin(uid: string) {
@@ -587,6 +588,99 @@ export async function completeUserOnboarding(
     changes: { field: "role", from: "new user", to: input.role }
   });
   return { token: createAppJwt({ uid: user.uid, email: user.email, role: user.role, organizationId: user.organizationId }), role: user.role, user };
+}
+
+export const recordAuditLog = writeAuditLog;
+
+export async function getMembersForAdmin(uid: string) {
+  await requireAdmin(uid);
+  const usersSnapshot = await firestore.collection("users").get();
+  const orgsSnapshot = await firestore.collection("organizations").get();
+
+  const orgMap = new Map<string, string>();
+  orgsSnapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    if (typeof data.name === "string") {
+      orgMap.set(docSnap.id, data.name);
+    }
+  });
+
+  return usersSnapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    const role = isUserRole(data.role) ? data.role : "Organization Member";
+    const fullName = typeof data.fullName === "string" ? data.fullName : (typeof data.name === "string" ? data.name : "Campus Member");
+    const email = typeof data.email === "string" ? data.email : "";
+    const position = typeof data.position === "string" && data.position.trim() ? data.position : (role === "Admin" ? "System Administrator" : role);
+    const orgId = typeof data.organizationId === "string" ? data.organizationId : null;
+    const organizationName = (orgId && orgMap.get(orgId)) || (typeof data.organizationName === "string" ? data.organizationName : "University Campus");
+    const committee = typeof data.committee === "string" && data.committee.trim() ? data.committee : "Executive Committee";
+    const inviteStatus = typeof data.inviteStatus === "string" ? data.inviteStatus : (data.onboardingCompleted ? "Active" : "Pending Invite");
+    const joinedDate = data.createdAt && typeof (data.createdAt as { toDate?: () => Date }).toDate === "function"
+      ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format((data.createdAt as { toDate: () => Date }).toDate())
+      : "Jan 15, 2025";
+
+    return {
+      id: docSnap.id,
+      name: fullName,
+      email,
+      role,
+      position,
+      organization: organizationName,
+      committee,
+      inviteStatus,
+      joinedDate
+    };
+  });
+}
+
+export async function updateMemberRoleForAdmin(uid: string, targetUid: string, input: { role: string; position: string }) {
+  const adminUser = await requireAdmin(uid);
+  const userRef = firestore.collection("users").doc(targetUid);
+  const snap = await userRef.get();
+  if (!snap.exists) throw new AppError("Member record was not found.", 404);
+  const targetData = snap.data() ?? {};
+
+  await userRef.update({
+    role: input.role,
+    position: input.position,
+    updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  });
+
+  writeAuditLog({
+    actorUID: uid,
+    actorName: adminUser.fullName,
+    actorRole: "Admin",
+    action: "UPDATE_ROLE",
+    actionCategory: "User Management",
+    targetType: "UserRole",
+    targetName: typeof targetData.fullName === "string" ? targetData.fullName : targetUid,
+    reason: `Changed role to ${input.role} (${input.position})`
+  });
+}
+
+export async function reassignMemberForAdmin(uid: string, targetUid: string, input: { organization: string; committee: string }) {
+  const adminUser = await requireAdmin(uid);
+  const userRef = firestore.collection("users").doc(targetUid);
+  const snap = await userRef.get();
+  if (!snap.exists) throw new AppError("Member record was not found.", 404);
+  const targetData = snap.data() ?? {};
+
+  await userRef.update({
+    organizationName: input.organization,
+    committee: input.committee,
+    updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  });
+
+  writeAuditLog({
+    actorUID: uid,
+    actorName: adminUser.fullName,
+    actorRole: "Admin",
+    action: "REASSIGN_MEMBER",
+    actionCategory: "User Management",
+    targetType: "UserAssignment",
+    targetName: typeof targetData.fullName === "string" ? targetData.fullName : targetUid,
+    reason: `Reassigned to ${input.organization} (${input.committee})`
+  });
 }
 
 // ─── Admin member directory helpers ────────────────────────────────────────
@@ -931,3 +1025,4 @@ export async function getEventsForUser(uid: string, orgId?: string) {
     };
   });
 }
+

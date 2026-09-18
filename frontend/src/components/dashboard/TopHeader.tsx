@@ -29,6 +29,7 @@ function Avatar({ name, role }: { name: string; role: UserRole }) {
     .filter(Boolean)
     .slice(0, 2)
     .join("");
+
   return (
     <div
       className={`relative flex size-12 items-center justify-center rounded-full text-base font-extrabold text-white ${
@@ -58,7 +59,6 @@ export function TopHeader({
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-
   const [liveUser, setLiveUser] = useState({
     name,
     role,
@@ -165,7 +165,7 @@ export function TopHeader({
   }, []);
 
   const displayOrg =
-    liveOrganizationName || organizationName || (liveUser.role === "Admin" ? "University Campus" : "");
+    liveOrganizationName || organizationName || (liveUser.role === "Admin" ? "University Campus" : "University Student Council");
   const subtitle =
     liveUser.role === "Admin"
       ? `University Campus · ${greetingDate}`
@@ -187,7 +187,6 @@ export function TopHeader({
         >
           <Menu className="size-6" />
         </button>
-
         <div className="min-w-0">
           <h1 className="truncate text-xl font-extrabold tracking-[-0.02em] text-slate-900 sm:text-[25px]">
             {liveUser.role === "Admin"
@@ -199,7 +198,6 @@ export function TopHeader({
           </p>
         </div>
       </div>
-
       <div className="flex shrink-0 items-center gap-3 sm:gap-5">
         {liveUser.role !== "Admin" ? (
           <button
@@ -213,7 +211,6 @@ export function TopHeader({
             </span>
           </button>
         ) : null}
-
         <div ref={menuRef} className="relative">
           <button
             aria-expanded={menuOpen}
@@ -225,7 +222,6 @@ export function TopHeader({
           >
             <Avatar name={liveUser.name} role={liveUser.role} />
           </button>
-
           {menuOpen ? (
             <div
               className="absolute right-0 z-30 mt-3 w-48 rounded-xl border border-slate-200 bg-white p-2 shadow-lg"

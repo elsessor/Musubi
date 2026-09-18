@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Check,
   CheckSquare,
   Clock3,
+  Filter,
   FolderGit2,
   Mail,
   Search,
+  ShieldCheck,
   Square,
   UserCheck,
   UserCog,
@@ -17,35 +20,19 @@ import {
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useLogout } from "@/hooks/useLogout";
-import {
-  bulkUpdateAdminMembersRole,
-  createAdminMembersStream,
-  updateAdminMember,
-  type AdminMemberRecord
-} from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import type { UserRole } from "@/types/auth";
 import { getDashboardNavItems } from "@/utils/routes";
+import {
+  bulkUpdateAdminMembersRole,
+  createAdminMembersStream,
+  getAdminMemberDirectory,
+  updateAdminMember,
+  type AdminMemberRecord
+} from "@/services/auth.service";
 
 export type MemberRecord = AdminMemberRecord;
-
-const AVAILABLE_ROLES: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
-
-type OrganizationOption = {
-  id: string;
-  name: string;
-};
-
-type CommitteeOption = {
-  id: string;
-  name: string;
-  organizationId: string | null;
-};
-
-const EMPTY_COMMITTEE = "Unassigned";
-const UNASSIGNED_ORGANIZATION = "Unassigned";
-const CAMPUS_ORGANIZATION = "University Campus";
 
 export default function AdminMembersPage() {
   const router = useRouter();
@@ -56,10 +43,10 @@ export default function AdminMembersPage() {
   const showToast = useToastStore((state) => state.showToast);
 
   const [members, setMembers] = useState<MemberRecord[]>([]);
-  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
-  const [committees, setCommittees] = useState<CommitteeOption[]>([]);
-  const [membersLoading, setMembersLoading] = useState(true);
-  const [membersError, setMembersError] = useState("");
+  const [directoryOrgs, setDirectoryOrgs] = useState<{ id: string; name: string }[]>([]);
+  const [directoryCommittees, setDirectoryCommittees] = useState<{ id: string; name: string; organizationId: string | null }[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [orgFilter, setOrgFilter] = useState<string>("all");
@@ -80,63 +67,68 @@ export default function AdminMembersPage() {
     }
   }, [authLoading, profile, router]);
 
+  // Load real members from backend + real-time stream
   useEffect(() => {
-    if (authLoading || profile?.role !== "Admin" || !firebaseUser) {
-      return;
-    }
+    if (!firebaseUser) return;
 
     let isMounted = true;
-    let closeStream: (() => void) | null = null;
-    setMembersLoading(true);
-    setMembersError("");
+    let unsubStream: (() => void) | null = null;
+
+    void getAdminMemberDirectory(firebaseUser)
+      .then((directory) => {
+        if (!isMounted) return;
+        setMembers(directory.members);
+        setDirectoryOrgs(directory.organizations);
+        setDirectoryCommittees(directory.committees);
+        setLoadingMembers(false);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setLoadingMembers(false);
+      });
 
     void createAdminMembersStream(firebaseUser, {
       onData: (directory) => {
         if (!isMounted) return;
         setMembers(directory.members);
-        setOrganizations(directory.organizations);
-        setCommittees(directory.committees);
-        setMembersError("");
-        setMembersLoading(false);
+        setDirectoryOrgs(directory.organizations);
+        setDirectoryCommittees(directory.committees);
+        setLoadingMembers(false);
       },
-      onError: () => {
-        if (!isMounted) return;
-        setMembersLoading(false);
-        setMembersError("Live member connection was interrupted. Refresh the page if it does not reconnect.");
-      }
-    })
-      .then((close) => {
-        closeStream = close;
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setMembersLoading(false);
-        setMembersError("Unable to load live member data from Firebase.");
-      });
+      onError: () => {}
+    }).then((unsub) => {
+      if (isMounted) unsubStream = unsub;
+      else unsub();
+    });
 
     return () => {
       isMounted = false;
-      closeStream?.();
+      if (unsubStream) unsubStream();
     };
-  }, [authLoading, firebaseUser, profile?.role]);
+  }, [firebaseUser]);
 
-  const organizationOptions = useMemo(
-    () => [
-      { id: "__campus__", name: CAMPUS_ORGANIZATION },
-      { id: "__unassigned_org__", name: UNASSIGNED_ORGANIZATION },
-      ...organizations
-    ],
-    [organizations]
-  );
+  // Dynamic filter options derived from real database records
+  const availableOrganizations = useMemo(() => {
+    const set = new Set<string>();
+    directoryOrgs.forEach((o) => {
+      if (o.name) set.add(o.name);
+    });
+    members.forEach((m) => {
+      if (m.organization) set.add(m.organization);
+    });
+    return Array.from(set);
+  }, [directoryOrgs, members]);
 
-  const committeeOptions = useMemo(
-    () => [{ id: "__unassigned__", name: EMPTY_COMMITTEE, organizationId: null }, ...committees],
-    [committees]
-  );
-
-  useEffect(() => {
-    setSelectedIds((currentIds) => currentIds.filter((id) => members.some((member) => member.id === id)));
-  }, [members]);
+  const availableCommittees = useMemo(() => {
+    const set = new Set<string>();
+    directoryCommittees.forEach((c) => {
+      if (c.name) set.add(c.name);
+    });
+    members.forEach((m) => {
+      if (m.committee) set.add(m.committee);
+    });
+    return Array.from(set);
+  }, [directoryCommittees, members]);
 
   const filteredMembers = useMemo(() => {
     return members.filter((member) => {
@@ -147,15 +139,8 @@ export default function AdminMembersPage() {
         member.position.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesRole = roleFilter === "all" || member.role === roleFilter;
-      const matchesOrg =
-        orgFilter === "all" ||
-        member.organizationId === orgFilter ||
-        (orgFilter === "__campus__" && member.organization === CAMPUS_ORGANIZATION) ||
-        (orgFilter === "__unassigned_org__" && member.organization === UNASSIGNED_ORGANIZATION);
-      const matchesCommittee =
-        committeeFilter === "all" ||
-        member.committeeId === committeeFilter ||
-        (committeeFilter === "__unassigned__" && member.committee === EMPTY_COMMITTEE);
+      const matchesOrg = orgFilter === "all" || member.organization === orgFilter;
+      const matchesCommittee = committeeFilter === "all" || member.committee === committeeFilter;
       const matchesStatus = statusFilter === "all" || member.inviteStatus === statusFilter;
 
       return matchesSearch && matchesRole && matchesOrg && matchesCommittee && matchesStatus;
@@ -183,84 +168,88 @@ export default function AdminMembersPage() {
   // Single Role Change Handler
   async function handleSaveRole(id: string, newRole: UserRole, newPosition: string) {
     if (!firebaseUser) return;
-    const target = members.find((m) => m.id === id);
     try {
-      await updateAdminMember(firebaseUser, id, {
-        role: newRole,
-        position: newPosition
-      });
+      await updateAdminMember(firebaseUser, id, { role: newRole, position: newPosition });
+      setMembers((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, role: newRole, position: newPosition } : m))
+      );
       showToast({
         title: "Role updated",
-        description: `Updated role for ${target?.name ?? "member"} to ${newRole}.`,
+        description: `Updated member role to ${newRole}.`,
         tone: "success"
       });
-      setRoleModalMember(null);
-    } catch {
+    } catch (err) {
       showToast({
-        title: "Unable to update role",
-        description: "Firebase rejected the role update. Please check permissions and try again.",
+        title: "Update failed",
+        description: err instanceof Error ? err.message : "Failed to update role.",
         tone: "error"
       });
+    } finally {
+      setRoleModalMember(null);
     }
   }
 
   // Single Reassign Handler
-  async function handleSaveReassign(id: string, organizationValue: string, committeeValue: string) {
+  async function handleSaveReassign(id: string, newOrg: string, newCommittee: string) {
     if (!firebaseUser) return;
-    const target = members.find((m) => m.id === id);
-    const organizationId = organizationValue.startsWith("__") ? null : organizationValue;
-    const committeeId = committeeValue === "__unassigned__" ? null : committeeValue;
-    const organizationName =
-      organizationOptions.find((organization) => organization.id === organizationValue)?.name ??
-      UNASSIGNED_ORGANIZATION;
-    const committeeName =
-      committeeOptions.find((committee) => committee.id === committeeValue)?.name ?? EMPTY_COMMITTEE;
     try {
+      const orgObj = directoryOrgs.find((o) => o.name === newOrg);
+      const commObj = directoryCommittees.find((c) => c.name === newCommittee);
+
       await updateAdminMember(firebaseUser, id, {
-        organizationId,
-        organizationName,
-        committeeId,
-        committeeName
+        organizationId: orgObj ? orgObj.id : null,
+        organizationName: newOrg,
+        committeeId: commObj ? commObj.id : null,
+        committeeName: newCommittee
       });
+
+      setMembers((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, organization: newOrg, committee: newCommittee } : m))
+      );
       showToast({
         title: "Assignment updated",
-        description: `Reassigned ${target?.name ?? "member"} to ${organizationName} (${committeeName}).`,
+        description: `Reassigned member to ${newOrg} (${newCommittee}).`,
         tone: "success"
       });
-      setReassignModalMember(null);
-    } catch {
+    } catch (err) {
       showToast({
-        title: "Unable to update assignment",
-        description: "Firebase rejected the reassignment. Please check permissions and try again.",
+        title: "Reassignment failed",
+        description: err instanceof Error ? err.message : "Failed to reassign member.",
         tone: "error"
       });
+    } finally {
+      setReassignModalMember(null);
     }
   }
 
   // Bulk Role Change Handler
   async function handleSaveBulkRole(newRole: UserRole) {
-    if (!firebaseUser) return;
+    if (!firebaseUser || selectedIds.length === 0) return;
     try {
       await bulkUpdateAdminMembersRole(firebaseUser, selectedIds, newRole);
+      setMembers((prev) =>
+        prev.map((m) => (selectedIds.includes(m.id) ? { ...m, role: newRole } : m))
+      );
       showToast({
         title: "Bulk role update successful",
         description: `Updated role to ${newRole} for ${selectedIds.length} selected member(s).`,
         tone: "success"
       });
-      setBulkRoleModalOpen(false);
-      setSelectedIds([]);
-    } catch {
+    } catch (err) {
       showToast({
-        title: "Unable to update selected members",
-        description: "Firebase rejected the bulk role update. Please try again.",
+        title: "Bulk update failed",
+        description: err instanceof Error ? err.message : "Failed to bulk update roles.",
         tone: "error"
       });
+    } finally {
+      setBulkRoleModalOpen(false);
+      setSelectedIds([]);
     }
   }
 
   if (authLoading || !profile || profile.role !== "Admin") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#eef1f5] text-slate-500">
+      <div className="flex min-h-screen items-center justify-center bg-[#eef1f5] text-slate-500 font-semibold">
         Loading member directory...
       </div>
     );
@@ -283,7 +272,7 @@ export default function AdminMembersPage() {
   const totalMembers = members.length;
   const activeCount = members.filter((m) => m.inviteStatus === "Active").length;
   const pendingCount = members.filter((m) => m.inviteStatus === "Pending Invite").length;
-  const leaderCount = members.filter((m) => m.role === "Student Leader").length;
+  const leaderCount = members.filter((m) => m.role === "Student Leader" || m.role === "Admin").length;
 
   return (
     <DashboardLayout
@@ -411,9 +400,9 @@ export default function AdminMembersPage() {
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
               >
                 <option value="all">All Organizations</option>
-                {organizationOptions.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name}
+                {availableOrganizations.map((org) => (
+                  <option key={org} value={org}>
+                    {org}
                   </option>
                 ))}
               </select>
@@ -424,9 +413,9 @@ export default function AdminMembersPage() {
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
               >
                 <option value="all">All Committees</option>
-                {committeeOptions.map((comm) => (
-                  <option key={comm.id} value={comm.id}>
-                    {comm.name}
+                {availableCommittees.map((comm) => (
+                  <option key={comm} value={comm}>
+                    {comm}
                   </option>
                 ))}
               </select>
@@ -444,12 +433,6 @@ export default function AdminMembersPage() {
             </div>
           </div>
         </div>
-
-        {membersError ? (
-          <p className="rounded-xl bg-rose-50 p-4 text-sm font-semibold text-rose-700">
-            {membersError}
-          </p>
-        ) : null}
 
         {/* Floating Bulk Action Bar */}
         {selectedIds.length > 0 ? (
@@ -511,10 +494,10 @@ export default function AdminMembersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm font-medium">
-                {membersLoading ? (
+                {loadingMembers ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center text-slate-500">
-                      Loading live members from Firebase...
+                    <td colSpan={7} className="px-4 py-12 text-center text-slate-400 font-semibold">
+                      Loading campus members...
                     </td>
                   </tr>
                 ) : filteredMembers.length ? (
@@ -593,7 +576,7 @@ export default function AdminMembersPage() {
                             <button
                               type="button"
                               onClick={() => setReassignModalMember(member)}
-                              className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-brand hover:text-white"
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
                             >
                               Reassign
                             </button>
@@ -604,14 +587,8 @@ export default function AdminMembersPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center text-slate-500">
-                      <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-3">
-                        <Users className="size-6" />
-                      </div>
-                      <p className="font-bold text-slate-800 text-base">No members match your criteria</p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Try adjusting your search query or reset your selected filters.
-                      </p>
+                    <td colSpan={7} className="px-4 py-12 text-center text-slate-400 font-medium">
+                      No members match the selected filters or search query.
                     </td>
                   </tr>
                 )}
@@ -633,10 +610,10 @@ export default function AdminMembersPage() {
       {/* Reassign Committee / Org Modal */}
       {reassignModalMember ? (
         <ReassignModal
-          committees={committeeOptions}
+          availableOrganizations={availableOrganizations}
+          availableCommittees={availableCommittees}
           member={reassignModalMember}
           onClose={() => setReassignModalMember(null)}
-          organizations={organizationOptions}
           onSave={handleSaveReassign}
         />
       ) : null}
@@ -666,8 +643,8 @@ function MemberAvatar({ name, role }: { name: string; role: UserRole }) {
     role === "Admin"
       ? "bg-rose-600 text-white"
       : role === "Student Leader"
-      ? "bg-[#2868ed] text-white"
-      : "bg-[#385779] text-white";
+        ? "bg-[#2868ed] text-white"
+        : "bg-[#385779] text-white";
 
   return (
     <div
@@ -720,6 +697,9 @@ function ChangeRoleModal({
 }) {
   const [role, setRole] = useState<UserRole>(member.role);
   const [position, setPosition] = useState(member.position);
+  const [submitting, setSubmitting] = useState(false);
+
+  const availableRoles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 animate-in fade-in">
@@ -745,7 +725,7 @@ function ChangeRoleModal({
               onChange={(e) => setRole(e.target.value as UserRole)}
               className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
             >
-              {AVAILABLE_ROLES.map((r) => (
+              {availableRoles.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
@@ -771,16 +751,22 @@ function ChangeRoleModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={submitting}
             className="h-11 flex-1 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={() => onSave(member.id, role, position.trim() || member.position)}
-            className="h-11 flex-1 rounded-xl bg-[#213f68] text-sm font-extrabold text-white hover:bg-blue-900 transition"
+            disabled={submitting}
+            onClick={async () => {
+              setSubmitting(true);
+              await onSave(member.id, role, position.trim() || member.position);
+              setSubmitting(false);
+            }}
+            className="h-11 flex-1 rounded-xl bg-[#213f68] text-sm font-extrabold text-white hover:bg-blue-900 transition disabled:opacity-50"
           >
-            Save Role Changes
+            {submitting ? "Saving..." : "Save Role Changes"}
           </button>
         </div>
       </div>
@@ -790,40 +776,21 @@ function ChangeRoleModal({
 
 /* Reassign Committee & Org Modal Component */
 function ReassignModal({
-  committees,
+  availableOrganizations,
+  availableCommittees,
   member,
   onClose,
-  organizations,
   onSave
 }: {
-  committees: CommitteeOption[];
+  availableOrganizations: string[];
+  availableCommittees: string[];
   member: MemberRecord;
   onClose: () => void;
-  organizations: OrganizationOption[];
-  onSave: (id: string, organizationValue: string, committeeValue: string) => void;
+  onSave: (id: string, newOrg: string, newCommittee: string) => void;
 }) {
-  const initialOrganizationId =
-    member.organizationId ??
-    (member.organization === CAMPUS_ORGANIZATION ? "__campus__" : "__unassigned_org__");
-  const [organizationId, setOrganizationId] = useState(initialOrganizationId);
-  const [committeeId, setCommitteeId] = useState(member.committeeId ?? "__unassigned__");
-  const visibleCommittees = committees.filter(
-    (committee) =>
-      committee.id === "__unassigned__" ||
-      !committee.organizationId ||
-      committee.organizationId === organizationId
-  );
-
-  function handleOrganizationChange(nextOrganizationId: string) {
-    setOrganizationId(nextOrganizationId);
-    const committeeBelongsToOrganization = visibleCommittees.some(
-      (committee) => committee.id === committeeId && committee.organizationId === nextOrganizationId
-    );
-
-    if (!committeeBelongsToOrganization) {
-      setCommitteeId("__unassigned__");
-    }
-  }
+  const [organization, setOrganization] = useState(member.organization);
+  const [committee, setCommittee] = useState(member.committee);
+  const [submitting, setSubmitting] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 animate-in fade-in">
@@ -845,13 +812,13 @@ function ReassignModal({
               Organization
             </label>
             <select
-              value={organizationId}
-              onChange={(e) => handleOrganizationChange(e.target.value)}
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
               className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
             >
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
+              {availableOrganizations.map((org) => (
+                <option key={org} value={org}>
+                  {org}
                 </option>
               ))}
             </select>
@@ -862,13 +829,13 @@ function ReassignModal({
               Committee Placement
             </label>
             <select
-              value={committeeId}
-              onChange={(e) => setCommitteeId(e.target.value)}
+              value={committee}
+              onChange={(e) => setCommittee(e.target.value)}
               className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
             >
-              {visibleCommittees.map((comm) => (
-                <option key={comm.id} value={comm.id}>
-                  {comm.name}
+              {availableCommittees.map((comm) => (
+                <option key={comm} value={comm}>
+                  {comm}
                 </option>
               ))}
             </select>
@@ -879,16 +846,22 @@ function ReassignModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={submitting}
             className="h-11 flex-1 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={() => onSave(member.id, organizationId, committeeId)}
-            className="h-11 flex-1 rounded-xl bg-[#2868ed] text-sm font-extrabold text-white hover:bg-blue-700 transition"
+            disabled={submitting}
+            onClick={async () => {
+              setSubmitting(true);
+              await onSave(member.id, organization, committee);
+              setSubmitting(false);
+            }}
+            className="h-11 flex-1 rounded-xl bg-[#2868ed] text-sm font-extrabold text-white hover:bg-blue-700 transition disabled:opacity-50"
           >
-            Save Reassignment
+            {submitting ? "Saving..." : "Save Reassignment"}
           </button>
         </div>
       </div>
@@ -907,6 +880,8 @@ function BulkRoleModal({
   onSave: (newRole: UserRole) => void;
 }) {
   const [role, setRole] = useState<UserRole>("Student Leader");
+  const [submitting, setSubmitting] = useState(false);
+  const availableRoles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 animate-in fade-in">
@@ -931,7 +906,7 @@ function BulkRoleModal({
             onChange={(e) => setRole(e.target.value as UserRole)}
             className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
           >
-            {AVAILABLE_ROLES.map((r) => (
+            {availableRoles.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
@@ -943,16 +918,22 @@ function BulkRoleModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={submitting}
             className="h-11 flex-1 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={() => onSave(role)}
-            className="h-11 flex-1 rounded-xl bg-[#2868ed] text-sm font-extrabold text-white hover:bg-blue-700 transition"
+            disabled={submitting}
+            onClick={async () => {
+              setSubmitting(true);
+              await onSave(role);
+              setSubmitting(false);
+            }}
+            className="h-11 flex-1 rounded-xl bg-[#2868ed] text-sm font-extrabold text-white hover:bg-blue-700 transition disabled:opacity-50"
           >
-            Apply to {count} Members
+            {submitting ? "Applying..." : `Apply to ${count} Members`}
           </button>
         </div>
       </div>

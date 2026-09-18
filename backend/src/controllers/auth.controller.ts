@@ -3,18 +3,22 @@ import type { NextFunction, Request, Response } from "express";
 import { firebaseAuth } from "../config/firebase.js";
 import { runAtomizerFlow } from "../services/atomizer.service.js";
 import {
+  addMembersToOrganizationCommittee,
   bulkUpdateMemberRolesForAdmin,
+  clearEventsForOrg,
   completeUserOnboarding,
+  createEventForUser,
   createOrganization,
   createOrganizationCommittee,
-  addMembersToOrganizationCommittee,
   getAdminMemberDirectory,
   getAuditLogs,
   getCurrentUser,
+  getEventsForUser,
+  getMembersForAdmin,
   getMyOrganizationJoinRequest,
+  getOrganizationCommittees,
   getOrganizationDirectory,
   getOrganizationForUser,
-  getOrganizationCommittees,
   getOrganizationJoinRequests,
   getOrganizationManagementDetail,
   getOrganizationMembers,
@@ -22,14 +26,13 @@ import {
   getOrganizationsForAdmin,
   joinOrganization,
   loginWithFirebaseToken,
+  reassignMemberForAdmin,
   reviewOrganizationJoinRequest,
   reviewOrganizationRequest,
-  updateMemberForAdmin,
-  updateOrganizationForAdmin,
-  createEventForUser,
   updateEventForUser,
-  clearEventsForOrg,
-  getEventsForUser,
+  updateMemberForAdmin,
+  updateMemberRoleForAdmin,
+  updateOrganizationForAdmin,
   watchAdminMemberDirectory,
   watchAuditLogs
 } from "../services/auth.service.js";
@@ -50,6 +53,39 @@ export async function loginController(request: Request, response: Response, next
     if (!idToken) throw new AppError("Firebase ID token is required.", 400);
     const session = await loginWithFirebaseToken(idToken);
     response.status(200).json(session);
+  } catch (error) { next(error); }
+}
+
+export async function membersController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    response.status(200).json({ members: await getMembersForAdmin(decoded.uid) });
+  } catch (error) { next(error); }
+}
+
+export async function updateMemberRoleController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const { role, position } = request.body as Record<string, unknown>;
+    if (typeof role !== "string" || typeof position !== "string") throw new AppError("Role and position are required.", 400);
+    await updateMemberRoleForAdmin(decoded.uid, request.params.id, { role, position });
+    response.status(200).json({ success: true });
+  } catch (error) { next(error); }
+}
+
+export async function reassignMemberController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const { organization, committee } = request.body as Record<string, unknown>;
+    if (typeof organization !== "string" || typeof committee !== "string") throw new AppError("Organization and committee are required.", 400);
+    await reassignMemberForAdmin(decoded.uid, request.params.id, { organization, committee });
+    response.status(200).json({ success: true });
   } catch (error) { next(error); }
 }
 
@@ -88,6 +124,17 @@ export async function meController(request: AuthenticatedRequest, response: Resp
     if (!request.authUser) throw new AppError("Authentication is required.", 401);
     const user = await getCurrentUser(request.authUser.uid);
     response.status(200).json({ user });
+  } catch (error) { next(error); }
+}
+
+export async function eventsController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const orgId = typeof request.query.orgId === "string" ? request.query.orgId : undefined;
+    const events = await getEventsForUser(decoded.uid, orgId);
+    response.status(200).json({ events });
   } catch (error) { next(error); }
 }
 

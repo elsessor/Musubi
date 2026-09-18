@@ -13,7 +13,7 @@ import {
 } from "firebase/firestore";
 
 import { getFirebaseDb } from "../firebase/config";
-import type { Event, EventStatus } from "../components/events/types";
+import type { Event, EventStatus, Task } from "../components/events/types";
 import { useAuthStore } from "@/store/authStore";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
@@ -83,46 +83,20 @@ export function subscribeEventsFirestore(
   user: User | null,
   orgId: string | null | undefined,
   onData: (events: Event[]) => void
-) {
+): () => void {
   const targetOrgId = orgId && orgId.trim() ? orgId.trim() : null;
 
   // 1. Initial immediate fetch via secure backend API
   void fetchEvents(user, targetOrgId).then((events) => {
-    if (events.length > 0) {
-      onData(events);
-    }
+    onData(events);
   });
 
-  // 2. Poll every 2 seconds to keep live data synced with backend
+  // 2. Poll every 3 seconds to keep live data synced with backend
   const interval = setInterval(() => {
     void fetchEvents(user, targetOrgId).then((events) => {
       onData(events);
     });
-  }, 2000);
-
-  // 3. Optional client snapshot listener fallback
-  try {
-    const db = getFirebaseDb();
-    if (targetOrgId) {
-      const q = query(collection(db, "events"), where("orgId", "==", targetOrgId));
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          if (!snapshot.empty) {
-            const events = snapshot.docs.map((document) =>
-              normalizeEvent(document.id, document.data())
-            );
-            onData(events);
-          }
-        },
-        () => { }
-      );
-      return () => {
-        clearInterval(interval);
-        unsubscribe();
-      };
-    }
-  } catch { }
+  }, 3000);
 
   return () => {
     clearInterval(interval);

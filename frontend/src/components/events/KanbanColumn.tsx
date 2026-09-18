@@ -11,6 +11,7 @@ type KanbanColumnProps = {
   onAddTask?: () => void;
   onDragStart?: (taskId: string) => void;
   onDrop?: (status: TaskStatus) => void;
+  onReassignTask?: (task: Task) => void;
   customStatuses?: CustomStatusConfig[];
   isLeader?: boolean;
   onColumnDragStart?: (status: TaskStatus) => void;
@@ -26,13 +27,14 @@ export function KanbanColumn({
   onAddTask,
   onDragStart,
   onDrop,
+  onReassignTask,
   customStatuses,
   isLeader = false,
   onColumnDragStart,
   onColumnDragOver,
   onColumnDrop,
   isColumnDragging = false,
-  isColumnDragOver = false,
+  isColumnDragOver = false
 }: KanbanColumnProps) {
   const theme = getStatusTheme(status, customStatuses);
   const isDraggableColumn = Boolean(isLeader && onColumnDragStart);
@@ -94,7 +96,7 @@ export function KanbanColumn({
           </div>
         ) : (
           tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onDragStart={onDragStart} />
+            <TaskCard key={task.id} task={task} onDragStart={onDragStart} onReassign={onReassignTask} />
           ))
         )}
       </div>

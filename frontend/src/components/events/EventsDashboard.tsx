@@ -14,11 +14,9 @@ import {
   Table,
   Users
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Event, EventStatus } from "./types";
 import { CreateEventCard, EventCard } from "./EventCard";
-import { AddCustomStatusModal } from "./AddCustomStatusModal";
-import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
 type StatusFilter = EventStatus | "All";
 type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
@@ -91,12 +89,10 @@ type EventsDashboardProps = {
   isLeader?: boolean;
   onSelectEvent: (event: Event) => void;
   onNewEvent: () => void;
-  committees?: { id: string; name: string }[];
 };
 
-export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent, committees = [] }: EventsDashboardProps) {
+export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent }: EventsDashboardProps) {
   const [filter, setFilter] = useState<StatusFilter>("All");
-  const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
 
@@ -112,7 +108,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
       if (saved) {
         return JSON.parse(saved);
       }
-    } catch {}
+    } catch { }
     return DEFAULT_EVENT_STATUSES;
   });
 
@@ -122,7 +118,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
       if (saved) {
         setCustomStatuses(JSON.parse(saved));
       }
-    } catch {}
+    } catch { }
   }, []);
 
   // Synchronize statusOrder with customStatuses and defaultStatuses
@@ -142,7 +138,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
       const updated = [...filtered, ...missingDefaults, ...missingCustom];
       try {
         localStorage.setItem("musubi_event_status_order", JSON.stringify(updated));
-      } catch {}
+      } catch { }
       return updated;
     });
   }, [customStatuses]);
@@ -151,7 +147,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
     setStatusOrder(newOrder);
     try {
       localStorage.setItem("musubi_event_status_order", JSON.stringify(newOrder));
-    } catch {}
+    } catch { }
   }
 
   function handleAddCustomStatus(statusName: string, color: StatusThemeColor) {
@@ -168,7 +164,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
     try {
       localStorage.setItem("musubi_custom_event_statuses", JSON.stringify(updated));
       localStorage.setItem("musubi_event_status_order", JSON.stringify(updatedOrder));
-    } catch {}
+    } catch { }
   }
 
   function handleDeleteCustomStatus(statusName: string) {
@@ -179,7 +175,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
     try {
       localStorage.setItem("musubi_custom_event_statuses", JSON.stringify(updated));
       localStorage.setItem("musubi_event_status_order", JSON.stringify(updatedOrder));
-    } catch {}
+    } catch { }
     if (filter === statusName) {
       setFilter("All");
     }
@@ -203,8 +199,8 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
     setDragOverStatusPill(null);
   }
 
-  const activeCount    = events.filter((e) => e.status === "Active").length;
-  const planningCount  = events.filter((e) => e.status === "Planning").length;
+  const activeCount = events.filter((e) => e.status === "Active").length;
+  const planningCount = events.filter((e) => e.status === "Planning").length;
   const completedCount = events.filter((e) => e.status === "Completed").length;
 
   const fetchedNames = committees.map((c) => c.name);
@@ -234,8 +230,8 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
             <span className="text-slate-500">Total</span>
           </span>
           {[
-            { label: "Active",    count: activeCount,    dot: "bg-blue-500" },
-            { label: "Planning",  count: planningCount,  dot: "bg-amber-400" },
+            { label: "Active", count: activeCount, dot: "bg-blue-500" },
+            { label: "Planning", count: planningCount, dot: "bg-amber-400" },
             { label: "Completed", count: completedCount, dot: "bg-emerald-500" }
           ].map(({ label, count, dot }) => (
             <span key={label} className="flex items-center gap-1.5 text-sm text-slate-600">
@@ -263,25 +259,14 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <div className="relative flex items-center">
-            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
-            <select
-              value={selectedCommittee}
-              onChange={(e) => setSelectedCommittee(e.target.value)}
-              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
-            >
-              <option value="All">All Committees</option>
-              {allCommitteeNames.map((commName) => (
-                <option key={commName} value={commName}>
-                  {commName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <button type="button" className="flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">
+            <SlidersHorizontal size={12} />
+            All Committees
+          </button>
 
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">
-            {allStatusFilters.map(({ label, key }) => {
+            {STATUS_FILTERS.map(({ label, key }) => {
               const count = key === "All" ? events.length : events.filter((e) => e.status === key).length;
               const isActive = filter === key;
               const theme = getStatusTheme(key, customStatuses);
@@ -320,19 +305,17 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                   }}
                   onClick={() => setFilter(key)}
                   title={isPillDraggable ? "Drag to rearrange status order" : undefined}
-                  className={`group flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
-                    isActive
-                      ? "bg-slate-900 text-white shadow"
-                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
-                  } ${isPillDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
-                    isDraggingThis ? "opacity-30 scale-95 border-dashed border-blue-400" : ""
-                  } ${isDragOverThis ? "ring-2 ring-blue-500 scale-105 bg-blue-50/80" : ""}`}
+                  className={`group flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${isActive
+                    ? "bg-slate-900 text-white shadow"
+                    : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                    } ${isPillDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${isDraggingThis ? "opacity-30 scale-95 border-dashed border-blue-400" : ""
+                    } ${isDragOverThis ? "ring-2 ring-blue-500 scale-105 bg-blue-50/80" : ""}`}
                 >
                   {isPillDraggable && (
                     <GripVertical size={11} className="-ml-1 text-slate-300 transition-opacity group-hover:text-slate-500" />
                   )}
                   {key !== "All" && (
-                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white/70" : theme.dot}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white/70" : STATUS_DOT[key as EventStatus]}`} />
                   )}
                   {label}
                   <span className={`${isActive ? "text-white/70" : "text-slate-400"}`}>{count}</span>
@@ -363,11 +346,10 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
               type="button"
               title={title}
               onClick={() => setViewMode(mode)}
-              className={`rounded-lg p-2 transition-all ${
-                viewMode === mode
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-              }`}
+              className={`rounded-lg p-2 transition-all ${viewMode === mode
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                }`}
             >
               <Icon size={14} />
             </button>
@@ -375,24 +357,23 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
         </div>
       </div>
 
-      {/* 1. Grid View */}
+      {/* 1. Grid View (Image 1) */}
       {viewMode === "grid" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map((event) => (
-            <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} />
+            <EventCard key={event.id} event={event} onClick={onSelectEvent} />
           ))}
           {isLeader && <CreateEventCard onClick={onNewEvent} />}
         </div>
       )}
 
-      {/* 2. Table View */}
+      {/* 2. Table View (Image 2) */}
       {viewMode === "table" && (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-3.5">EVENT</th>
-                <th className="px-4 py-3.5">COMMITTEE</th>
                 <th className="px-4 py-3.5">STATUS</th>
                 <th className="px-4 py-3.5">PROGRESS</th>
                 <th className="px-4 py-3.5">START DATE</th>
@@ -401,69 +382,85 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {visible.map((event) => {
-                const theme = getStatusTheme(event.status, customStatuses);
-                return (
-                  <tr
-                    key={event.id}
-                    onClick={() => onSelectEvent(event)}
-                    className="group cursor-pointer transition hover:bg-slate-50/80"
-                  >
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-slate-900 group-hover:text-blue-600 transition">
-                        {event.title}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">{event.description}</p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="inline-flex rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700 border border-violet-200">
-                        {event.committee || "General"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${theme.badge}`}
-                      >
-                        {event.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 min-w-[140px]">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className={`h-full rounded-full ${theme.dot}`}
-                            style={{ width: `${event.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-semibold text-slate-600">{event.progress}%</span>
+              {visible.map((event) => (
+                <tr
+                  key={event.id}
+                  onClick={() => onSelectEvent(event)}
+                  className="group cursor-pointer transition hover:bg-slate-50/80"
+                >
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-slate-900 group-hover:text-blue-600 transition">
+                      {event.title}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">{event.description}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${event.status === "Active"
+                        ? "bg-blue-50 text-blue-600 border border-blue-200"
+                        : event.status === "Completed"
+                          ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                          : event.status === "Planning"
+                            ? "bg-amber-50 text-amber-600 border border-amber-200"
+                            : "bg-slate-100 text-slate-600 border border-slate-200"
+                        }`}
+                    >
+                      {event.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 min-w-[140px]">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${event.status === "Completed"
+                            ? "bg-emerald-500"
+                            : event.status === "Planning"
+                              ? "bg-amber-400"
+                              : "bg-blue-500"
+                            }`}
+                          style={{ width: `${event.progress}%` }}
+                        />
                       </div>
-                    </td>
-                    <td className="px-4 py-4 text-xs font-medium text-slate-600">{event.startDate}</td>
-                    <td className="px-4 py-4 text-xs font-medium text-slate-600">{event.endDate}</td>
-                    <td className="px-4 py-4 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1">
-                        <Users size={13} className="text-slate-400" />
-                        {event.memberCount}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+                      <span className="text-xs font-semibold text-slate-600">{event.progress}%</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-xs font-medium text-slate-600">{event.startDate}</td>
+                  <td className="px-4 py-4 text-xs font-medium text-slate-600">{event.endDate}</td>
+                  <td className="px-4 py-4 text-xs font-medium text-slate-600">
+                    <span className="inline-flex items-center gap-1">
+                      <Users size={13} className="text-slate-400" />
+                      {event.memberCount}
+                    </span>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* 3. Expanded View */}
+      {/* 3. Expanded View (Image 3) */}
       {viewMode === "expanded" && (
         <div className="space-y-4">
           {visible.map((event) => {
-            const theme = getStatusTheme(event.status, customStatuses);
+            const statusColor =
+              event.status === "Completed"
+                ? "border-l-emerald-500"
+                : event.status === "Planning"
+                  ? "border-l-amber-400"
+                  : "border-l-blue-500";
+            const progressBg =
+              event.status === "Completed"
+                ? "bg-emerald-500"
+                : event.status === "Planning"
+                  ? "bg-amber-400"
+                  : "bg-blue-500";
+
             return (
               <article
                 key={event.id}
                 onClick={() => onSelectEvent(event)}
-                className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 ${theme.border} bg-white p-5 shadow-sm transition hover:shadow-md cursor-pointer`}
+                className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 ${statusColor} bg-white p-5 shadow-sm transition hover:shadow-md cursor-pointer`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
@@ -475,18 +472,16 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                       <p className="mt-0.5 text-xs text-slate-500">{event.description}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {event.committee && (
-                      <span className="rounded-full bg-violet-50 px-3 py-0.5 text-[11px] font-semibold text-violet-700 border border-violet-200">
-                        {event.committee}
-                      </span>
-                    )}
-                    <span
-                      className={`rounded-full px-3 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${theme.badge}`}
-                    >
-                      {event.status}
-                    </span>
-                  </div>
+                  <span
+                    className={`rounded-full px-3 py-0.5 text-[11px] font-semibold ${event.status === "Active"
+                      ? "bg-blue-50 text-blue-600 border border-blue-200"
+                      : event.status === "Completed"
+                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                        : "bg-amber-50 text-amber-600 border border-amber-200"
+                      }`}
+                  >
+                    {event.status}
+                  </span>
                 </div>
 
                 <div className="mt-4">
@@ -495,7 +490,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                     <span className="font-semibold text-slate-800">{event.progress}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div className={`h-full rounded-full ${theme.dot}`} style={{ width: `${event.progress}%` }} />
+                    <div className={`h-full rounded-full ${progressBg}`} style={{ width: `${event.progress}%` }} />
                   </div>
                 </div>
 
@@ -509,7 +504,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
         </div>
       )}
 
-      {/* 4. Kanban View */}
+      {/* 4. Kanban View (Image 4) */}
       {viewMode === "kanban" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {statusOrder.map((status) => {
@@ -522,9 +517,8 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
             return (
               <div
                 key={status}
-                className={`flex flex-col gap-3 transition-all ${
-                  isDraggingCol ? "opacity-30 scale-95" : ""
-                } ${isDragOverCol ? "ring-2 ring-blue-500 rounded-2xl p-1 bg-blue-50/40" : ""}`}
+                className={`flex flex-col gap-3 transition-all ${isDraggingCol ? "opacity-30 scale-95" : ""
+                  } ${isDragOverCol ? "ring-2 ring-blue-500 rounded-2xl p-1 bg-blue-50/40" : ""}`}
               >
                 <div
                   draggable={isColDraggable}
@@ -553,9 +547,8 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                     setDragOverStatusPill(null);
                   }}
                   title={isColDraggable ? "Drag column header to rearrange" : undefined}
-                  className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-xs font-bold ${theme.headerTone} ${
-                    isColDraggable ? "cursor-grab active:cursor-grabbing hover:brightness-95" : ""
-                  }`}
+                  className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-xs font-bold ${theme.headerTone} ${isColDraggable ? "cursor-grab active:cursor-grabbing hover:brightness-95" : ""
+                    }`}
                 >
                   <div className="flex items-center gap-1.5">
                     {isColDraggable && (
@@ -573,7 +566,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                       onClick={() => onSelectEvent(event)}
                       className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow cursor-pointer"
                     >
-                      <div className={`h-1 w-full rounded-full ${theme.dot} mb-3`} />
+                      <div className={`h-1 w-full rounded-full ${barTone} mb-3`} />
                       <h4 className="text-sm font-bold text-slate-900">{event.title}</h4>
                       <div className="mt-2.5">
                         <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
@@ -581,7 +574,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                           <span>👥 {event.memberCount}</span>
                         </div>
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                          <div className={`h-full rounded-full ${theme.dot}`} style={{ width: `${event.progress}%` }} />
+                          <div className={`h-full rounded-full ${barTone}`} style={{ width: `${event.progress}%` }} />
                         </div>
                       </div>
                       <p className="mt-3 text-[11px] font-medium text-slate-500">📅 {event.startDate}</p>
@@ -600,7 +593,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
         </div>
       )}
 
-      {/* 5. Calendar View */}
+      {/* 5. Calendar View (Image 5) */}
       {viewMode === "calendar" && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
@@ -642,30 +635,31 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                 <div key={idx} className={`min-h-[90px] p-2 transition ${isCurrentMonth ? "bg-white" : "bg-slate-50/40 text-slate-400"}`}>
                   <div className="flex justify-between items-center mb-1">
                     <span
-                      className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold ${
-                        isToday
-                          ? "bg-blue-600 text-white font-bold shadow-sm"
-                          : isCurrentMonth
+                      className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold ${isToday
+                        ? "bg-blue-600 text-white font-bold shadow-sm"
+                        : isCurrentMonth
                           ? "text-slate-700"
                           : "text-slate-400"
-                      }`}
+                        }`}
                     >
                       {day.dayNumber}
                     </span>
                   </div>
 
-                  {day.matchingEvents.map((evt) => {
-                    const theme = getStatusTheme(evt.status, customStatuses);
-                    return (
-                      <button
-                        key={evt.id}
-                        onClick={() => onSelectEvent(evt)}
-                        className={`mt-1 block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] font-semibold ${theme.bg} ${theme.text}`}
-                      >
-                        {evt.title}
-                      </button>
-                    );
-                  })}
+                  {day.matchingEvents.map((evt) => (
+                    <button
+                      key={evt.id}
+                      onClick={() => onSelectEvent(evt)}
+                      className={`mt-1 block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] font-semibold ${evt.status === "Completed"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : evt.status === "Planning"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-blue-100 text-blue-800"
+                        }`}
+                    >
+                      {evt.title}
+                    </button>
+                  ))}
                 </div>
               );
             })}

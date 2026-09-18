@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AdminDashboardView } from "@/components/admin/AdminDashboardView";
+import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useAuthStore } from "@/store/authStore";
 import { useLogout } from "@/hooks/useLogout";
 import { getDashboardNavItems } from "@/utils/routes";
