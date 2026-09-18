@@ -31,6 +31,13 @@
 }
 
 @layer components {
+  /* Committee cards use a three-column grid on wide dashboard screens. */
+  @media (min-width: 1280px) {
+    .mt-4.grid.gap-4.lg\:grid-cols-2 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
   .auth-label {
     @apply mb-2 block text-xs font-bold uppercase tracking-normal text-slate-500;
   }

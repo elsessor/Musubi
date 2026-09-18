@@ -16,6 +16,7 @@ import type {
   DashboardNavItem,
   DashboardUser
 } from "@/types/dashboard";
+import { cn } from "@/utils/cn";
 
 type DashboardLayoutProps = {
   user: DashboardUser;
@@ -48,6 +49,7 @@ export function DashboardLayout({
   children
 }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
     <div className="h-screen overflow-hidden bg-[#eef1f5] text-slate-900">
@@ -55,15 +57,17 @@ export function DashboardLayout({
       <Sidebar
         activeNavId={activeNavId}
         mobileOpen={mobileSidebarOpen}
+        collapsed={sidebarCollapsed}
         onLogout={onLogout}
         onNavigate={() => setMobileSidebarOpen(false)}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         navItems={navItems}
         role={user.role}
         roleLabel={user.roleLabel}
         userName={user.name}
       />
 
-      <div className="flex h-full min-w-0 flex-col overflow-hidden md:ml-[354px]">
+      <div className={cn("flex h-full min-w-0 flex-col overflow-hidden transition-all duration-300", sidebarCollapsed ? "md:ml-20" : "md:ml-[354px]")}>
         <TopHeader
           academicYear={user.academicYear}
           greetingDate={user.greetingDate}
@@ -71,6 +75,7 @@ export function DashboardLayout({
           notificationCount={notificationCount}
           organizationName={user.organizationName}
           role={user.role}
+          userId={user.id}
           onLogout={onLogout}
           onMenuToggle={() => setMobileSidebarOpen(true)}
         />

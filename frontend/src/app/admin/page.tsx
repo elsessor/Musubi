@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { AdminDashboardView } from "@/components/admin/AdminDashboardView";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { AdminDashboardView } from "@/components/admin/AdminDashboardView";
 import { useAuthStore } from "@/store/authStore";
 import { useLogout } from "@/hooks/useLogout";
 import { getDashboardNavItems } from "@/utils/routes";

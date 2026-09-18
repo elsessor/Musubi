@@ -5,6 +5,10 @@ export function getDashboardRoute(role: UserRole): string {
   return role === "Admin" ? "/admin" : "/dashboard";
 }
 
+export function getPostAuthenticationRoute(user: AuthUserProfile): string {
+  return user.onboardingCompleted || user.organizationId ? getDashboardRoute(user.role) : "/onboarding";
+}
+
 export function getDashboardNavItems(role: UserRole): DashboardNavItem[] {
   if (role === "Admin") {
     return [
@@ -17,24 +21,20 @@ export function getDashboardNavItems(role: UserRole): DashboardNavItem[] {
     ];
   }
 
-  const commonMemberItems: DashboardNavItem[] = [
+  const baseItems: DashboardNavItem[] = [
     { id: "dashboard", label: "Dashboard", href: "/dashboard" },
     { id: "events", label: "Events & Tasks", href: "/dashboard/events" },
     { id: "organization", label: "Organization", href: "/dashboard/organization" },
-    { id: "notifications", label: "Notifications", href: "/dashboard/notifications", badge: 2 },
+    { id: "notifications", label: "Notifications", href: "/dashboard/notifications" },
     { id: "settings", label: "Settings", href: "/dashboard/settings" }
   ];
 
   return role === "Student Leader"
     ? [
-        ...commonMemberItems.slice(0, 3),
+        ...baseItems.slice(0, 3),
         { id: "analytics", label: "Analytics", href: "/dashboard/analytics" },
         { id: "audit-logs", label: "Audit Logs", href: "/dashboard/audit-logs" },
-        ...commonMemberItems.slice(3)
+        ...baseItems.slice(3)
       ]
-    : commonMemberItems;
-}
-
-export function getPostAuthenticationRoute(user: AuthUserProfile): string {
-  return user.onboardingCompleted || user.organizationId ? getDashboardRoute(user.role) : "/onboarding";
+    : baseItems;
 }

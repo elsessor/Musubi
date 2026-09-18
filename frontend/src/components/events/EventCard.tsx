@@ -2,6 +2,7 @@
 
 import { Calendar, Plus, Users } from "lucide-react";
 import type { Event, EventStatus } from "./types";
+<<<<<<< HEAD
 
 const statusConfig: Record<EventStatus, { label: string; dot: string; badge: string; text: string }> = {
   Active:    { label: "Active",    dot: "bg-blue-500",   badge: "bg-blue-50 text-blue-600 ring-blue-200",    text: "text-blue-600"  },
@@ -10,14 +11,25 @@ const statusConfig: Record<EventStatus, { label: string; dot: string; badge: str
   Cancelled: { label: "Cancelled", dot: "bg-rose-500",   badge: "bg-rose-50 text-rose-700 ring-rose-200",       text: "text-rose-600" },
   Archived:  { label: "Archived",  dot: "bg-slate-400",  badge: "bg-slate-100 text-slate-600 ring-slate-200", text: "text-slate-500"  }
 };
+=======
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 
 type EventCardProps = {
   event: Event;
   onClick: (event: Event) => void;
+<<<<<<< HEAD
 };
 
 export function EventCard({ event, onClick }: EventCardProps) {
   const cfg = statusConfig[event.status];
+=======
+  customStatuses?: CustomStatusConfig[];
+};
+
+export function EventCard({ event, onClick, customStatuses }: EventCardProps) {
+  const theme = getStatusTheme(event.status, customStatuses);
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
   const taskCount = event.tasks.length;
 
   return (
@@ -26,17 +38,35 @@ export function EventCard({ event, onClick }: EventCardProps) {
       onClick={() => onClick(event)}
       className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm ring-1 ring-slate-100 transition-all hover:-translate-y-0.5 hover:shadow-md hover:ring-blue-200 focus-visible:outline-2 focus-visible:outline-blue-500"
     >
+<<<<<<< HEAD
       {/* Top row: icon + status badge */}
       <div className="flex items-start justify-between">
+=======
+      {/* Top row: icon + committee badge + status badge */}
+      <div className="flex items-start justify-between gap-2">
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
             <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
           </svg>
         </span>
+<<<<<<< HEAD
         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${cfg.badge}`}>
           {cfg.label}
         </span>
+=======
+        <div className="flex items-center gap-1.5">
+          {event.committee && (
+            <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 ring-1 ring-inset ring-violet-200">
+              {event.committee}
+            </span>
+          )}
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${theme.badge}`}>
+            {event.status}
+          </span>
+        </div>
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
       </div>
 
       {/* Title + description */}
@@ -64,7 +94,11 @@ export function EventCard({ event, onClick }: EventCardProps) {
       <div className="mt-4">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
           <div
+<<<<<<< HEAD
             className="h-full rounded-full bg-blue-500 transition-all"
+=======
+            className={`h-full rounded-full ${theme.dot} transition-all`}
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
             style={{ width: `${event.progress}%` }}
           />
         </div>

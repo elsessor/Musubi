@@ -1,6 +1,10 @@
 "use client";
 
+<<<<<<< HEAD
 import { AlertTriangle, Calendar, Lock, UserCheck, Zap } from "lucide-react";
+=======
+import { AlertTriangle, Calendar, ShieldAlert, Sparkles } from "lucide-react";
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 import type { Task, TaskPriority } from "./types";
 
 const priorityConfig: Record<TaskPriority, { label: string; classes: string }> = {
@@ -13,11 +17,18 @@ const priorityConfig: Record<TaskPriority, { label: string; classes: string }> =
 type TaskCardProps = {
   task: Task;
   onDragStart?: (taskId: string) => void;
+<<<<<<< HEAD
   onReassign?: (task: Task) => void;
 };
 
 export function TaskCard({ task, onDragStart, onReassign }: TaskCardProps) {
   const pCfg = priorityConfig[task.priority];
+=======
+};
+
+export function TaskCard({ task, onDragStart }: TaskCardProps) {
+  const pCfg = priorityConfig[task.priority || "Medium"];
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 
   return (
     <div
@@ -25,6 +36,7 @@ export function TaskCard({ task, onDragStart, onReassign }: TaskCardProps) {
       onDragStart={() => onDragStart?.(task.id)}
       className="group flex cursor-grab flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md active:cursor-grabbing"
     >
+<<<<<<< HEAD
       {/* Blocker alert or Leader / AI Badges */}
       {task.blockedBy && task.blockedBy > 0 ? (
         <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
@@ -45,10 +57,35 @@ export function TaskCard({ task, onDragStart, onReassign }: TaskCardProps) {
             <Zap size={10} /> AI Generated
           </span>
         )}
+=======
+      {/* Badges / Alerts */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {task.isLeaderOnly ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-200/80">
+            <ShieldAlert size={11} className="text-amber-500" />
+            Leader Only
+          </span>
+        ) : null}
+
+        {typeof task.matchPercentage === "number" && task.matchPercentage > 0 ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-indigo-200/60">
+            <Sparkles size={10} className="text-indigo-500" />
+            {task.matchPercentage}% Match
+          </span>
+        ) : null}
+
+        {task.blockedBy && task.blockedBy > 0 ? (
+          <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+            <AlertTriangle size={12} className="shrink-0 text-amber-500" />
+            Blocked by {task.blockedBy} {task.blockedBy === 1 ? "task" : "tasks"}
+          </div>
+        ) : null}
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
       </div>
 
       {/* Title & Description */}
       <div>
+<<<<<<< HEAD
         <p className="text-[13px] font-semibold leading-snug text-slate-800">{task.title}</p>
         {task.description && (
           <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2 font-medium">{task.description}</p>
@@ -57,12 +94,23 @@ export function TaskCard({ task, onDragStart, onReassign }: TaskCardProps) {
 
       {/* Priority + meta row */}
       <div className="flex items-center gap-2 pt-1">
+=======
+        <p className="text-[13px] font-bold leading-snug text-slate-900">{task.title || task.description}</p>
+        {task.description && task.title && task.description.trim() !== task.title.trim() ? (
+          <p className="mt-0.5 text-xs text-slate-500 line-clamp-2">{task.description}</p>
+        ) : null}
+      </div>
+
+      {/* Priority + meta row */}
+      <div className="flex items-center gap-2 pt-0.5">
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${pCfg.classes}`}>
           <span className="h-1.5 w-1.5 rounded-full bg-current" />
           {pCfg.label}
         </span>
 
         <div className="ml-auto flex items-center gap-2">
+<<<<<<< HEAD
           {onReassign && (
             <button
               type="button"
@@ -77,15 +125,24 @@ export function TaskCard({ task, onDragStart, onReassign }: TaskCardProps) {
             </button>
           )}
 
+=======
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
           <span className="flex items-center gap-1 text-[11px] text-slate-400">
             <Calendar size={11} />
             {task.dueDate}
           </span>
           <span
+<<<<<<< HEAD
             className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee.color}`}
             title={task.assignee.name || task.assignee.initials}
           >
             {task.assignee.initials}
+=======
+            className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
+            title={task.assignedMemberName || task.assignee?.initials || "ME"}
+          >
+            {task.assignee?.initials || "ME"}
+>>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
           </span>
         </div>
       </div>

@@ -20,159 +20,15 @@ import {
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useLogout } from "@/hooks/useLogout";
-import { fetchAuditLogs, type AuditLogRecord } from "@/services/audit.service";
+import {
+  createAuditLogsStream,
+  fetchAuditLogs,
+  subscribeAuditLogsFirestore,
+  type AuditLogRecord
+} from "@/services/audit.service";
 import { useAuthStore } from "@/store/authStore";
 import type { UserRole } from "@/types/auth";
 import { getDashboardNavItems } from "@/utils/routes";
-
-const MOCK_AUDIT_LOGS: AuditLogRecord[] = [
-  {
-    id: "log-101",
-    actorName: "Juan Dela Cruz",
-    actorRole: "Admin",
-    action: "Updated Organization Status",
-    actionCategory: "Organization",
-    targetType: "Organization",
-    targetName: "Computer Society",
-    changes: {
-      field: "setupStatus",
-      from: "pending",
-      to: "active"
-    },
-    reason: "Administrative approval following document verification.",
-    context: null,
-    createdAt: "2026-08-06T10:45:00.000Z"
-  },
-  {
-    id: "log-102",
-    actorName: "Musubi AI Orchestrator",
-    actorRole: "AI System Agent",
-    action: "Automated Task Allocation & Schedule Optimization",
-    actionCategory: "AI Agent Actions",
-    targetType: "Task Workflow",
-    targetName: "Annual Tech Symposium 2026",
-    changes: {
-      field: "taskPriority & assignedCommittee",
-      from: "Unassigned (Priority: Medium)",
-      to: "Events & Logistics (Priority: High)"
-    },
-    reason: "AI auto-balanced workload based on committee capacity and deadline proximity.",
-    context: {
-      aiModelUsed: "Gemini 1.5 Pro",
-      confidenceScore: 0.985,
-      previousStatus: "unassigned",
-      newStatus: "assigned"
-    },
-    createdAt: "2026-08-06T09:30:00.000Z"
-  },
-  {
-    id: "log-103",
-    actorName: "Maria Santos",
-    actorRole: "Student Leader",
-    action: "Reassigned Committee Member",
-    actionCategory: "User Management",
-    targetType: "Member",
-    targetName: "Alex Rivera",
-    changes: {
-      field: "committee",
-      from: "Executive Committee",
-      to: "Events & Logistics"
-    },
-    reason: "Reassigned to oversee upcoming campus tech summit.",
-    context: null,
-    createdAt: "2026-08-06T08:15:00.000Z"
-  },
-  {
-    id: "log-104",
-    actorName: "Juan Dela Cruz",
-    actorRole: "Admin",
-    action: "Changed Member Role",
-    actionCategory: "User Management",
-    targetType: "User Account",
-    targetName: "Carlos Mendoza",
-    changes: {
-      field: "role",
-      from: "Organization Member",
-      to: "Student Leader"
-    },
-    reason: "Promoted to Student Leader upon election as Treasurer.",
-    context: null,
-    createdAt: "2026-08-05T16:20:00.000Z"
-  },
-  {
-    id: "log-105",
-    actorName: "Musubi AI Classifier",
-    actorRole: "AI System Agent",
-    action: "Automated Document Validation",
-    actionCategory: "AI Agent Actions",
-    targetType: "Registration Form",
-    targetName: "Youth Developers Org Constitution.pdf",
-    changes: {
-      field: "verificationStatus",
-      from: "Submitted",
-      to: "Verified (Compliant)"
-    },
-    reason: "Constitution text parsed and validated against university charter requirements.",
-    context: {
-      aiModelUsed: "Gemini 1.5 Flash",
-      confidenceScore: 0.942,
-      previousStatus: "Submitted",
-      newStatus: "Verified"
-    },
-    createdAt: "2026-08-05T14:05:00.000Z"
-  },
-  {
-    id: "log-106",
-    actorName: "Sophia Chen",
-    actorRole: "Organization Member",
-    action: "Password Reset Request",
-    actionCategory: "Security & Access",
-    targetType: "Auth Credential",
-    targetName: "sophia.chen@university.edu.ph",
-    changes: {
-      field: "passwordResetLink",
-      from: "N/A",
-      to: "Reset Email Triggered"
-    },
-    reason: "Requested self-service password reset via email link.",
-    context: null,
-    createdAt: "2026-08-04T11:50:00.000Z"
-  },
-  {
-    id: "log-107",
-    actorName: "Juan Dela Cruz",
-    actorRole: "Admin",
-    action: "Approved Organization Request",
-    actionCategory: "Organization",
-    targetType: "Registration Request",
-    targetName: "Engineering Guild",
-    changes: {
-      field: "requestStatus",
-      from: "pending",
-      to: "approved"
-    },
-    reason: "Meets all charter and adviser sponsorship requirements.",
-    context: null,
-    createdAt: "2026-08-03T09:12:00.000Z"
-  },
-  {
-    id: "log-108",
-    actorName: "Beatrice Tan",
-    actorRole: "Student Leader",
-    action: "Created Event Task Proposal",
-    actionCategory: "Events & Tasks",
-    targetType: "Event Proposal",
-    targetName: "Hackathon 2026 Logistics Prep",
-    changes: {
-      field: "proposalStatus",
-      from: "Draft",
-      to: "Submitted for Review"
-    },
-    reason: "Initial submission for venue reservation.",
-    context: null,
-    createdAt: "2026-08-02T15:30:00.000Z"
-  }
-];
 
 const CATEGORIES = [
   "All Categories",
@@ -205,6 +61,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
 
   const [logs, setLogs] = useState<AuditLogRecord[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
+  const [logsError, setLogsError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("All Categories");
   const [dateRangeFilter, setDateRangeFilter] = useState<string>("all");
@@ -224,33 +81,57 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
     if (!profile) return;
 
     let isMounted = true;
-    setLogsLoading(true);
+    let unsubscribeStream: (() => void) | null = null;
 
-    fetchAuditLogs(firebaseUser)
-      .then((res) => {
-        if (isMounted) {
-          if (res.logs && res.logs.length > 0) {
-            setLogs(res.logs);
-          } else {
-            setLogs(MOCK_AUDIT_LOGS);
+    setLogsLoading(true);
+    setLogsError("");
+
+    // Subscribe to live Firestore audit_logs collection
+    const unsubscribeFirestore = subscribeAuditLogsFirestore({
+      onData: (realtimeLogs) => {
+        if (!isMounted) return;
+        setLogs(realtimeLogs);
+        setLogsLoading(false);
+        setLogsError("");
+      },
+      onError: () => {
+        if (!firebaseUser) return;
+        createAuditLogsStream(firebaseUser, {
+          onData: (streamLogs) => {
+            if (!isMounted) return;
+            setLogs(streamLogs);
+            setLogsLoading(false);
+            setLogsError("");
+          },
+          onError: () => {
+            if (!isMounted) return;
+            fetchAuditLogs(firebaseUser)
+              .then((res) => {
+                if (isMounted) {
+                  setLogs(res.logs);
+                  setLogsLoading(false);
+                }
+              })
+              .catch(() => {
+                if (isMounted) {
+                  setLogsLoading(false);
+                  setLogsError("Unable to load audit logs from Firebase.");
+                }
+              });
           }
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setLogs(MOCK_AUDIT_LOGS);
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setLogsLoading(false);
-        }
-      });
+        }).then((close) => {
+          unsubscribeStream = close;
+        });
+      }
+    });
 
     return () => {
       isMounted = false;
+      unsubscribeFirestore();
+      unsubscribeStream?.();
     };
   }, [firebaseUser, profile]);
+
 
   // Filtering
   const filteredLogs = useMemo(() => {
@@ -465,6 +346,12 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
           </div>
         </div>
 
+        {logsError ? (
+          <p className="rounded-xl bg-rose-50 p-4 text-sm font-semibold text-rose-700">
+            {logsError}
+          </p>
+        ) : null}
+
         {/* Audit Log Feed */}
         <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80 overflow-hidden">
           {logsLoading ? (
@@ -546,7 +433,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
                                 <div className="space-y-2">
                                   {log.changes.field ? (
                                     <p className="font-semibold text-slate-800 text-xs">
-                                      Modified Field: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-blue-700 font-mono text-[11px]">{log.changes.field}</code>
+                                      Modified Field: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-blue-700 font-mono text-[11px]">{String(log.changes.field)}</code>
                                     </p>
                                   ) : null}
                                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

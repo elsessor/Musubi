@@ -31,6 +31,7 @@ export type DashboardActivity = {
 };
 
 export type DashboardUser = {
+  id?: string | null;
   name: string;
   role: import("@/types/auth").UserRole;
   roleLabel: string;

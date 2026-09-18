@@ -1,4 +1,7 @@
 import type { User } from "firebase/auth";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+
+import { getFirebaseDb } from "../firebase/config";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 
@@ -19,19 +22,107 @@ export type AuditLogRecord = {
   createdAt?: string | null;
 };
 
+export function normalizeAuditLogRecord(id: string, data: Record<string, any>): AuditLogRecord {
+  const asIsoString = (val: unknown): string | null => {
+    if (val && typeof (val as { toDate?: () => Date }).toDate === "function") {
+      return (val as { toDate: () => Date }).toDate().toISOString();
+    }
+    if (typeof val === "string") return val;
+    return null;
+  };
+
+  return {
+    id,
+    orgId: typeof data.orgId === "string" ? data.orgId : null,
+    actorUID: typeof data.actorUID === "string" ? data.actorUID : null,
+    actorName: typeof data.actorName === "string" ? data.actorName : "System",
+    actorRole: typeof data.actorRole === "string" ? data.actorRole : "Automated",
+    action: typeof data.action === "string" ? data.action : "System Event",
+    actionCategory: typeof data.actionCategory === "string" ? data.actionCategory : "Organization",
+    targetType: typeof data.targetType === "string" ? data.targetType : "Entity",
+    targetName: typeof data.targetName === "string" ? data.targetName : null,
+    changes: data.changes ?? null,
+    reason: typeof data.reason === "string" ? data.reason : null,
+    context: data.context ?? null,
+    metadata: data.metadata ?? null,
+    createdAt: asIsoString(data.createdAt)
+  };
+}
+
+export function subscribeAuditLogsFirestore(
+  callbacks: {
+    onData: (logs: AuditLogRecord[]) => void;
+    onError: (error: Error) => void;
+  }
+) {
+  try {
+    const db = getFirebaseDb();
+    const q = query(collection(db, "audit_logs"), orderBy("createdAt", "desc"));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const logs = snapshot.docs.map((doc) => normalizeAuditLogRecord(doc.id, doc.data()));
+        callbacks.onData(logs);
+      },
+      (err) => {
+        callbacks.onData([]);
+        callbacks.onError(err);
+      }
+    );
+  } catch (error) {
+    callbacks.onData([]);
+    callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+    return () => {};
+  }
+}
+
+export async function createAuditLogsStream(
+  user: User,
+  callbacks: {
+    onData: (logs: AuditLogRecord[]) => void;
+    onError: () => void;
+  }
+) {
+  const token = await user.getIdToken();
+  const stream = new EventSource(`${API_BASE_URL}/auth/audit-logs/stream?token=${encodeURIComponent(token)}`);
+
+  stream.addEventListener("audit_logs", (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const rawLogs = Array.isArray(data.logs) ? data.logs : [];
+      const logs = rawLogs.map((item: any) => normalizeAuditLogRecord(item.id ?? crypto.randomUUID(), item));
+      callbacks.onData(logs);
+    } catch {
+      callbacks.onError();
+    }
+  });
+
+  // Only treat the connection as failed when EventSource permanently closes.
+  // Transient network blips cause readyState === CONNECTING (auto-retry) — ignore those.
+  stream.addEventListener("error", () => {
+    if (stream.readyState === EventSource.CLOSED) {
+      callbacks.onError();
+    }
+  });
+  return () => stream.close();
+}
+
 export async function fetchAuditLogs(user: User | null, params?: { page?: number; pageSize?: number; category?: string | null; from?: string | null; to?: string | null }): Promise<{ logs: AuditLogRecord[]; total?: number; page?: number }> {
-  const query = new URLSearchParams();
-  if (params?.page) query.set("page", String(params.page));
-  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
-  if (params?.category) query.set("category", params.category);
-  if (params?.from) query.set("from", params.from);
-  if (params?.to) query.set("to", params.to);
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.set("page", String(params.page));
+  if (params?.pageSize) queryParams.set("pageSize", String(params.pageSize));
+  if (params?.category) queryParams.set("category", params.category);
+  if (params?.from) queryParams.set("from", params.from);
+  if (params?.to) queryParams.set("to", params.to);
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (user) headers.Authorization = `Bearer ${await user.getIdToken()}`;
 
-  const res = await fetch(`${API_BASE_URL}/auth/audit-logs?${query.toString()}`, { headers });
+  const res = await fetch(`${API_BASE_URL}/auth/audit-logs?${queryParams.toString()}`, { headers });
   if (!res.ok) throw new Error("Unable to load audit logs.");
   const data = await res.json();
-  return { logs: Array.isArray(data.logs) ? data.logs : [], total: typeof data.total === "number" ? data.total : undefined, page: typeof data.page === "number" ? data.page : params?.page ?? 1 };
+  const rawLogs = Array.isArray(data.logs) ? data.logs : [];
+  const logs = rawLogs.map((item: any) => normalizeAuditLogRecord(item.id ?? crypto.randomUUID(), item));
+  return { logs, total: typeof data.total === "number" ? data.total : undefined, page: typeof data.page === "number" ? data.page : params?.page ?? 1 };
 }
+
