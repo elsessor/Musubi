@@ -1,26 +1,4 @@
 import type { User } from "firebase/auth";
-<<<<<<< HEAD
-import { addDoc, collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
-import { getFirebaseDb } from "@/firebase/config";
-import type { Event, EventStatus, Task } from "@/components/events/types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
-
-async function fetchEventsApi(user: User | null, orgId: string | null): Promise<Event[]> {
-  try {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (user) {
-      headers.Authorization = `Bearer ${await user.getIdToken()}`;
-    }
-    const queryStr = orgId ? `?orgId=${encodeURIComponent(orgId)}` : "";
-    const res = await fetch(`${API_BASE_URL}/auth/events${queryStr}`, { headers });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data.events) ? data.events : [];
-  } catch {
-    return [];
-  }
-=======
 import {
   addDoc,
   collection,
@@ -35,7 +13,7 @@ import {
 } from "firebase/firestore";
 
 import { getFirebaseDb } from "../firebase/config";
-import type { Event, EventStatus } from "../components/events/types";
+import type { Event, EventStatus, Task } from "../components/events/types";
 import { useAuthStore } from "@/store/authStore";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
@@ -99,157 +77,35 @@ export async function fetchEvents(user: User | null, orgId?: string | null): Pro
     }
   }
   return [];
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 }
 
 export function subscribeEventsFirestore(
   user: User | null,
-<<<<<<< HEAD
-  orgId: string | null,
-  callback: (events: Event[]) => void
-): () => void {
-  let isCancelled = false;
-
-  const fallbackToApi = () => {
-    void fetchEventsApi(user, orgId).then((events) => {
-      if (!isCancelled) {
-        callback(events);
-      }
-    });
-  };
-
-  try {
-    const db = getFirebaseDb();
-    const eventsRef = collection(db, "events");
-
-    const q = orgId ? query(eventsRef, where("orgId", "==", orgId)) : eventsRef;
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        if (isCancelled) return;
-        const events: Event[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            title: typeof data.title === "string" ? data.title : "Untitled Event",
-            description: typeof data.description === "string" ? data.description : "",
-            status: (data.status as EventStatus) ?? "Active",
-            startDate: typeof data.startDate === "string" ? data.startDate : "",
-            endDate: typeof data.endDate === "string" ? data.endDate : "",
-            memberCount: typeof data.memberCount === "number" ? data.memberCount : 1,
-            progress: typeof data.progress === "number" ? data.progress : 0,
-            committee: typeof data.committee === "string" ? data.committee : "General",
-            tasks: Array.isArray(data.tasks) ? (data.tasks as Task[]) : []
-          };
-        });
-        callback(events);
-      },
-      (_error) => {
-        // Suppress raw error to prevent Next.js dev overlay on permission denied
-        fallbackToApi();
-      }
-    );
-
-    return () => {
-      isCancelled = true;
-      if (typeof unsubscribe === "function") {
-        unsubscribe();
-      }
-    };
-  } catch (_err) {
-    fallbackToApi();
-    return () => {
-      isCancelled = true;
-    };
-  }
-=======
   orgId: string | null | undefined,
   onData: (events: Event[]) => void
-) {
+): () => void {
   const targetOrgId = orgId && orgId.trim() ? orgId.trim() : null;
 
   // 1. Initial immediate fetch via secure backend API
   void fetchEvents(user, targetOrgId).then((events) => {
-    if (events.length > 0) {
-      onData(events);
-    }
+    onData(events);
   });
 
-  // 2. Poll every 2 seconds to keep live data synced with backend
+  // 2. Poll every 3 seconds to keep live data synced with backend
   const interval = setInterval(() => {
     void fetchEvents(user, targetOrgId).then((events) => {
       onData(events);
     });
-  }, 2000);
-
-  // 3. Optional client snapshot listener fallback
-  try {
-    const db = getFirebaseDb();
-    if (targetOrgId) {
-      const q = query(collection(db, "events"), where("orgId", "==", targetOrgId));
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          if (!snapshot.empty) {
-            const events = snapshot.docs.map((document) =>
-              normalizeEvent(document.id, document.data())
-            );
-            onData(events);
-          }
-        },
-        () => { }
-      );
-      return () => {
-        clearInterval(interval);
-        unsubscribe();
-      };
-    }
-  } catch { }
+  }, 3000);
 
   return () => {
     clearInterval(interval);
   };
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 }
 
 export async function createEventFirestore(
   user: User | null,
   orgId: string,
-<<<<<<< HEAD
-  eventData: Omit<Event, "id"> | Partial<Event>
-): Promise<string> {
-  const payload = {
-    ...eventData,
-    orgId,
-    createdBy: user?.uid ?? null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  try {
-    const db = getFirebaseDb();
-    const eventsRef = collection(db, "events");
-    const docRef = await addDoc(eventsRef, payload);
-    return docRef.id;
-  } catch (_err) {
-    // Fallback to backend REST API (Admin SDK)
-    if (user) {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      headers.Authorization = `Bearer ${await user.getIdToken()}`;
-      const res = await fetch(`${API_BASE_URL}/auth/events`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data.id ?? "new-event-id";
-      }
-    }
-    throw new Error("Unable to create event. Permission denied.");
-  }
-=======
   event: Partial<Event>
 ): Promise<string> {
   const token = await getValidToken(user);
@@ -286,36 +142,11 @@ export async function createEventFirestore(
     createdAt: serverTimestamp()
   });
   return docRef.id;
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 }
 
 export async function updateEventFirestore(
   user: User | null,
   eventId: string,
-<<<<<<< HEAD
-  updates: Partial<Event>
-): Promise<void> {
-  const payload = {
-    ...updates,
-    updatedAt: new Date().toISOString()
-  };
-
-  try {
-    const db = getFirebaseDb();
-    const docRef = doc(db, "events", eventId);
-    await updateDoc(docRef, payload);
-  } catch (_err) {
-    // Fallback to backend REST API (Admin SDK)
-    if (user) {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      headers.Authorization = `Bearer ${await user.getIdToken()}`;
-      await fetch(`${API_BASE_URL}/auth/events/${eventId}`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(payload)
-      });
-    }
-=======
   update: Partial<Event>
 ): Promise<void> {
   const token = await getValidToken(user);
@@ -367,6 +198,5 @@ export async function clearMockEventsFirestore(user: User | null, orgId?: string
     await Promise.all(deletePromises);
   } catch {
     // Ignore cleanup errors
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
   }
 }

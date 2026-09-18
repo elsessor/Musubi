@@ -53,27 +53,32 @@ export function subscribeAuditLogsFirestore(
   callbacks: {
     onData: (logs: AuditLogRecord[]) => void;
     onError: (error: Error) => void;
-  }
+  },
+  user?: User | null
 ) {
-  try {
-    const db = getFirebaseDb();
-    const q = query(collection(db, "audit_logs"), orderBy("createdAt", "desc"));
-    return onSnapshot(
-      q,
-      (snapshot) => {
-        const logs = snapshot.docs.map((doc) => normalizeAuditLogRecord(doc.id, doc.data()));
-        callbacks.onData(logs);
-      },
-      (err) => {
-        callbacks.onData([]);
-        callbacks.onError(err);
-      }
-    );
-  } catch (error) {
-    callbacks.onData([]);
-    callbacks.onError(error instanceof Error ? error : new Error(String(error)));
-    return () => {};
-  }
+  let intervalId: ReturnType<typeof setInterval> | null = null;
+  let isMounted = true;
+
+  const loadLogs = () => {
+    void fetchAuditLogs(user ?? null)
+      .then((res) => {
+        if (isMounted) callbacks.onData(res.logs);
+      })
+      .catch((err) => {
+        if (isMounted) {
+          callbacks.onData([]);
+          callbacks.onError(err instanceof Error ? err : new Error(String(err)));
+        }
+      });
+  };
+
+  loadLogs();
+  intervalId = setInterval(loadLogs, 4000);
+
+  return () => {
+    isMounted = false;
+    if (intervalId) clearInterval(intervalId);
+  };
 }
 
 export async function createAuditLogsStream(

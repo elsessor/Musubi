@@ -358,42 +358,36 @@ export async function getOrganizationMembers(user: User, organizationId: string)
 
 export function subscribeOrganizationMembersFirestore(
   organizationId: string | null | undefined,
-  onData: (members: OrganizationMember[]) => void
+  onData: (members: OrganizationMember[]) => void,
+  user?: User | null
 ) {
   const targetOrgId = organizationId && organizationId.trim() ? organizationId.trim() : null;
   if (!targetOrgId) {
     onData([]);
     return () => {};
   }
-  try {
-    const db = getFirebaseDb();
-    const q = query(collection(db, "users"), where("organizationId", "==", targetOrgId));
-    return onSnapshot(
-      q,
-      (snapshot) => {
-        const members: OrganizationMember[] = snapshot.docs.map((document) => {
-          const data = document.data();
-          return {
-            id: document.id,
-            name: typeof data.fullName === "string" ? data.fullName : typeof data.name === "string" ? data.name : "Unnamed member",
-            role: typeof data.role === "string" ? data.role : "Organization Member",
-            position: typeof data.position === "string" && data.position.trim() ? data.position : typeof data.role === "string" ? data.role : "Organization Member",
-            skills: normalizeStringArray(data.skills),
-            committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
-            committeeName: typeof data.committeeName === "string" ? data.committeeName : null
-          };
-        });
-        onData(members);
-      },
-      (error) => {
-        console.warn("subscribeOrganizationMembersFirestore snapshot error:", error);
-        onData([]);
-      }
-    );
-  } catch {
-    onData([]);
-    return () => {};
-  }
+
+  let isMounted = true;
+  let intervalId: ReturnType<typeof setInterval> | null = null;
+
+  const loadMembers = () => {
+    if (!user) return;
+    void getOrganizationMembers(user, targetOrgId)
+      .then((members) => {
+        if (isMounted) onData(members);
+      })
+      .catch((err) => {
+        console.warn("subscribeOrganizationMembers error:", err);
+      });
+  };
+
+  loadMembers();
+  intervalId = setInterval(loadMembers, 4000);
+
+  return () => {
+    isMounted = false;
+    if (intervalId) clearInterval(intervalId);
+  };
 }
 
 export async function getOrganizationJoinRequests(user: User, organizationId: string): Promise<OrganizationJoinRequest[]> {

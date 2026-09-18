@@ -1,23 +1,24 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { firebaseAuth } from "../config/firebase.js";
-<<<<<<< HEAD
-import { completeUserOnboarding, createEventForUser, createOrganization, getAuditLogs, getEventsForUser, getCurrentUser, getMembersForAdmin, getMyOrganizationJoinRequest, getOrganizationDirectory, getOrganizationForUser, getOrganizationJoinRequests, getOrganizationManagementDetail, getOrganizationMembers, getOrganizationRequests, getOrganizationsForAdmin, joinOrganization, loginWithFirebaseToken, reassignMemberForAdmin, reviewOrganizationJoinRequest, reviewOrganizationRequest, updateEventForUser, updateMemberRoleForAdmin, updateOrganizationForAdmin } from "../services/auth.service.js";
-=======
 import { runAtomizerFlow } from "../services/atomizer.service.js";
 import {
+  addMembersToOrganizationCommittee,
   bulkUpdateMemberRolesForAdmin,
+  clearEventsForOrg,
   completeUserOnboarding,
+  createEventForUser,
   createOrganization,
   createOrganizationCommittee,
-  addMembersToOrganizationCommittee,
   getAdminMemberDirectory,
   getAuditLogs,
   getCurrentUser,
+  getEventsForUser,
+  getMembersForAdmin,
   getMyOrganizationJoinRequest,
+  getOrganizationCommittees,
   getOrganizationDirectory,
   getOrganizationForUser,
-  getOrganizationCommittees,
   getOrganizationJoinRequests,
   getOrganizationManagementDetail,
   getOrganizationMembers,
@@ -25,18 +26,16 @@ import {
   getOrganizationsForAdmin,
   joinOrganization,
   loginWithFirebaseToken,
+  reassignMemberForAdmin,
   reviewOrganizationJoinRequest,
   reviewOrganizationRequest,
-  updateMemberForAdmin,
-  updateOrganizationForAdmin,
-  createEventForUser,
   updateEventForUser,
-  clearEventsForOrg,
-  getEventsForUser,
+  updateMemberForAdmin,
+  updateMemberRoleForAdmin,
+  updateOrganizationForAdmin,
   watchAdminMemberDirectory,
   watchAuditLogs
 } from "../services/auth.service.js";
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -46,7 +45,17 @@ function getBearerToken(request: Request): string | null {
   return header.slice("Bearer ".length);
 }
 
-<<<<<<< HEAD
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export async function loginController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const idToken = typeof request.body.idToken === "string" ? request.body.idToken : getBearerToken(request);
+    if (!idToken) throw new AppError("Firebase ID token is required.", 400);
+    const session = await loginWithFirebaseToken(idToken);
+    response.status(200).json(session);
+  } catch (error) { next(error); }
+}
+
 export async function membersController(request: Request, response: Response, next: NextFunction) {
   try {
     const token = getBearerToken(request);
@@ -77,16 +86,6 @@ export async function reassignMemberController(request: Request, response: Respo
     if (typeof organization !== "string" || typeof committee !== "string") throw new AppError("Organization and committee are required.", 400);
     await reassignMemberForAdmin(decoded.uid, request.params.id, { organization, committee });
     response.status(200).json({ success: true });
-=======
-// ── Auth ──────────────────────────────────────────────────────────────────────
-
-export async function loginController(request: Request, response: Response, next: NextFunction) {
-  try {
-    const idToken = typeof request.body.idToken === "string" ? request.body.idToken : getBearerToken(request);
-    if (!idToken) throw new AppError("Firebase ID token is required.", 400);
-    const session = await loginWithFirebaseToken(idToken);
-    response.status(200).json(session);
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
   } catch (error) { next(error); }
 }
 
@@ -122,47 +121,9 @@ export async function onboardingController(request: Request, response: Response,
 
 export async function meController(request: AuthenticatedRequest, response: Response, next: NextFunction) {
   try {
-<<<<<<< HEAD
-    const idToken =
-      typeof request.body.idToken === "string" ? request.body.idToken : getBearerToken(request);
-
-    if (!idToken) {
-      throw new AppError("Firebase ID token is required.", 400);
-    }
-
-    const session = await loginWithFirebaseToken(idToken);
-    response.status(200).json(session);
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function meController(
-  request: AuthenticatedRequest,
-  response: Response,
-  next: NextFunction
-) {
-  try {
-    if (!request.authUser) {
-      throw new AppError("Authentication is required.", 401);
-    }
-
-    response.status(200).json({ user: request.authUser });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function auditLogsController(request: Request, response: Response, next: NextFunction) {
-  try {
-    const token = getBearerToken(request);
-    if (!token) throw new AppError("Firebase ID token is required.", 400);
-    const decoded = await firebaseAuth.verifyIdToken(token);
-    const category = typeof request.query.category === "string" ? request.query.category : null;
-    const page = typeof request.query.page === "string" ? parseInt(request.query.page, 10) || 1 : 1;
-    const pageSize = typeof request.query.pageSize === "string" ? parseInt(request.query.pageSize, 10) || 50 : 50;
-    const result = await getAuditLogs(decoded.uid, category, page, pageSize);
-    response.status(200).json(result);
+    if (!request.authUser) throw new AppError("Authentication is required.", 401);
+    const user = await getCurrentUser(request.authUser.uid);
+    response.status(200).json({ user });
   } catch (error) { next(error); }
 }
 
@@ -177,36 +138,7 @@ export async function eventsController(request: Request, response: Response, nex
   } catch (error) { next(error); }
 }
 
-export async function createEventController(request: Request, response: Response, next: NextFunction) {
-  try {
-    const token = getBearerToken(request);
-    if (!token) throw new AppError("Firebase ID token is required.", 400);
-    const decoded = await firebaseAuth.verifyIdToken(token);
-    const { orgId, ...eventData } = request.body as Record<string, unknown>;
-    const result = await createEventForUser(decoded.uid, { orgId: typeof orgId === "string" ? orgId : "default-org", ...eventData });
-    response.status(201).json(result);
-  } catch (error) { next(error); }
-}
-
-export async function updateEventController(request: Request, response: Response, next: NextFunction) {
-  try {
-    const token = getBearerToken(request);
-    if (!token) throw new AppError("Firebase ID token is required.", 400);
-    const decoded = await firebaseAuth.verifyIdToken(token);
-    const { id } = request.params;
-    await updateEventForUser(decoded.uid, id, request.body as Record<string, unknown>);
-    response.status(200).json({ success: true });
-  } catch (error) { next(error); }
-}
-=======
-    if (!request.authUser) throw new AppError("Authentication is required.", 401);
-    const user = await getCurrentUser(request.authUser.uid);
-    response.status(200).json({ user });
-  } catch (error) { next(error); }
-}
-
 // ── Organization requests (admin) ─────────────────────────────────────────────
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 
 export async function organizationRequestsController(request: Request, response: Response, next: NextFunction) {
   try {

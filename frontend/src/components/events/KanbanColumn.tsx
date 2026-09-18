@@ -3,7 +3,6 @@
 import { Plus } from "lucide-react";
 import type { Task, TaskStatus } from "./types";
 import { TaskCard } from "./TaskCard";
-<<<<<<< HEAD
 
 const columnConfig: Record<TaskStatus, { dot: string; header: string }> = {
   "To Do": { dot: "bg-slate-400", header: "text-slate-700" },
@@ -11,9 +10,6 @@ const columnConfig: Record<TaskStatus, { dot: string; header: string }> = {
   "In Review": { dot: "bg-amber-400", header: "text-amber-700" },
   "Completed": { dot: "bg-emerald-500", header: "text-emerald-700" }
 };
-=======
-import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 
 type KanbanColumnProps = {
   status: TaskStatus;
@@ -21,19 +17,11 @@ type KanbanColumnProps = {
   onAddTask?: () => void;
   onDragStart?: (taskId: string) => void;
   onDrop?: (status: TaskStatus) => void;
-<<<<<<< HEAD
   onReassignTask?: (task: Task) => void;
 };
 
 export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop, onReassignTask }: KanbanColumnProps) {
   const cfg = columnConfig[status];
-=======
-  customStatuses?: CustomStatusConfig[];
-};
-
-export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop, customStatuses }: KanbanColumnProps) {
-  const theme = getStatusTheme(status, customStatuses);
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -52,13 +40,8 @@ export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop, cu
     >
       {/* Column header */}
       <div className="flex items-center gap-2 px-4 py-3.5">
-<<<<<<< HEAD
         <span className={`h-2 w-2 rounded-full ${cfg.dot}`} />
         <span className={`text-sm font-semibold ${cfg.header}`}>{status}</span>
-=======
-        <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
-        <span className={`text-sm font-semibold ${theme.text}`}>{status}</span>
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
         <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">
           {tasks.length}
         </span>
@@ -72,11 +55,7 @@ export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop, cu
           </div>
         ) : (
           tasks.map((task) => (
-<<<<<<< HEAD
             <TaskCard key={task.id} task={task} onDragStart={onDragStart} onReassign={onReassignTask} />
-=======
-            <TaskCard key={task.id} task={task} onDragStart={onDragStart} />
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
           ))
         )}
       </div>

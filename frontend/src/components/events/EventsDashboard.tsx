@@ -13,31 +13,18 @@ import {
   Table,
   Users
 } from "lucide-react";
-<<<<<<< HEAD
 import { useState } from "react";
 import type { Event, EventStatus } from "./types";
 import { CreateEventCard, EventCard } from "./EventCard";
-=======
-import { useEffect, useState } from "react";
-import type { Event, EventStatus } from "./types";
-import { CreateEventCard, EventCard } from "./EventCard";
-import { AddCustomStatusModal } from "./AddCustomStatusModal";
-import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 
 type StatusFilter = EventStatus | "All";
 type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
 
-<<<<<<< HEAD
 const STATUS_FILTERS: { label: string; key: StatusFilter }[] = [
-=======
-const DEFAULT_STATUS_FILTERS: { label: string; key: StatusFilter }[] = [
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
   { label: "All Events", key: "All" },
   { label: "Active", key: "Active" },
   { label: "Planning", key: "Planning" },
   { label: "Completed", key: "Completed" },
-<<<<<<< HEAD
   { label: "Cancelled", key: "Cancelled" },
   { label: "Archived", key: "Archived" }
 ];
@@ -50,11 +37,6 @@ const STATUS_DOT: Record<EventStatus, string> = {
   Archived:  "bg-slate-400"
 };
 
-=======
-  { label: "Archived", key: "Archived" }
-];
-
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { mode: "grid", title: "Grid View", icon: LayoutGrid },
   { mode: "table", title: "Table View", icon: Table },
@@ -121,7 +103,6 @@ type EventsDashboardProps = {
   isLeader?: boolean;
   onSelectEvent: (event: Event) => void;
   onNewEvent: () => void;
-<<<<<<< HEAD
 };
 
 export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent }: EventsDashboardProps) {
@@ -129,65 +110,11 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
 
-=======
-  committees?: { id: string; name: string }[];
-};
-
-export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent, committees = [] }: EventsDashboardProps) {
-  const [filter, setFilter] = useState<StatusFilter>("All");
-  const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
-
-  // Custom event statuses stored in state & localStorage
-  const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
-  const [isAddStatusModalOpen, setIsAddStatusModalOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("musubi_custom_event_statuses");
-      if (saved) {
-        setCustomStatuses(JSON.parse(saved));
-      }
-    } catch {}
-  }, []);
-
-  function handleAddCustomStatus(statusName: string, color: StatusThemeColor) {
-    if (customStatuses.some((cs) => cs.name.toLowerCase() === statusName.toLowerCase())) {
-      return;
-    }
-    const updated = [...customStatuses, { name: statusName, color }];
-    setCustomStatuses(updated);
-    try {
-      localStorage.setItem("musubi_custom_event_statuses", JSON.stringify(updated));
-    } catch {}
-  }
-
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
   const activeCount    = events.filter((e) => e.status === "Active").length;
   const planningCount  = events.filter((e) => e.status === "Planning").length;
   const completedCount = events.filter((e) => e.status === "Completed").length;
 
-<<<<<<< HEAD
   const visible = filter === "All" ? events : events.filter((e) => e.status === filter);
-=======
-  const fetchedNames = committees.map((c) => c.name);
-  const eventNames = events.map((e) => e.committee).filter((c): c is string => Boolean(c));
-  const allCommitteeNames = Array.from(new Set([...fetchedNames, ...eventNames]));
-
-  const allStatusFilters: { label: string; key: StatusFilter }[] = [
-    ...DEFAULT_STATUS_FILTERS,
-    ...customStatuses.map((cs) => ({ label: cs.name, key: cs.name as EventStatus }))
-  ];
-
-  const visible = events.filter((e) => {
-    const matchesStatus = filter === "All" || e.status === filter;
-    const matchesCommittee =
-      selectedCommittee === "All" ||
-      (e.committee || "").toLowerCase() === selectedCommittee.toLowerCase();
-    return matchesStatus && matchesCommittee;
-  });
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
 
   return (
     <div className="flex flex-col gap-4">
@@ -228,7 +155,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-<<<<<<< HEAD
           <button type="button" className="flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">
             <SlidersHorizontal size={12} />
             All Committees
@@ -239,30 +165,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
             {STATUS_FILTERS.map(({ label, key }) => {
               const count = key === "All" ? events.length : events.filter((e) => e.status === key).length;
               const isActive = filter === key;
-=======
-          <div className="relative flex items-center">
-            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
-            <select
-              value={selectedCommittee}
-              onChange={(e) => setSelectedCommittee(e.target.value)}
-              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
-            >
-              <option value="All">All Committees</option>
-              {allCommitteeNames.map((commName) => (
-                <option key={commName} value={commName}>
-                  {commName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status filter pills */}
-          <div className="flex flex-wrap items-center gap-1">
-            {allStatusFilters.map(({ label, key }) => {
-              const count = key === "All" ? events.length : events.filter((e) => e.status === key).length;
-              const isActive = filter === key;
-              const theme = getStatusTheme(key, customStatuses);
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
               return (
                 <button
                   key={key}
@@ -275,33 +177,13 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                   }`}
                 >
                   {key !== "All" && (
-<<<<<<< HEAD
                     <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white/70" : STATUS_DOT[key as EventStatus]}`} />
-=======
-                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white/70" : theme.dot}`} />
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
                   )}
                   {label}
                   <span className={`${isActive ? "text-white/70" : "text-slate-400"}`}>{count}</span>
                 </button>
               );
             })}
-<<<<<<< HEAD
-=======
-
-            {/* + Add Custom Status Button for Leaders */}
-            {isLeader && (
-              <button
-                type="button"
-                onClick={() => setIsAddStatusModalOpen(true)}
-                className="flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
-                title="Add Custom Event Status"
-              >
-                <Plus size={13} />
-                <span>Custom Status</span>
-              </button>
-            )}
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
           </div>
         </div>
 
@@ -325,39 +207,23 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
         </div>
       </div>
 
-<<<<<<< HEAD
       {/* 1. Grid View (Image 1) */}
       {viewMode === "grid" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map((event) => (
             <EventCard key={event.id} event={event} onClick={onSelectEvent} />
-=======
-      {/* 1. Grid View */}
-      {viewMode === "grid" && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((event) => (
-            <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} />
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
           ))}
           {isLeader && <CreateEventCard onClick={onNewEvent} />}
         </div>
       )}
 
-<<<<<<< HEAD
       {/* 2. Table View (Image 2) */}
-=======
-      {/* 2. Table View */}
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
       {viewMode === "table" && (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-3.5">EVENT</th>
-<<<<<<< HEAD
-=======
-                <th className="px-4 py-3.5">COMMITTEE</th>
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
                 <th className="px-4 py-3.5">STATUS</th>
                 <th className="px-4 py-3.5">PROGRESS</th>
                 <th className="px-4 py-3.5">START DATE</th>
@@ -366,7 +232,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-<<<<<<< HEAD
               {visible.map((event) => (
                 <tr
                   key={event.id}
@@ -421,62 +286,11 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                   </td>
                 </tr>
               ))}
-=======
-              {visible.map((event) => {
-                const theme = getStatusTheme(event.status, customStatuses);
-                return (
-                  <tr
-                    key={event.id}
-                    onClick={() => onSelectEvent(event)}
-                    className="group cursor-pointer transition hover:bg-slate-50/80"
-                  >
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-slate-900 group-hover:text-blue-600 transition">
-                        {event.title}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">{event.description}</p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="inline-flex rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700 border border-violet-200">
-                        {event.committee || "General"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${theme.badge}`}
-                      >
-                        {event.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 min-w-[140px]">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className={`h-full rounded-full ${theme.dot}`}
-                            style={{ width: `${event.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-semibold text-slate-600">{event.progress}%</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-xs font-medium text-slate-600">{event.startDate}</td>
-                    <td className="px-4 py-4 text-xs font-medium text-slate-600">{event.endDate}</td>
-                    <td className="px-4 py-4 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1">
-                        <Users size={13} className="text-slate-400" />
-                        {event.memberCount}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
             </tbody>
           </table>
         </div>
       )}
 
-<<<<<<< HEAD
       {/* 3. Expanded View (Image 3) */}
       {viewMode === "expanded" && (
         <div className="space-y-4">
@@ -494,22 +308,11 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                 ? "bg-amber-400"
                 : "bg-blue-500";
 
-=======
-      {/* 3. Expanded View */}
-      {viewMode === "expanded" && (
-        <div className="space-y-4">
-          {visible.map((event) => {
-            const theme = getStatusTheme(event.status, customStatuses);
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
             return (
               <article
                 key={event.id}
                 onClick={() => onSelectEvent(event)}
-<<<<<<< HEAD
                 className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 ${statusColor} bg-white p-5 shadow-sm transition hover:shadow-md cursor-pointer`}
-=======
-                className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 ${theme.border} bg-white p-5 shadow-sm transition hover:shadow-md cursor-pointer`}
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
@@ -521,7 +324,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                       <p className="mt-0.5 text-xs text-slate-500">{event.description}</p>
                     </div>
                   </div>
-<<<<<<< HEAD
                   <span
                     className={`rounded-full px-3 py-0.5 text-[11px] font-semibold ${
                       event.status === "Active"
@@ -533,20 +335,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                   >
                     {event.status}
                   </span>
-=======
-                  <div className="flex items-center gap-2">
-                    {event.committee && (
-                      <span className="rounded-full bg-violet-50 px-3 py-0.5 text-[11px] font-semibold text-violet-700 border border-violet-200">
-                        {event.committee}
-                      </span>
-                    )}
-                    <span
-                      className={`rounded-full px-3 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${theme.badge}`}
-                    >
-                      {event.status}
-                    </span>
-                  </div>
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
                 </div>
 
                 <div className="mt-4">
@@ -555,11 +343,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                     <span className="font-semibold text-slate-800">{event.progress}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-<<<<<<< HEAD
                     <div className={`h-full rounded-full ${progressBg}`} style={{ width: `${event.progress}%` }} />
-=======
-                    <div className={`h-full rounded-full ${theme.dot}`} style={{ width: `${event.progress}%` }} />
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
                   </div>
                 </div>
 
@@ -573,7 +357,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
         </div>
       )}
 
-<<<<<<< HEAD
       {/* 4. Kanban View (Image 4) */}
       {viewMode === "kanban" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -600,24 +383,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
             return (
               <div key={status} className="flex flex-col gap-3">
                 <div className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-xs font-bold ${headerTone}`}>
-=======
-      {/* 4. Kanban View */}
-      {viewMode === "kanban" && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            "Planning",
-            "Active",
-            "Completed",
-            "Archived",
-            ...customStatuses.map((cs) => cs.name)
-          ].map((status) => {
-            const statusEvents = visible.filter((e) => e.status === status);
-            const theme = getStatusTheme(status, customStatuses);
-
-            return (
-              <div key={status} className="flex flex-col gap-3">
-                <div className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-xs font-bold ${theme.headerTone}`}>
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
                   <span>{status}</span>
                   <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold">{statusEvents.length}</span>
                 </div>
@@ -629,11 +394,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                       onClick={() => onSelectEvent(event)}
                       className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow cursor-pointer"
                     >
-<<<<<<< HEAD
                       <div className={`h-1 w-full rounded-full ${barTone} mb-3`} />
-=======
-                      <div className={`h-1 w-full rounded-full ${theme.dot} mb-3`} />
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
                       <h4 className="text-sm font-bold text-slate-900">{event.title}</h4>
                       <div className="mt-2.5">
                         <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
@@ -641,11 +402,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                           <span>👥 {event.memberCount}</span>
                         </div>
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-<<<<<<< HEAD
                           <div className={`h-full rounded-full ${barTone}`} style={{ width: `${event.progress}%` }} />
-=======
-                          <div className={`h-full rounded-full ${theme.dot}`} style={{ width: `${event.progress}%` }} />
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
                         </div>
                       </div>
                       <p className="mt-3 text-[11px] font-medium text-slate-500">📅 {event.startDate}</p>
@@ -664,11 +421,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
         </div>
       )}
 
-<<<<<<< HEAD
       {/* 5. Calendar View (Image 5) */}
-=======
-      {/* 5. Calendar View */}
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
       {viewMode === "calendar" && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
@@ -722,7 +475,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                     </span>
                   </div>
 
-<<<<<<< HEAD
                   {day.matchingEvents.map((evt) => (
                     <button
                       key={evt.id}
@@ -738,20 +490,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                       {evt.title}
                     </button>
                   ))}
-=======
-                  {day.matchingEvents.map((evt) => {
-                    const theme = getStatusTheme(evt.status, customStatuses);
-                    return (
-                      <button
-                        key={evt.id}
-                        onClick={() => onSelectEvent(evt)}
-                        className={`mt-1 block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] font-semibold ${theme.bg} ${theme.text}`}
-                      >
-                        {evt.title}
-                      </button>
-                    );
-                  })}
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
                 </div>
               );
             })}
@@ -772,17 +510,6 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
           </button>
         </div>
       )}
-<<<<<<< HEAD
-=======
-
-      {/* Add Custom Event Status Modal */}
-      <AddCustomStatusModal
-        isOpen={isAddStatusModalOpen}
-        onClose={() => setIsAddStatusModalOpen(false)}
-        type="event"
-        onAddStatus={handleAddCustomStatus}
-      />
->>>>>>> ae4f7a49c2e30de3085b723d9a17a60cf92c8322
     </div>
   );
 }
