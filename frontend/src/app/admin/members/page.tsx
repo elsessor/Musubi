@@ -25,6 +25,11 @@ import { useToastStore } from "@/store/toastStore";
 import type { UserRole } from "@/types/auth";
 import { getDashboardNavItems } from "@/utils/routes";
 
+import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { getFirebaseDb } from "@/firebase/config";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
+
 export type MemberRecord = {
   id: string;
   name: string;
@@ -37,118 +42,7 @@ export type MemberRecord = {
   joinedDate: string;
 };
 
-const INITIAL_MEMBERS: MemberRecord[] = [
-  {
-    id: "mem-001",
-    name: "Juan Dela Cruz",
-    email: "juan.delacruz@university.edu.ph",
-    role: "Admin",
-    position: "System Administrator",
-    organization: "University Campus",
-    committee: "Executive Board",
-    inviteStatus: "Active",
-    joinedDate: "Jan 15, 2025"
-  },
-  {
-    id: "mem-002",
-    name: "Maria Santos",
-    email: "maria.santos@university.edu.ph",
-    role: "Student Leader",
-    position: "President",
-    organization: "Computer Society",
-    committee: "Executive Committee",
-    inviteStatus: "Active",
-    joinedDate: "Feb 01, 2025"
-  },
-  {
-    id: "mem-003",
-    name: "Alex Rivera",
-    email: "alex.rivera@university.edu.ph",
-    role: "Student Leader",
-    position: "Vice President Internal",
-    organization: "Computer Society",
-    committee: "Events & Logistics",
-    inviteStatus: "Active",
-    joinedDate: "Feb 10, 2025"
-  },
-  {
-    id: "mem-004",
-    name: "Sophia Chen",
-    email: "sophia.chen@university.edu.ph",
-    role: "Organization Member",
-    position: "Logistics Lead",
-    organization: "Engineering Guild",
-    committee: "Events & Logistics",
-    inviteStatus: "Active",
-    joinedDate: "Feb 12, 2025"
-  },
-  {
-    id: "mem-005",
-    name: "Carlos Mendoza",
-    email: "carlos.mendoza@university.edu.ph",
-    role: "Student Leader",
-    position: "Treasurer",
-    organization: "Student Council",
-    committee: "Finance & Sponsorship",
-    inviteStatus: "Pending Invite",
-    joinedDate: "Feb 18, 2025"
-  },
-  {
-    id: "mem-006",
-    name: "Alyssa Gonzales",
-    email: "alyssa.gonzales@university.edu.ph",
-    role: "Organization Member",
-    position: "Media Manager",
-    organization: "Youth Developers Org",
-    committee: "Media & Documentation",
-    inviteStatus: "Active",
-    joinedDate: "Feb 20, 2025"
-  },
-  {
-    id: "mem-007",
-    name: "Gabriel Ramos",
-    email: "gabriel.ramos@university.edu.ph",
-    role: "Organization Member",
-    position: "Member",
-    organization: "Computer Society",
-    committee: "Unassigned",
-    inviteStatus: "Pending Invite",
-    joinedDate: "Feb 22, 2025"
-  },
-  {
-    id: "mem-008",
-    name: "Beatrice Tan",
-    email: "beatrice.tan@university.edu.ph",
-    role: "Student Leader",
-    position: "Secretary General",
-    organization: "Youth Developers Org",
-    committee: "Executive Committee",
-    inviteStatus: "Active",
-    joinedDate: "Mar 01, 2025"
-  },
-  {
-    id: "mem-009",
-    name: "Daniel Kim",
-    email: "daniel.kim@university.edu.ph",
-    role: "Organization Member",
-    position: "Technical Specialist",
-    organization: "Engineering Guild",
-    committee: "Technology & Web",
-    inviteStatus: "Inactive",
-    joinedDate: "Mar 05, 2025"
-  },
-  {
-    id: "mem-010",
-    name: "Patricia Reyes",
-    email: "patricia.reyes@university.edu.ph",
-    role: "Organization Member",
-    position: "Design Officer",
-    organization: "Youth Developers Org",
-    committee: "Media & Documentation",
-    inviteStatus: "Active",
-    joinedDate: "Mar 10, 2025"
-  }
-];
+const INITIAL_MEMBERS: MemberRecord[] = [];
 
 const AVAILABLE_ORGANIZATIONS = [
   "Computer Society",
@@ -173,11 +67,13 @@ const AVAILABLE_ROLES: UserRole[] = ["Admin", "Student Leader", "Organization Me
 export default function AdminMembersPage() {
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const authLoading = useAuthStore((state) => state.loading);
   const logout = useLogout();
   const showToast = useToastStore((state) => state.showToast);
 
   const [members, setMembers] = useState<MemberRecord[]>(INITIAL_MEMBERS);
+  const [loadingMembers, setLoadingMembers] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [orgFilter, setOrgFilter] = useState<string>("all");
@@ -197,6 +93,97 @@ export default function AdminMembersPage() {
       router.replace(profile ? "/dashboard" : "/sign-in");
     }
   }, [authLoading, profile, router]);
+
+  // Real-time Firestore Snapshot Listener + REST Fallback
+  useEffect(() => {
+    if (!firebaseUser || profile?.role !== "Admin") return;
+
+    let unsub: (() => void) | null = null;
+    let isCancelled = false;
+
+    const fetchFromApi = async () => {
+      try {
+        const idToken = await firebaseUser.getIdToken();
+        const res = await fetch(`${API_BASE_URL}/auth/members`, {
+          headers: { Authorization: `Bearer ${idToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!isCancelled && Array.isArray(data.members)) {
+            setMembers(data.members);
+          }
+        }
+      } catch {
+        // Ignore API fallback errors
+      } finally {
+        if (!isCancelled) setLoadingMembers(false);
+      }
+    };
+
+    try {
+      const db = getFirebaseDb();
+      const usersRef = collection(db, "users");
+
+      unsub = onSnapshot(
+        usersRef,
+        (snapshot) => {
+          if (isCancelled) return;
+          if (!snapshot.empty) {
+            const liveMembers: MemberRecord[] = snapshot.docs.map((docSnap) => {
+              const d = docSnap.data();
+              const fullName = typeof d.fullName === "string" && d.fullName.trim()
+                ? d.fullName
+                : (typeof d.name === "string" && d.name.trim() ? d.name : "Campus Member");
+              const role = d.role === "Admin" || d.role === "Student Leader" || d.role === "Organization Member"
+                ? d.role
+                : "Organization Member";
+              const position = typeof d.position === "string" && d.position.trim()
+                ? d.position
+                : (role === "Admin" ? "System Administrator" : role);
+              const organization = typeof d.organizationName === "string" && d.organizationName.trim()
+                ? d.organizationName
+                : (typeof d.organization === "string" ? d.organization : "University Campus");
+              const committee = typeof d.committee === "string" && d.committee.trim()
+                ? d.committee
+                : "Executive Committee";
+              const inviteStatus = typeof d.inviteStatus === "string"
+                ? (d.inviteStatus as MemberRecord["inviteStatus"])
+                : (d.onboardingCompleted ? "Active" : "Pending Invite");
+              const joinedDate = d.createdAt && typeof (d.createdAt as { toDate?: () => Date }).toDate === "function"
+                ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format((d.createdAt as { toDate: () => Date }).toDate())
+                : "Jan 15, 2025";
+
+              return {
+                id: docSnap.id,
+                name: fullName,
+                email: typeof d.email === "string" ? d.email : "",
+                role,
+                position,
+                organization,
+                committee,
+                inviteStatus,
+                joinedDate
+              };
+            });
+            setMembers(liveMembers);
+            setLoadingMembers(false);
+          } else {
+            void fetchFromApi();
+          }
+        },
+        () => {
+          void fetchFromApi();
+        }
+      );
+    } catch {
+      void fetchFromApi();
+    }
+
+    return () => {
+      isCancelled = true;
+      if (unsub) unsub();
+    };
+  }, [firebaseUser, profile?.role]);
 
   const filteredMembers = useMemo(() => {
     return members.filter((member) => {
@@ -234,11 +221,28 @@ export default function AdminMembersPage() {
   }
 
   // Single Role Change Handler
-  function handleSaveRole(id: string, newRole: UserRole, newPosition: string) {
+  async function handleSaveRole(id: string, newRole: UserRole, newPosition: string) {
     setMembers((prev) =>
       prev.map((m) => (m.id === id ? { ...m, role: newRole, position: newPosition } : m))
     );
     const target = members.find((m) => m.id === id);
+
+    try {
+      // 1. Update Firestore
+      const db = getFirebaseDb();
+      await updateDoc(doc(db, "users", id), { role: newRole, position: newPosition });
+    } catch {
+      // 2. REST Fallback
+      if (firebaseUser) {
+        const idToken = await firebaseUser.getIdToken();
+        await fetch(`${API_BASE_URL}/auth/members/${id}/role`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ role: newRole, position: newPosition })
+        }).catch(() => {});
+      }
+    }
+
     showToast({
       title: "Role updated",
       description: `Updated role for ${target?.name ?? "member"} to ${newRole}.`,
@@ -248,11 +252,28 @@ export default function AdminMembersPage() {
   }
 
   // Single Reassign Handler
-  function handleSaveReassign(id: string, newOrg: string, newCommittee: string) {
+  async function handleSaveReassign(id: string, newOrg: string, newCommittee: string) {
     setMembers((prev) =>
       prev.map((m) => (m.id === id ? { ...m, organization: newOrg, committee: newCommittee } : m))
     );
     const target = members.find((m) => m.id === id);
+
+    try {
+      // 1. Update Firestore
+      const db = getFirebaseDb();
+      await updateDoc(doc(db, "users", id), { organizationName: newOrg, committee: newCommittee });
+    } catch {
+      // 2. REST Fallback
+      if (firebaseUser) {
+        const idToken = await firebaseUser.getIdToken();
+        await fetch(`${API_BASE_URL}/auth/members/${id}/reassign`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ organization: newOrg, committee: newCommittee })
+        }).catch(() => {});
+      }
+    }
+
     showToast({
       title: "Assignment updated",
       description: `Reassigned ${target?.name ?? "member"} to ${newOrg} (${newCommittee}).`,
@@ -262,10 +283,15 @@ export default function AdminMembersPage() {
   }
 
   // Bulk Role Change Handler
-  function handleSaveBulkRole(newRole: UserRole) {
+  async function handleSaveBulkRole(newRole: UserRole) {
     setMembers((prev) =>
       prev.map((m) => (selectedIds.includes(m.id) ? { ...m, role: newRole } : m))
     );
+
+    for (const id of selectedIds) {
+      void handleSaveRole(id, newRole, newRole);
+    }
+
     showToast({
       title: "Bulk role update successful",
       description: `Updated role to ${newRole} for ${selectedIds.length} selected member(s).`,

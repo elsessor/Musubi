@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { firebaseAuth } from "../config/firebase.js";
-import { completeUserOnboarding, createOrganization, getCurrentUser, getMyOrganizationJoinRequest, getOrganizationDirectory, getOrganizationForUser, getOrganizationJoinRequests, getOrganizationManagementDetail, getOrganizationMembers, getOrganizationRequests, getOrganizationsForAdmin, joinOrganization, loginWithFirebaseToken, reviewOrganizationJoinRequest, reviewOrganizationRequest, updateOrganizationForAdmin } from "../services/auth.service.js";
+import { completeUserOnboarding, createEventForUser, createOrganization, getAuditLogs, getEventsForUser, getCurrentUser, getMembersForAdmin, getMyOrganizationJoinRequest, getOrganizationDirectory, getOrganizationForUser, getOrganizationJoinRequests, getOrganizationManagementDetail, getOrganizationMembers, getOrganizationRequests, getOrganizationsForAdmin, joinOrganization, loginWithFirebaseToken, reassignMemberForAdmin, reviewOrganizationJoinRequest, reviewOrganizationRequest, updateEventForUser, updateMemberRoleForAdmin, updateOrganizationForAdmin } from "../services/auth.service.js";
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -13,6 +13,39 @@ function getBearerToken(request: Request): string | null {
   }
 
   return header.slice("Bearer ".length);
+}
+
+export async function membersController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    response.status(200).json({ members: await getMembersForAdmin(decoded.uid) });
+  } catch (error) { next(error); }
+}
+
+export async function updateMemberRoleController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const { role, position } = request.body as Record<string, unknown>;
+    if (typeof role !== "string" || typeof position !== "string") throw new AppError("Role and position are required.", 400);
+    await updateMemberRoleForAdmin(decoded.uid, request.params.id, { role, position });
+    response.status(200).json({ success: true });
+  } catch (error) { next(error); }
+}
+
+export async function reassignMemberController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const { organization, committee } = request.body as Record<string, unknown>;
+    if (typeof organization !== "string" || typeof committee !== "string") throw new AppError("Organization and committee are required.", 400);
+    await reassignMemberForAdmin(decoded.uid, request.params.id, { organization, committee });
+    response.status(200).json({ success: true });
+  } catch (error) { next(error); }
 }
 
 export async function onboardingController(request: Request, response: Response, next: NextFunction) {
@@ -59,11 +92,56 @@ export async function meController(
       throw new AppError("Authentication is required.", 401);
     }
 
-    const user = await getCurrentUser(request.authUser.uid);
-    response.status(200).json({ user });
+    response.status(200).json({ user: request.authUser });
   } catch (error) {
     next(error);
   }
+}
+
+export async function auditLogsController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const category = typeof request.query.category === "string" ? request.query.category : null;
+    const page = typeof request.query.page === "string" ? parseInt(request.query.page, 10) || 1 : 1;
+    const pageSize = typeof request.query.pageSize === "string" ? parseInt(request.query.pageSize, 10) || 50 : 50;
+    const result = await getAuditLogs(decoded.uid, category, page, pageSize);
+    response.status(200).json(result);
+  } catch (error) { next(error); }
+}
+
+export async function eventsController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const orgId = typeof request.query.orgId === "string" ? request.query.orgId : undefined;
+    const events = await getEventsForUser(decoded.uid, orgId);
+    response.status(200).json({ events });
+  } catch (error) { next(error); }
+}
+
+export async function createEventController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const { orgId, ...eventData } = request.body as Record<string, unknown>;
+    const result = await createEventForUser(decoded.uid, { orgId: typeof orgId === "string" ? orgId : "default-org", ...eventData });
+    response.status(201).json(result);
+  } catch (error) { next(error); }
+}
+
+export async function updateEventController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const { id } = request.params;
+    await updateEventForUser(decoded.uid, id, request.body as Record<string, unknown>);
+    response.status(200).json({ success: true });
+  } catch (error) { next(error); }
 }
 
 export async function organizationRequestsController(request: Request, response: Response, next: NextFunction) {
