@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { GripVertical, Plus } from "lucide-react";
 import type { Task, TaskStatus } from "./types";
 import { TaskCard } from "./TaskCard";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
@@ -12,10 +12,30 @@ type KanbanColumnProps = {
   onDragStart?: (taskId: string) => void;
   onDrop?: (status: TaskStatus) => void;
   customStatuses?: CustomStatusConfig[];
+  isLeader?: boolean;
+  onColumnDragStart?: (status: TaskStatus) => void;
+  onColumnDragOver?: (e: React.DragEvent, status: TaskStatus) => void;
+  onColumnDrop?: (status: TaskStatus) => void;
+  isColumnDragging?: boolean;
+  isColumnDragOver?: boolean;
 };
 
-export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop, customStatuses }: KanbanColumnProps) {
+export function KanbanColumn({
+  status,
+  tasks,
+  onAddTask,
+  onDragStart,
+  onDrop,
+  customStatuses,
+  isLeader = false,
+  onColumnDragStart,
+  onColumnDragOver,
+  onColumnDrop,
+  isColumnDragging = false,
+  isColumnDragOver = false,
+}: KanbanColumnProps) {
   const theme = getStatusTheme(status, customStatuses);
+  const isDraggableColumn = Boolean(isLeader && onColumnDragStart);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -28,12 +48,37 @@ export function KanbanColumn({ status, tasks, onAddTask, onDragStart, onDrop, cu
 
   return (
     <div
-      className="flex h-full min-w-[280px] max-w-[300px] flex-col rounded-2xl bg-[#f4f6f9]"
+      className={`flex h-full min-w-[280px] max-w-[300px] flex-col rounded-2xl bg-[#f4f6f9] transition-all ${
+        isColumnDragging ? "opacity-30 scale-95 border-2 border-dashed border-blue-400" : ""
+      } ${isColumnDragOver ? "ring-2 ring-blue-500 bg-blue-50/50" : ""}`}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
       {/* Column header */}
-      <div className="flex items-center gap-2 px-4 py-3.5">
+      <div
+        draggable={isDraggableColumn}
+        onDragStart={(e) => {
+          if (!isDraggableColumn) return;
+          e.stopPropagation();
+          onColumnDragStart?.(status);
+        }}
+        onDragOver={(e) => {
+          if (!isDraggableColumn) return;
+          onColumnDragOver?.(e, status);
+        }}
+        onDrop={(e) => {
+          if (!isDraggableColumn) return;
+          e.stopPropagation();
+          onColumnDrop?.(status);
+        }}
+        className={`flex items-center gap-2 px-4 py-3.5 ${
+          isDraggableColumn ? "cursor-grab active:cursor-grabbing hover:bg-slate-200/50 rounded-t-2xl transition" : ""
+        }`}
+        title={isDraggableColumn ? "Drag column to rearrange" : undefined}
+      >
+        {isDraggableColumn && (
+          <GripVertical size={14} className="text-slate-400 opacity-60 hover:opacity-100 -ml-1" />
+        )}
         <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
         <span className={`text-sm font-semibold ${theme.text}`}>{status}</span>
         <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-600">

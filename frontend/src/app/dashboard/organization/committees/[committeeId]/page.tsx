@@ -85,8 +85,8 @@ export default function CommitteePage() {
     name: profile.fullName,
     role: profile.role,
     roleLabel: profile.position ?? profile.role,
-    organizationName: organization?.name ?? "Organization",
-    academicYear: "AY 2025-2026",
+    organizationName: organization?.name ?? profile.organizationName ?? "",
+    academicYear: "AY 2025–2026",
     greetingDate: dateLabel()
   };
 

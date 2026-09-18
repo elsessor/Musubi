@@ -190,11 +190,12 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
   }
 
   const user = {
+    id: profile.uid,
     name: profile.fullName,
     role: userRole,
     roleLabel: profile.position ?? (userRole === "Admin" ? "Administrator" : "Student Leader"),
-    organizationName: "University Campus",
-    academicYear: "",
+    organizationName: profile.organizationName ?? (userRole === "Admin" ? "University Campus" : ""),
+    academicYear: userRole === "Admin" ? "" : "AY 2025–2026",
     greetingDate: new Intl.DateTimeFormat("en-US", {
       weekday: "long",
       month: "long",

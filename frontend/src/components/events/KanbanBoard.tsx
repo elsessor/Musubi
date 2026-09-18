@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   Columns3,
   Filter,
+  GripVertical,
   LayoutGrid,
   Plus,
   Rows,
@@ -14,7 +15,7 @@ import {
   Users
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Event, Task, TaskStatus } from "./types";
+import type { Event, Task, TaskPriority, TaskStatus } from "./types";
 import { KanbanColumn } from "./KanbanColumn";
 import { TaskGridView } from "./TaskGridView";
 import { TaskTableView } from "./TaskTableView";
@@ -67,6 +68,18 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
   // Custom task statuses state & localStorage
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
   const [isAddStatusModalOpen, setIsAddStatusModalOpen] = useState(false);
+  const [draggedStatusPill, setDraggedStatusPill] = useState<string | null>(null);
+  const [dragOverStatusPill, setDragOverStatusPill] = useState<string | null>(null);
+
+  const [statusOrder, setStatusOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("musubi_task_status_order");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {}
+    return DEFAULT_STATUSES;
+  });
 
   useEffect(() => {
     try {
@@ -77,15 +90,82 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
     } catch {}
   }, []);
 
+  // Synchronize statusOrder with customStatuses and defaultStatuses
+  useEffect(() => {
+    setStatusOrder((prev) => {
+      const existing = new Set(prev);
+      const missingDefaults = DEFAULT_STATUSES.filter((st) => !existing.has(st));
+      const missingCustom = customStatuses.filter((cs) => !existing.has(cs.name)).map((cs) => cs.name);
+      const validCustomNames = new Set(customStatuses.map((cs) => cs.name));
+      const filtered = prev.filter(
+        (st) => DEFAULT_STATUSES.includes(st as TaskStatus) || validCustomNames.has(st)
+      );
+
+      if (missingDefaults.length === 0 && missingCustom.length === 0 && filtered.length === prev.length) {
+        return prev;
+      }
+      const updated = [...filtered, ...missingDefaults, ...missingCustom];
+      try {
+        localStorage.setItem("musubi_task_status_order", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  }, [customStatuses]);
+
+  function handleReorderStatusOrder(newOrder: string[]) {
+    setStatusOrder(newOrder);
+    try {
+      localStorage.setItem("musubi_task_status_order", JSON.stringify(newOrder));
+    } catch {}
+  }
+
   function handleAddCustomStatus(statusName: string, color: StatusThemeColor) {
-    if (customStatuses.some((cs) => cs.name.toLowerCase() === statusName.toLowerCase())) {
+    if (
+      customStatuses.some((cs) => cs.name.toLowerCase() === statusName.toLowerCase()) ||
+      DEFAULT_STATUSES.some((ds) => ds.toLowerCase() === statusName.toLowerCase())
+    ) {
       return;
     }
     const updated = [...customStatuses, { name: statusName, color }];
     setCustomStatuses(updated);
+    const updatedOrder = [...statusOrder, statusName];
+    setStatusOrder(updatedOrder);
     try {
       localStorage.setItem("musubi_custom_task_statuses", JSON.stringify(updated));
+      localStorage.setItem("musubi_task_status_order", JSON.stringify(updatedOrder));
     } catch {}
+  }
+
+  function handleDeleteCustomStatus(statusName: string) {
+    const updated = customStatuses.filter((cs) => cs.name.toLowerCase() !== statusName.toLowerCase());
+    const updatedOrder = statusOrder.filter((st) => st.toLowerCase() !== statusName.toLowerCase());
+    setCustomStatuses(updated);
+    setStatusOrder(updatedOrder);
+    try {
+      localStorage.setItem("musubi_custom_task_statuses", JSON.stringify(updated));
+      localStorage.setItem("musubi_task_status_order", JSON.stringify(updatedOrder));
+    } catch {}
+    if (statusFilter === statusName) {
+      setStatusFilter("All");
+    }
+  }
+
+  function handleDropStatusPill(targetStatusName: string) {
+    if (!draggedStatusPill || draggedStatusPill === targetStatusName) {
+      setDraggedStatusPill(null);
+      setDragOverStatusPill(null);
+      return;
+    }
+    const fromIdx = statusOrder.indexOf(draggedStatusPill);
+    const toIdx = statusOrder.indexOf(targetStatusName);
+    if (fromIdx !== -1 && toIdx !== -1) {
+      const updated = [...statusOrder];
+      const [moved] = updated.splice(fromIdx, 1);
+      updated.splice(toIdx, 0, moved);
+      handleReorderStatusOrder(updated);
+    }
+    setDraggedStatusPill(null);
+    setDragOverStatusPill(null);
   }
 
   // AddTaskModal state
@@ -103,14 +183,11 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
     new Set([...fetchedNames, ...taskNames, ...(event.committee ? [event.committee] : [])])
   );
 
-  const allStatuses: TaskStatus[] = [
-    ...DEFAULT_STATUSES,
-    ...customStatuses.map((cs) => cs.name as TaskStatus)
-  ];
+  const allStatuses: TaskStatus[] = statusOrder as TaskStatus[];
 
   const allTaskFilters: { label: string; key: TaskStatus | "All" }[] = [
-    ...DEFAULT_TASK_FILTERS,
-    ...customStatuses.map((cs) => ({ label: cs.name, key: cs.name as TaskStatus }))
+    { label: "All Tasks", key: "All" },
+    ...statusOrder.map((st) => ({ label: st, key: st as TaskStatus }))
   ];
 
   const visibleTasks = tasks.filter((t) => {
@@ -137,6 +214,15 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
     void updateEventFirestore(firebaseUser, event.id, {
       tasks: updatedTasks,
       progress: newProgress
+    });
+  }
+
+  function handleUpdateTaskPriority(taskId: string, newPriority: TaskPriority) {
+    const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, priority: newPriority } : t));
+    setTasks(updatedTasks);
+
+    void updateEventFirestore(firebaseUser, event.id, {
+      tasks: updatedTasks
     });
   }
 
@@ -232,17 +318,52 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
               const count = key === "All" ? tasks.length : tasks.filter((t) => t.status === key).length;
               const isActive = statusFilter === key;
               const theme = getStatusTheme(key, customStatuses);
+              const isPillDraggable = isLeader && key !== "All";
+              const isDraggingThis = draggedStatusPill === key;
+              const isDragOverThis = dragOverStatusPill === key;
+
               return (
                 <button
                   key={key}
                   type="button"
+                  draggable={isPillDraggable}
+                  onDragStart={(e) => {
+                    if (!isPillDraggable) return;
+                    e.dataTransfer.setData("text/plain", key);
+                    setDraggedStatusPill(key);
+                  }}
+                  onDragOver={(e) => {
+                    if (!isLeader) return;
+                    e.preventDefault();
+                    if (draggedStatusPill && draggedStatusPill !== key && key !== "All") {
+                      setDragOverStatusPill(key);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverStatusPill === key) setDragOverStatusPill(null);
+                  }}
+                  onDrop={(e) => {
+                    if (!isPillDraggable) return;
+                    e.preventDefault();
+                    handleDropStatusPill(key);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedStatusPill(null);
+                    setDragOverStatusPill(null);
+                  }}
                   onClick={() => setStatusFilter(key)}
-                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
+                  title={isPillDraggable ? "Drag to rearrange status order" : undefined}
+                  className={`group flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
                     isActive
                       ? "bg-slate-900 text-white shadow"
                       : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
-                  }`}
+                  } ${isPillDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
+                    isDraggingThis ? "opacity-30 scale-95 border-dashed border-blue-400" : ""
+                  } ${isDragOverThis ? "ring-2 ring-blue-500 scale-105 bg-blue-50/80" : ""}`}
                 >
+                  {isPillDraggable && (
+                    <GripVertical size={11} className="-ml-1 text-slate-300 transition-opacity group-hover:text-slate-500" />
+                  )}
                   {key !== "All" && (
                     <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white/70" : theme.dot}`} />
                   )}
@@ -258,7 +379,7 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
                 type="button"
                 onClick={() => setIsAddStatusModalOpen(true)}
                 className="flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
-                title="Add Custom Task Status"
+                title="Add or rearrange custom task statuses"
               >
                 <Plus size={13} />
                 <span>Custom Status</span>
@@ -324,6 +445,7 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
           <TaskTableView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
+            onUpdatePriority={handleUpdateTaskPriority}
             customStatuses={customStatuses}
           />
         )}
@@ -347,6 +469,17 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
                 onDragStart={(id) => setDraggedId(id)}
                 onDrop={handleDrop}
                 customStatuses={customStatuses}
+                isLeader={isLeader}
+                onColumnDragStart={(st) => setDraggedStatusPill(st)}
+                onColumnDragOver={(e, st) => {
+                  e.preventDefault();
+                  if (draggedStatusPill && draggedStatusPill !== st) {
+                    setDragOverStatusPill(st);
+                  }
+                }}
+                onColumnDrop={(st) => handleDropStatusPill(st)}
+                isColumnDragging={draggedStatusPill === status}
+                isColumnDragOver={dragOverStatusPill === status}
               />
             ))}
 
@@ -393,12 +526,17 @@ export function KanbanBoard({ event, onBack, committees = [], isLeader = true }:
         customStatuses={customStatuses}
       />
 
-      {/* Add Custom Task Status Modal */}
+      {/* Add & Manage Custom Task Status Modal */}
       <AddCustomStatusModal
         isOpen={isAddStatusModalOpen}
         onClose={() => setIsAddStatusModalOpen(false)}
         type="task"
+        customStatuses={customStatuses}
+        statusOrder={statusOrder}
+        defaultStatuses={DEFAULT_STATUSES}
         onAddStatus={handleAddCustomStatus}
+        onReorderStatusOrder={handleReorderStatusOrder}
+        onDeleteStatus={handleDeleteCustomStatus}
       />
     </div>
   );

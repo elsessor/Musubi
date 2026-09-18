@@ -12,7 +12,7 @@ import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { fetchAuditLogs, type AuditLogRecord } from "@/services/audit.service";
-import { subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
+import { getOrganization, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
 
@@ -54,10 +54,10 @@ function buildDashboardUser(profile: AuthUserProfile | null) {
 
   return {
     id: profile?.uid ?? null,
-    name: profile?.fullName ?? "Hans San Miguel",
+    name: profile?.fullName ?? "",
     role,
     roleLabel: profile?.position ?? (role === "Student Leader" ? "President" : role),
-    organizationName: "University Student Council",
+    organizationName: profile?.organizationName ?? "",
     academicYear: "AY 2025–2026",
     greetingDate: formatGreetingDate()
   };
@@ -67,6 +67,7 @@ export function DashboardPage() {
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const authLoading = useAuthStore((state) => state.loading);
   const logout = useLogout();
   const [dashboardUser, setDashboardUser] = useState(() => buildDashboardUser(profile));
   const [loading, setLoading] = useState(true);
@@ -87,9 +88,11 @@ export function DashboardPage() {
       const uid = profile?.uid ?? firebaseUser?.uid;
 
       if (!uid) {
-        if (!cancelled) {
-          setDashboardUser(buildDashboardUser(profile));
-          setLoading(false);
+        if (!authLoading) {
+          if (!cancelled) {
+            setDashboardUser(buildDashboardUser(profile));
+            setLoading(false);
+          }
         }
         return;
       }
@@ -105,15 +108,35 @@ export function DashboardPage() {
             ? data.role
             : profile?.role ?? "Student Leader";
 
-        const fullName = typeof data?.fullName === "string" && data.fullName.trim() ? data.fullName : profile?.fullName ?? "Hans San Miguel";
-        const orgName = typeof data?.organizationName === "string" && data.organizationName.trim() ? data.organizationName : "University Student Council";
+        const fullName =
+          typeof data?.fullName === "string" && data.fullName.trim()
+            ? data.fullName
+            : profile?.fullName ?? "";
+
+        let orgName =
+          typeof data?.organizationName === "string" && data.organizationName.trim()
+            ? data.organizationName
+            : profile?.organizationName ?? "";
+
+        const orgId = typeof data?.organizationId === "string" ? data.organizationId : profile?.organizationId ?? null;
+        if (!orgName && orgId && firebaseUser) {
+          try {
+            const orgData = await getOrganization(firebaseUser, orgId);
+            if (orgData?.name) orgName = orgData.name;
+          } catch {
+            // Ignore fallback error
+          }
+        }
 
         if (!cancelled) {
           setDashboardUser({
             id: uid,
             name: fullName,
             role,
-            roleLabel: typeof data?.position === "string" && data.position.trim() ? data.position : (role === "Student Leader" ? "President" : role),
+            roleLabel:
+              typeof data?.position === "string" && data.position.trim()
+                ? data.position
+                : (role === "Student Leader" ? "President" : role),
             organizationName: orgName,
             academicYear: "AY 2025–2026",
             greetingDate: formatGreetingDate()
@@ -135,7 +158,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser?.uid, profile]);
+  }, [authLoading, firebaseUser, profile]);
 
   // Subscribe to real-time events in Cloud Firestore
   useEffect(() => {

@@ -31,6 +31,7 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
     role,
     position: typeof data.position === "string" ? data.position : null,
     organizationId: typeof data.organizationId === "string" ? data.organizationId : null,
+    organizationName: typeof data.organizationName === "string" ? data.organizationName : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
     skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
     onboardingCompleted: data.onboardingCompleted === true,
@@ -44,7 +45,20 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
   const snapshot = await userRef.get();
 
   if (snapshot.exists) {
-    const user = normalizeUserDocument(uid, snapshot.data() ?? {});
+    const data = snapshot.data() ?? {};
+    let orgName = typeof data.organizationName === "string" && data.organizationName.trim() ? data.organizationName : null;
+    if (!orgName && typeof data.organizationId === "string" && data.organizationId.trim()) {
+      try {
+        const orgDoc = await firestore.collection("organizations").doc(data.organizationId).get();
+        if (orgDoc.exists && typeof orgDoc.data()?.name === "string") {
+          orgName = orgDoc.data()?.name;
+          await userRef.update({ organizationName: orgName });
+        }
+      } catch (err) {
+        console.error("[getOrCreateUserDocument] Error syncing organizationName:", err);
+      }
+    }
+    const user = normalizeUserDocument(uid, { ...data, organizationName: orgName });
     await userRef.update({
       lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
     });
@@ -59,6 +73,7 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
     role: DEFAULT_ROLE,
     position: null,
     organizationId: null,
+    organizationName: null,
     profilePicture: firebaseUser.photoURL ?? null,
     skills: [],
     onboardingCompleted: false,
@@ -106,9 +121,10 @@ export async function loginWithFirebaseToken(idToken: string): Promise<LoginResp
       role: user.role,
       position: user.position,
       organizationId: user.organizationId,
-      profilePicture: user.profilePicture
-      , skills: user.skills
-      , onboardingCompleted: user.onboardingCompleted
+      organizationName: user.organizationName,
+      profilePicture: user.profilePicture,
+      skills: user.skills,
+      onboardingCompleted: user.onboardingCompleted
     }
   };
 }
@@ -156,9 +172,10 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     role: user.role,
     position: user.position,
     organizationId: user.organizationId,
-    profilePicture: user.profilePicture
-    , skills: user.skills
-    , onboardingCompleted: user.onboardingCompleted
+    organizationName: user.organizationName,
+    profilePicture: user.profilePicture,
+    skills: user.skills,
+    onboardingCompleted: user.onboardingCompleted
   };
 }
 
@@ -287,7 +304,11 @@ export async function reviewOrganizationJoinRequest(uid: string, organizationId:
   const request = snapshot.data();
   if (!snapshot.exists || request?.organizationId !== organizationId || request.status !== "pending" || typeof request.requestedByUID !== "string") throw new AppError("Join request was not found.", 404);
   await ref.update({ status, reviewedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), reviewedByUID: uid });
-  if (status === "accepted") await firestore.collection("users").doc(request.requestedByUID).set({ organizationId }, { merge: true });
+  if (status === "accepted") {
+    const orgDoc = await firestore.collection("organizations").doc(organizationId).get();
+    const orgName = orgDoc.exists && typeof orgDoc.data()?.name === "string" ? orgDoc.data()?.name : null;
+    await firestore.collection("users").doc(request.requestedByUID).set({ organizationId, ...(orgName ? { organizationName: orgName } : {}) }, { merge: true });
+  }
   writeAuditLog({
     actorUID: uid,
     actorName: leader.fullName,
@@ -309,7 +330,7 @@ export async function createOrganization(uid: string, input: { name: string; typ
     name: input.name.trim(), type: input.type.trim(), description: input.description.trim(), status: "pending", requestedByUID: uid,
     organizationConfig: {}, createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   });
-  await firestore.collection("users").doc(uid).set({ organizationId: ref.id }, { merge: true });
+  await firestore.collection("users").doc(uid).set({ organizationId: ref.id, organizationName: input.name.trim() }, { merge: true });
   await firestore.collection("org_requests").add({
     organizationId: ref.id, orgName: input.name.trim(), orgType: input.type.trim(), description: input.description.trim(), status: "pending", rejectionReason: null,
     submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), requestedBy: { uid, name: user.fullName, email: user.email }
@@ -512,11 +533,26 @@ export async function completeUserOnboarding(
     throw new AppError("Complete the required onboarding details.", 400);
   }
 
+  let orgName: string | null = null;
+  if (input.organizationRequest?.orgName) {
+    orgName = input.organizationRequest.orgName.trim();
+  } else if (input.organizationId) {
+    try {
+      const orgDoc = await firestore.collection("organizations").doc(input.organizationId).get();
+      if (orgDoc.exists && typeof orgDoc.data()?.name === "string") {
+        orgName = orgDoc.data()?.name;
+      }
+    } catch (err) {
+      console.error("[completeOnboarding] Error resolving org name:", err);
+    }
+  }
+
   const userRef = firestore.collection("users").doc(uid);
   await userRef.set({
     role: input.role,
     position: input.position.trim(),
     organizationId: input.organizationId,
+    ...(orgName ? { organizationName: orgName } : {}),
     yearLevel: input.yearLevel,
     program: input.program,
     skills: input.skills,

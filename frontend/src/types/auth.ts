@@ -12,6 +12,7 @@ export type AuthUserProfile = {
   role: UserRole;
   position: string | null;
   organizationId: string | null;
+  organizationName?: string | null;
   profilePicture: string | null;
   skills: string[];
   onboardingCompleted: boolean;

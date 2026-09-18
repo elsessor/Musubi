@@ -170,6 +170,7 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
       role: backendUser.role,
       position: typeof backendUser.position === "string" ? backendUser.position : null,
       organizationId: backendUser.organizationId,
+      organizationName: typeof backendUser.organizationName === "string" ? backendUser.organizationName : null,
       profilePicture: backendUser.profilePicture,
       skills,
       onboardingCompleted
