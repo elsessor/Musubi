@@ -62,9 +62,11 @@ export function findBestMemberForSubtask(
 
     let explanation = "";
     if (matchedSkills.length > 0) {
-      explanation = `Matched skills: ${matchedSkills.join(", ")} (${score}% match)`;
+      explanation = `Matched skills: ${matchedSkills.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(", ")}`;
+    } else if (member.position || member.role) {
+      explanation = `Matched role: ${member.position || member.role}`;
     } else {
-      explanation = `${member.position || member.role} (${score}% match)`;
+      explanation = "Available team capacity";
     }
 
     return {

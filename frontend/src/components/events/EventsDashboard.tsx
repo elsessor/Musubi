@@ -33,6 +33,43 @@ const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ s
   { mode: "calendar", title: "Calendar View", icon: Calendar }
 ];
 
+function parseEventDateRange(evt: Event): { start: Date | null; end: Date | null } {
+  if (!evt.startDate || evt.startDate === "TBD") {
+    return { start: null, end: null };
+  }
+
+  let startStr = evt.startDate.trim();
+  let endStr = evt.endDate ? evt.endDate.trim() : "";
+
+  if (startStr.includes(" - ")) {
+    const parts = startStr.split(" - ");
+    startStr = parts[0].trim();
+    if (!endStr || endStr === "TBD") {
+      endStr = parts[1].trim();
+    }
+  }
+
+  function parseDateString(str: string): Date | null {
+    if (!str || str === "TBD") return null;
+
+    let d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+
+    const hasYear = /\b(20\d\d)\b/.test(str);
+    if (!hasYear) {
+      d = new Date(`${str}, 2026`);
+      if (!isNaN(d.getTime())) return d;
+    }
+
+    return null;
+  }
+
+  const start = parseDateString(startStr);
+  const end = parseDateString(endStr) || start;
+
+  return { start, end };
+}
+
 function buildCalendarDays(currentDate: Date, events: Event[]) {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -54,14 +91,33 @@ function buildCalendarDays(currentDate: Date, events: Event[]) {
     });
   }
 
-  const today = new Date(2026, 7, 21); // Aug 21, 2026
+  const today = new Date();
 
   for (let d = 1; d <= lastDateOfMonth; d++) {
-    const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d;
-    const matchingEvents = events.filter((e) => {
-      if (d === 20 && e.title.includes("Culture")) return true;
-      if (d === 5 && e.title.includes("Orientation")) return true;
-      if (d === 28 && e.title.includes("Sports")) return true;
+    const isToday =
+      today.getFullYear() === year &&
+      today.getMonth() === month &&
+      today.getDate() === d;
+
+    const cellTime = new Date(year, month, d, 0, 0, 0, 0).getTime();
+
+    const matchingEvents = events.filter((e, evtIdx) => {
+      const { start, end } = parseEventDateRange(e);
+      if (start) {
+        const startTime = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+        const endTime = end
+          ? new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime()
+          : startTime;
+        if (cellTime >= startTime && cellTime <= endTime) {
+          return true;
+        }
+      } else {
+        // Fallback placement for TBD or unparseable dates: distribute evenly across calendar
+        const fallbackDays = [5, 15, 25, 1, 10, 20];
+        const assignedDay = fallbackDays[evtIdx % fallbackDays.length];
+        if (d === assignedDay) return true;
+      }
+
       return false;
     });
 
@@ -98,7 +154,25 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
+  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date(2026, 7, 1)); // Default Aug 2026
+
+  useEffect(() => {
+    if (events.length > 0) {
+      for (const evt of events) {
+        const { start } = parseEventDateRange(evt);
+        if (start) {
+          setCalendarDate((prev) => {
+            const hasMatches = buildCalendarDays(prev, events).some((d) => d.matchingEvents.length > 0);
+            if (!hasMatches) {
+              return new Date(start.getFullYear(), start.getMonth(), 1);
+            }
+            return prev;
+          });
+          break;
+        }
+      }
+    }
+  }, [events]);
 
   // Custom event statuses stored in state & localStorage
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);

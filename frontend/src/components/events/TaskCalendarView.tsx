@@ -42,11 +42,33 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onAddTask, customStatu
 
   // Parse task due date and match with day number
   function getTasksForDay(dayNum: number): Task[] {
-    return tasks.filter((t) => {
-      if (!t.dueDate) return false;
+    const targetCellTime = new Date(year, month, dayNum, 0, 0, 0, 0).getTime();
+
+    return tasks.filter((t, idx) => {
+      if (!t.dueDate) {
+        // Fallback placement for tasks without explicit due date
+        const fallbackDays = [5, 12, 18, 24];
+        return dayNum === fallbackDays[idx % fallbackDays.length];
+      }
       const lower = t.dueDate.toLowerCase();
-      // Look for day number match (e.g. "Aug 15", "15", "2026-08-15")
+
+      // Standard Date parsing
+      const parsed = new Date(t.dueDate);
+      if (!isNaN(parsed.getTime())) {
+        const tTime = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime();
+        if (tTime === targetCellTime) return true;
+      }
+
+      // Parsing with implicit year
+      const parsedWithYear = new Date(`${t.dueDate}, ${year}`);
+      if (!isNaN(parsedWithYear.getTime())) {
+        const tTime = new Date(parsedWithYear.getFullYear(), parsedWithYear.getMonth(), parsedWithYear.getDate()).getTime();
+        if (tTime === targetCellTime) return true;
+      }
+
+      // Day number match substring (e.g. "Aug 15", "15", "2026-08-15")
       if (lower.includes(String(dayNum))) return true;
+
       return false;
     });
   }
