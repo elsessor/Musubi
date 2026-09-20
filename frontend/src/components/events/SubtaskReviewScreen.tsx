@@ -26,9 +26,17 @@ import {
   X,
   Zap
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { validateSubtaskSafeguards } from "./starterTemplates";
 import type { GoalDraft, Subtask, TaskPriority } from "./types";
+import {
+  subscribeOrganizationMembersFirestore,
+  type OrganizationMember
+} from "@/services/auth.service";
+import {
+  delegateSubtasksHeuristically,
+  findBestMemberForSubtask
+} from "@/utils/heuristicDelegation";
 
 const PRIORITY_BADGES: Record<TaskPriority, { bg: string; text: string }> = {
   Low: { bg: "bg-[#f1f5f9]", text: "text-[#475569]" },
@@ -39,22 +47,49 @@ const PRIORITY_BADGES: Record<TaskPriority, { bg: string; text: string }> = {
 
 type SubtaskReviewScreenProps = {
   goalDraft: GoalDraft;
+  members?: OrganizationMember[];
   onPublishGoal?: (publishedGoal: GoalDraft) => void;
   onBack?: () => void;
 };
 
-export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: SubtaskReviewScreenProps) {
+export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack }: SubtaskReviewScreenProps) {
   const [currentGoal, setCurrentGoal] = useState<GoalDraft>(goalDraft);
   const [subtasks, setSubtasks] = useState<Subtask[]>(goalDraft.subtasks);
+  const [liveMembers, setLiveMembers] = useState<OrganizationMember[]>(members || []);
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
   const [regeneratingIds, setRegeneratingIds] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
+  useEffect(() => {
+    if (members && members.length > 0) {
+      setLiveMembers(members);
+      return;
+    }
+    const unsub = subscribeOrganizationMembersFirestore((m) => {
+      setLiveMembers(m);
+    });
+    return () => unsub();
+  }, [members]);
+
+  function handleAutoAssignHeuristics() {
+    if (liveMembers.length === 0) return;
+    const updated = delegateSubtasksHeuristically(subtasks, liveMembers);
+    setSubtasks(updated);
+  }
+
   function handleConfirmTask(id: string) {
     setSubtasks((prev) =>
-      prev.map((st) => (st.id === id ? { ...st, status: "To Do", assigneeName: st.assigneeName || "Luis Garcia" } : st))
+      prev.map((st) => {
+        if (st.id !== id) return st;
+        let assignee = st.assigneeName;
+        if (!assignee || assignee === "Luis Garcia" || assignee.trim() === "") {
+          const best = findBestMemberForSubtask(st, liveMembers);
+          assignee = best?.member.name || liveMembers[0]?.name || "Unassigned";
+        }
+        return { ...st, status: "To Do", assigneeName: assignee };
+      })
     );
   }
 
@@ -140,10 +175,13 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
         const titleAndDesc = `${st.title} ${st.description}`.toLowerCase();
         const containsSensitive = sensitiveKeywords.some((kw) => titleAndDesc.includes(kw));
 
+        const best = findBestMemberForSubtask(st, liveMembers);
+        const autoAssignee = best?.member.name || liveMembers[0]?.name || "Unassigned";
+
         return {
           ...st,
           isLeaderOnly: containsSensitive ? true : st.isLeaderOnly,
-          assigneeName: !st.assigneeName || st.assigneeName.trim() === "" ? "Luis Garcia" : st.assigneeName,
+          assigneeName: !st.assigneeName || st.assigneeName.trim() === "" || st.assigneeName === "Luis Garcia" ? autoAssignee : st.assigneeName,
           requiredSkills: st.requiredSkills.length === 0 ? ["Event Planning", "Coordination"] : st.requiredSkills,
           description: st.description.length < 10 ? `${st.description} (Detailed breakdown verified by Student Leader)` : st.description
         };
@@ -179,6 +217,16 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
               &larr; Back
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={handleAutoAssignHeuristics}
+            className="inline-flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-bold text-indigo-700 shadow-xs hover:bg-indigo-100 transition"
+            title="Automatically assign subtasks based on team members' skills & workload"
+          >
+            <Sparkles size={15} />
+            Auto-Assign Skills
+          </button>
 
           <button
             type="button"
@@ -321,6 +369,7 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
       {editingSubtask && (
         <OldEditTaskModal
           subtask={editingSubtask}
+          members={liveMembers}
           onClose={() => setEditingSubtask(null)}
           onSave={handleSaveTaskEdit}
         />
@@ -329,6 +378,7 @@ export function SubtaskReviewScreen({ goalDraft, onPublishGoal, onBack }: Subtas
       {/* Manual Creation Modal */}
       {showAddModal && (
         <OldAddSubtaskModal
+          members={liveMembers}
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddManualSubtask}
         />
@@ -577,14 +627,21 @@ function OldTaskCard({
 
 type OldEditTaskModalProps = {
   subtask: Subtask;
+  members: OrganizationMember[];
   onClose: () => void;
   onSave: (updated: Subtask) => void;
 };
 
-function OldEditTaskModal({ subtask, onClose, onSave }: OldEditTaskModalProps) {
+function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModalProps) {
+  const bestMatch = findBestMemberForSubtask(subtask, members);
+  const initialAssignee =
+    subtask.assigneeName && subtask.assigneeName !== "Luis Garcia"
+      ? subtask.assigneeName
+      : bestMatch?.member.name || members[0]?.name || "Unassigned";
+
   const [title, setTitle] = useState(subtask.title);
   const [description, setDescription] = useState(subtask.description);
-  const [assigneeName, setAssigneeName] = useState(subtask.assigneeName || "Luis Garcia");
+  const [assigneeName, setAssigneeName] = useState(initialAssignee);
   const [priority, setPriority] = useState<TaskPriority>(subtask.priority);
   const [estimatedDays, setEstimatedDays] = useState(subtask.estimatedDays);
   const [isLeaderOnly, setIsLeaderOnly] = useState(subtask.isLeaderOnly);
@@ -670,14 +727,23 @@ function OldEditTaskModal({ subtask, onClose, onSave }: OldEditTaskModalProps) {
               onChange={(e) => setAssigneeName(e.target.value)}
               className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
             >
-              <option value="Luis Garcia">Luis Garcia</option>
-              <option value="Beatrice Lim">Beatrice Lim</option>
-              <option value="Marco Dela Cruz">Marco Dela Cruz</option>
-              <option value="Ana Reyes">Ana Reyes</option>
+              {members.length === 0 ? (
+                <option value={assigneeName}>{assigneeName || "Unassigned"}</option>
+              ) : (
+                members.map((m) => (
+                  <option key={m.id} value={m.name}>
+                    {m.name} ({m.position || m.role}){m.skills && m.skills.length > 0 ? ` • [${m.skills.join(", ")}]` : ""}
+                  </option>
+                ))
+              )}
             </select>
-            <p className="mt-1 text-xs text-slate-500 font-medium">
-              Original AI suggestion: <span className="font-bold text-slate-700">{subtask.assigneeName || "Luis Garcia"} ({subtask.aiMetadata?.confidenceScore ?? 95}% match)</span>
-            </p>
+            {bestMatch && (
+              <p className="mt-1.5 text-xs text-slate-500 font-medium bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100">
+                ✨ Heuristic AI Recommendation: <span className="font-bold text-indigo-950">{bestMatch.member.name}</span> ({bestMatch.score}% match)
+                <br />
+                <span className="text-[11px] text-slate-500">{bestMatch.explanation}</span>
+              </p>
+            )}
           </div>
 
           {/* Interactive Calendar Deadline Picker (Exact Screenshot 2 Style) */}
@@ -839,14 +905,15 @@ function OldEditTaskModal({ subtask, onClose, onSave }: OldEditTaskModalProps) {
 // ── Old Add Subtask Modal ───────────────────────────────────────────────────
 
 type OldAddSubtaskModalProps = {
+  members: OrganizationMember[];
   onClose: () => void;
   onAdd: (subtask: Omit<Subtask, "id" | "isAiGenerated">) => void;
 };
 
-function OldAddSubtaskModal({ onClose, onAdd }: OldAddSubtaskModalProps) {
+function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assigneeName, setAssigneeName] = useState("Luis Garcia");
+  const [assigneeName, setAssigneeName] = useState(members[0]?.name || "Unassigned");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
   const [estimatedDays, setEstimatedDays] = useState(3);
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
@@ -925,10 +992,15 @@ function OldAddSubtaskModal({ onClose, onAdd }: OldAddSubtaskModalProps) {
                 onChange={(e) => setAssigneeName(e.target.value)}
                 className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800"
               >
-                <option value="Luis Garcia">Luis Garcia</option>
-                <option value="Beatrice Lim">Beatrice Lim</option>
-                <option value="Marco Dela Cruz">Marco Dela Cruz</option>
-                <option value="Ana Reyes">Ana Reyes</option>
+                {members.length === 0 ? (
+                  <option value={assigneeName}>{assigneeName}</option>
+                ) : (
+                  members.map((m) => (
+                    <option key={m.id} value={m.name}>
+                      {m.name} ({m.position || m.role}){m.skills && m.skills.length > 0 ? ` • [${m.skills.join(", ")}]` : ""}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 

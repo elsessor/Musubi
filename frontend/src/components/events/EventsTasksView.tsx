@@ -11,6 +11,7 @@ import type { Event, Task } from "./types";
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { createEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
+import { subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 
 type Tab = "events" | "atomizer";
 
@@ -22,6 +23,7 @@ export function EventsTasksView() {
   const [activeTab, setActiveTab] = useState<Tab>("events");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
+  const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(profile?.organizationId ?? null);
 
   // Modal state
@@ -64,6 +66,13 @@ export function EventsTasksView() {
     };
   }, [firebaseUser, effectiveOrgId]);
 
+  useEffect(() => {
+    const unsubscribe = subscribeOrganizationMembersFirestore(effectiveOrgId, setMembers, firebaseUser);
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
+  }, [effectiveOrgId, firebaseUser]);
+
   const currentTab = isLeader ? activeTab : "events";
 
   function handleSelectEvent(event: Event) {
@@ -80,7 +89,33 @@ export function EventsTasksView() {
     setSelectedEvent(updatedEvent);
   }
 
-  function handlePublishGoalTasks(targetEventId: string, publishedTasks: Task[]) {
+  async function handlePublishGoalTasks(
+    targetEventId: string,
+    publishedTasks: Task[],
+    newEventDetails?: { title: string; description: string }
+  ) {
+    if (targetEventId === "CREATE_NEW" || newEventDetails) {
+      const startFormatted = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const endFormatted = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      try {
+        await createEventFirestore(firebaseUser, effectiveOrgId || profile?.organizationId || "default-org", {
+          title: newEventDetails?.title || "New Event from Atomizer",
+          description: newEventDetails?.description || "",
+          status: "Planning",
+          committee: "General",
+          startDate: startFormatted,
+          endDate: endFormatted,
+          memberCount: 1,
+          progress: 0,
+          tasks: publishedTasks
+        });
+      } catch (err) {
+        console.error("Failed to create new event from description:", err);
+      }
+      setActiveTab("events");
+      return;
+    }
+
     const targetEvent = events.find((event) => event.id === targetEventId);
     if (!targetEvent) return;
 
@@ -162,7 +197,7 @@ export function EventsTasksView() {
       {/* View content */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {currentTab === "atomizer" && isLeader ? (
-          <AtomizerForm events={events} onPublishGoalTasks={handlePublishGoalTasks} />
+          <AtomizerForm events={events} members={members} onPublishGoalTasks={handlePublishGoalTasks} />
         ) : selectedEvent ? (
           <KanbanBoard event={selectedEvent} onBack={handleBack} onUpdateEvent={handleUpdateEvent} />
         ) : (

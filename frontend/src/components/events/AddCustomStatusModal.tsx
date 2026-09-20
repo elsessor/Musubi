@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronUp, GripVertical, Plus, Tag, Trash2, X } from "lucide-react";
-import { COLOR_OPTIONS, THEME_MAP, getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { Check, ChevronDown, ChevronUp, GripVertical, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { COLOR_OPTIONS, getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
 export type AddCustomStatusModalProps = {
   isOpen: boolean;
@@ -11,7 +11,7 @@ export type AddCustomStatusModalProps = {
   customStatuses?: CustomStatusConfig[];
   statusOrder: string[];
   defaultStatuses: string[];
-  onAddStatus: (statusName: string, color: StatusThemeColor) => void;
+  onAddStatus: (statusName: string, color: StatusThemeColor, insertIndex?: number) => void;
   onReorderStatusOrder: (newOrder: string[]) => void;
   onDeleteStatus?: (statusName: string) => void;
 };
@@ -29,6 +29,7 @@ export function AddCustomStatusModal({
 }: AddCustomStatusModalProps) {
   const [name, setName] = useState("");
   const [selectedColor, setSelectedColor] = useState<StatusThemeColor>("purple");
+  const [insertAfter, setInsertAfter] = useState<string>("before-completed");
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
@@ -53,7 +54,19 @@ export function AddCustomStatusModal({
       return;
     }
     setError("");
-    onAddStatus(trimmed, selectedColor);
+
+    let insertIndex = statusOrder.length;
+    if (insertAfter === "before-completed") {
+      const completedIdx = statusOrder.findIndex((s) => s.toLowerCase() === "completed");
+      if (completedIdx !== -1) insertIndex = completedIdx;
+    } else if (insertAfter === "at-start") {
+      insertIndex = 0;
+    } else {
+      const targetIdx = statusOrder.indexOf(insertAfter);
+      if (targetIdx !== -1) insertIndex = targetIdx + 1;
+    }
+
+    onAddStatus(trimmed, selectedColor, insertIndex);
     setName("");
   }
 
@@ -111,21 +124,14 @@ export function AddCustomStatusModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg animate-in fade-in zoom-in duration-150 rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl">
+      <div className="w-full max-w-md animate-in fade-in zoom-in duration-150 rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl space-y-4">
         {/* Modal Header */}
-        <div className="mb-4 flex items-start justify-between">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100/60 bg-blue-50 text-blue-500">
-              <Tag size={18} />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-100/60 bg-blue-50 text-blue-600">
+              <SlidersHorizontal size={18} />
             </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Custom {type === "event" ? "Event" : "Task"} Statuses
-              </h3>
-              <p className="text-xs text-slate-400">
-                Add custom statuses and rearrange workflow order
-              </p>
-            </div>
+            <h3 className="text-base font-bold text-slate-900">Manage Statuses</h3>
           </div>
           <button
             type="button"
@@ -136,80 +142,9 @@ export function AddCustomStatusModal({
           </button>
         </div>
 
-        {/* Add Status Form */}
-        <form onSubmit={handleSubmit} className="mb-5 space-y-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Status Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                if (error) setError("");
-              }}
-              placeholder={
-                type === "event"
-                  ? "e.g. On Hold, Postponed, In Review"
-                  : "e.g. QA Testing, Blocked, Deployed"
-              }
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              autoFocus
-            />
-            {error && <p className="mt-1 text-xs text-rose-500">{error}</p>}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Badge / Dot Color
-              </label>
-              {/* Circular Color Palette */}
-              <div className="flex items-center gap-2">
-                {COLOR_OPTIONS.map((c) => {
-                  const isSelected = selectedColor === c.key;
-                  return (
-                    <button
-                      key={c.key}
-                      type="button"
-                      onClick={() => setSelectedColor(c.key)}
-                      title={c.label}
-                      className={`relative flex h-7 w-7 items-center justify-center rounded-full transition-all hover:scale-110 ${c.dot} ${
-                        isSelected
-                          ? "ring-2 ring-slate-900 ring-offset-2 scale-110 shadow-sm"
-                          : "hover:opacity-90"
-                      }`}
-                    >
-                      {isSelected && <Check size={12} className="text-white drop-shadow" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="mt-3 flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            >
-              <Plus size={14} />
-              Add Status
-            </button>
-          </div>
-        </form>
-
-        {/* Status Workflow Order List (Default + Custom) */}
+        {/* Status Workflow Order List */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Status Order ({statusOrder.length})
-            </label>
-            <span className="text-[10px] text-slate-400">
-              Drag handle or use arrows to rearrange
-            </span>
-          </div>
-
-          <div className="max-h-52 space-y-1.5 overflow-y-auto pr-0.5">
+          <div className="max-h-48 space-y-1.5 overflow-y-auto pr-0.5">
             {statusOrder.map((statusName, idx) => {
               const isDefault = defaultStatuses.includes(statusName);
               const theme = getStatusTheme(statusName, customStatuses);
@@ -227,74 +162,63 @@ export function AddCustomStatusModal({
                     setDragOverIdx(null);
                   }}
                   onDrop={() => handleDrop(idx)}
-                  className={`group flex items-center justify-between gap-2 rounded-xl border p-2 transition-all ${
+                  className={`group flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition-all ${
                     isDragging
                       ? "opacity-30 border-dashed border-blue-400 bg-blue-50/50"
                       : isOver
                       ? "border-blue-400 bg-blue-50/70 shadow-sm"
-                      : "border-slate-200 bg-white hover:border-slate-300"
+                      : "border-slate-100 bg-white hover:border-slate-200"
                   }`}
                 >
-                  {/* Drag handle & Order number & Badge */}
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <div
                       className="cursor-grab text-slate-300 hover:text-slate-600 active:cursor-grabbing"
                       title="Drag to rearrange"
                     >
                       <GripVertical size={16} />
                     </div>
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-500">
-                      {idx + 1}
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${theme.dot}`} />
+                    <span className="truncate text-xs font-semibold text-slate-800">
+                      {statusName}
                     </span>
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${theme.dot}`} />
-                      <span className="truncate text-xs font-semibold text-slate-800">
-                        {statusName}
-                      </span>
-                    </div>
-                    {isDefault ? (
-                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500 uppercase tracking-wider">
-                        Default
-                      </span>
-                    ) : (
-                      <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold text-blue-600 uppercase tracking-wider">
-                        Custom
+                    {isDefault && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+                        pinned / default
                       </span>
                     )}
                   </div>
 
-                  {/* Controls: Up, Down, Delete */}
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={() => handleMoveUp(idx)}
                       disabled={idx === 0}
                       title="Move up"
-                      className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-25 disabled:hover:bg-transparent"
+                      className="rounded-lg p-1 text-slate-300 hover:text-slate-600 disabled:opacity-20"
                     >
-                      <ChevronUp size={15} />
+                      <ChevronUp size={14} />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleMoveDown(idx)}
                       disabled={idx === statusOrder.length - 1}
                       title="Move down"
-                      className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-25 disabled:hover:bg-transparent"
+                      className="rounded-lg p-1 text-slate-300 hover:text-slate-600 disabled:opacity-20"
                     >
-                      <ChevronDown size={15} />
+                      <ChevronDown size={14} />
                     </button>
                     {!isDefault && onDeleteStatus && (
                       <button
                         type="button"
                         onClick={() => handleDelete(statusName)}
-                        title={confirmDelete === statusName ? "Click again to confirm delete" : "Delete status"}
+                        title={confirmDelete === statusName ? "Confirm delete" : "Delete status"}
                         className={`rounded-lg p-1 transition ${
                           confirmDelete === statusName
                             ? "bg-rose-100 text-rose-600 font-bold"
-                            : "text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+                            : "text-slate-300 hover:text-rose-500"
                         }`}
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={14} />
                       </button>
                     )}
                   </div>
@@ -304,9 +228,78 @@ export function AddCustomStatusModal({
           </div>
         </div>
 
+        {/* Add New Status Form */}
+        <form onSubmit={handleSubmit} className="space-y-3 pt-2">
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            ADD NEW STATUS
+          </label>
+
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (error) setError("");
+            }}
+            placeholder="Status name..."
+            className="w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+          />
+
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold text-slate-400">
+              Insert after:
+            </label>
+            <select
+              value={insertAfter}
+              onChange={(e) => setInsertAfter(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 py-2 text-xs text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="before-completed">— Before &quot;Completed&quot; —</option>
+              <option value="at-start">At the beginning</option>
+              {statusOrder.map((s) => (
+                <option key={s} value={s}>
+                  After &quot;{s}&quot;
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {error && <p className="text-xs text-rose-500 font-medium">{error}</p>}
+
+          {/* Color Palette Dots */}
+          <div className="flex items-center justify-between px-1 py-1">
+            {COLOR_OPTIONS.map((c) => {
+              const isSelected = selectedColor === c.key;
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setSelectedColor(c.key)}
+                  title={c.label}
+                  className={`relative flex h-6 w-6 items-center justify-center rounded-full transition-all hover:scale-110 ${c.dot} ${
+                    isSelected
+                      ? "ring-2 ring-slate-900 ring-offset-2 scale-110 shadow-xs"
+                      : "hover:opacity-90"
+                  }`}
+                >
+                  {isSelected && <Check size={10} className="text-white drop-shadow-xs" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="submit"
+            className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-blue-200/80 py-2.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-300"
+          >
+            <Plus size={14} />
+            Add Status
+          </button>
+        </form>
+
         {confirmDelete && (
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-rose-50 px-3.5 py-2 text-xs text-rose-700">
-            <span>Delete custom status <strong>{confirmDelete}</strong>?</span>
+          <div className="flex items-center justify-between rounded-xl bg-rose-50 px-3.5 py-2 text-xs text-rose-700">
+            <span>Delete status <strong>{confirmDelete}</strong>?</span>
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -318,25 +311,29 @@ export function AddCustomStatusModal({
               <button
                 type="button"
                 onClick={() => handleDelete(confirmDelete)}
-                className="rounded-lg bg-rose-600 px-2.5 py-1 font-semibold text-white shadow-sm hover:bg-rose-700"
+                className="rounded-lg bg-rose-600 px-2.5 py-1 font-semibold text-white shadow-xs hover:bg-rose-700"
               >
-                Confirm Delete
+                Delete
               </button>
             </div>
           </div>
         )}
 
-        {/* Footer */}
-        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-          <p className="text-[11px] text-slate-400">
-            💡 Drag pills directly in the filter bar or columns to reorder anytime.
-          </p>
+        {/* Modal Action Buttons */}
+        <div className="flex items-center justify-end gap-3 pt-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            className="rounded-2xl border border-slate-200/80 px-6 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
           >
-            Done
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl bg-[#1E293B] px-8 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-slate-800"
+          >
+            Save
           </button>
         </div>
       </div>

@@ -2,26 +2,61 @@
 
 import { Loader2, SlidersHorizontal, Zap } from "lucide-react";
 import { useState } from "react";
+import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
+import type { CustomStatusConfig, StatusThemeColor } from "./statusUtils";
 import { atomizeGoal } from "@/services/auth.service";
+import { delegateSubtasksHeuristically } from "@/utils/heuristicDelegation";
+import type { OrganizationMember } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 
-const STATUS_OPTIONS: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
+const DEFAULT_STATUS_LIST: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
 type AtomizerFormProps = {
   events: Event[];
-  onPublishGoalTasks?: (targetEventId: string, publishedTasks: Task[]) => void;
+  members?: OrganizationMember[];
+  onPublishGoalTasks?: (
+    targetEventId: string,
+    publishedTasks: Task[],
+    newEventDetails?: { title: string; description: string }
+  ) => void;
 };
 
-export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) {
+export function AtomizerForm({ events, members = [], onPublishGoalTasks }: AtomizerFormProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const [selectedEventId, setSelectedEventId] = useState("");
+  const [isCreateFromDescription, setIsCreateFromDescription] = useState(false);
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>("To Do");
   const [goalDescription, setGoalDescription] = useState("");
   const [isAtomizing, setIsAtomizing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [activeGoalDraft, setActiveGoalDraft] = useState<GoalDraft | null>(null);
+
+  // Manage Statuses Modal State
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
+  const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_STATUS_LIST);
+
+  function handleAddStatus(name: string, color: StatusThemeColor, insertIndex?: number) {
+    const newConfig: CustomStatusConfig = { name, color };
+    setCustomStatuses((prev) => [...prev, newConfig]);
+    setStatusOrder((prev) => {
+      const idx = typeof insertIndex === "number" ? insertIndex : prev.length;
+      const copy = [...prev];
+      copy.splice(idx, 0, name);
+      return copy;
+    });
+  }
+
+  function handleReorderStatusOrder(newOrder: string[]) {
+    setStatusOrder(newOrder);
+  }
+
+  function handleDeleteStatus(name: string) {
+    setCustomStatuses((prev) => prev.filter((s) => s.name !== name));
+    setStatusOrder((prev) => prev.filter((s) => s !== name));
+  }
 
   async function handleAtomize() {
     if (!goalDescription.trim()) return;
@@ -35,7 +70,11 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
 
     try {
       const selectedEvent = events.find((e) => e.id === selectedEventId);
-      const eventName = selectedEvent ? selectedEvent.title : "Culture Week";
+      const eventName = isCreateFromDescription
+        ? "New Event from Atomizer"
+        : selectedEvent
+          ? selectedEvent.title
+          : "Culture Week";
 
       const data = await atomizeGoal(firebaseUser, {
         eventName,
@@ -43,11 +82,11 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
         defaultStatus
       });
 
-      const generatedSubtasks: Subtask[] = data.tasks.map((item, idx) => ({
+      const rawSubtasks: Subtask[] = data.tasks.map((item, idx) => ({
         id: `subtask-ai-${Date.now()}-${idx}`,
         title: item.title,
-        description: `Actionable subtask breakdown for ${eventName}. Priority: ${item.priority}. Suggested lead: ${item.assigneeName}.`,
-        assigneeName: item.assigneeName || (idx % 2 === 0 ? "Luis Garcia" : "Beatrice Lim"),
+        description: `Actionable subtask breakdown for ${eventName}. Priority: ${item.priority}.`,
+        assigneeName: item.assigneeName || "",
         requiredSkills:
           idx % 3 === 0
             ? ["Logistics", "Permits"]
@@ -62,12 +101,17 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
         status: defaultStatus
       }));
 
+      // Heuristically delegate subtasks to organization members with matching skills
+      const delegatedSubtasks = members && members.length > 0
+        ? delegateSubtasksHeuristically(rawSubtasks, members)
+        : rawSubtasks;
+
       const draft: GoalDraft = {
         id: `draft-${Date.now()}`,
         eventName,
         description: goalDescription.trim(),
         status: "Draft",
-        subtasks: generatedSubtasks,
+        subtasks: delegatedSubtasks,
         generationSource: "ai"
       };
 
@@ -79,15 +123,19 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
       setIsAtomizing(false);
     }
   }
+
   // If a goal draft is active, show SubtaskReviewScreen.
   if (activeGoalDraft) {
     return (
       <SubtaskReviewScreen
         goalDraft={activeGoalDraft}
+        members={members}
         onBack={() => setActiveGoalDraft(null)}
         onPublishGoal={(publishedGoal) => {
           setActiveGoalDraft(publishedGoal);
-          const targetId = selectedEventId || events[0]?.id || "culture-week";
+          const targetId = isCreateFromDescription
+            ? "CREATE_NEW"
+            : selectedEventId || events[0]?.id || "culture-week";
           const publishedTasks: Task[] = publishedGoal.subtasks.map((st) => ({
             id: st.id,
             title: st.title,
@@ -96,9 +144,9 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
             priority: st.priority,
             dueDate: "Aug 30",
             assignee: {
-              initials: st.assigneeName ? st.assigneeName.split(" ").map((n) => n[0]).join("") : "LG",
+              initials: st.assigneeName && st.assigneeName !== "Unassigned" ? st.assigneeName.split(" ").map((n) => n[0]).join("") : "UA",
               color: "bg-[#1e3a5f]",
-              name: st.assigneeName || "Luis Garcia"
+              name: st.assigneeName || "Unassigned"
             },
             requiredSkills: st.requiredSkills,
             isLeaderOnly: st.isLeaderOnly,
@@ -106,7 +154,13 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
           }));
 
           if (onPublishGoalTasks) {
-            onPublishGoalTasks(targetId, publishedTasks);
+            onPublishGoalTasks(
+              targetId,
+              publishedTasks,
+              isCreateFromDescription
+                ? { title: "New Event from Atomizer", description: goalDescription }
+                : undefined
+            );
           }
         }}
       />
@@ -143,22 +197,32 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
               <label className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
                 Target Event <span className="text-rose-500">*</span>
               </label>
-              <button type="button" className="text-xs font-medium text-blue-600 hover:underline">
-                + Create from Description
+              <button
+                type="button"
+                onClick={() => setIsCreateFromDescription((prev) => !prev)}
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
+                {isCreateFromDescription ? "Select Existing Event" : "+ Create from Description"}
               </button>
             </div>
-            <select
-              value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-            >
-              <option value="">— Select an event —</option>
-              {events.map((ev) => (
-                <option key={ev.id} value={ev.id}>
-                  {ev.title} ({ev.status})
-                </option>
-              ))}
-            </select>
+            {isCreateFromDescription ? (
+              <div className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-800">
+                New Event from Atomizer (Planning)
+              </div>
+            ) : (
+              <select
+                value={selectedEventId}
+                onChange={(e) => setSelectedEventId(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">— Select an event —</option>
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.title} ({ev.status})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Default Task Status */}
@@ -167,7 +231,11 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
               <label className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
                 Default Task Status
               </label>
-              <button type="button" className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline">
+              <button
+                type="button"
+                onClick={() => setIsManageModalOpen(true)}
+                className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+              >
                 <SlidersHorizontal size={13} />
                 Manage
               </button>
@@ -177,7 +245,7 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
               onChange={(e) => setDefaultStatus(e.target.value as TaskStatus)}
               className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
-              {STATUS_OPTIONS.map((s) => (
+              {statusOrder.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
@@ -221,6 +289,19 @@ export function AtomizerForm({ events, onPublishGoalTasks }: AtomizerFormProps) 
           </button>
         </div>
       </div>
+
+      {/* Manage Task Statuses Modal */}
+      <AddCustomStatusModal
+        isOpen={isManageModalOpen}
+        onClose={() => setIsManageModalOpen(false)}
+        type="task"
+        customStatuses={customStatuses}
+        statusOrder={statusOrder}
+        defaultStatuses={DEFAULT_STATUS_LIST}
+        onAddStatus={handleAddStatus}
+        onReorderStatusOrder={handleReorderStatusOrder}
+        onDeleteStatus={handleDeleteStatus}
+      />
     </div>
   );
 }

@@ -67,6 +67,15 @@ export function TopHeader({
   });
   const [liveOrganizationName, setLiveOrganizationName] = useState(organizationName);
 
+  const fallbackNameRef = useRef(name);
+  const fallbackRoleRef = useRef(role);
+  useEffect(() => {
+    fallbackNameRef.current = name;
+  }, [name]);
+  useEffect(() => {
+    fallbackRoleRef.current = role;
+  }, [role]);
+
   // Sync state when incoming props update
   useEffect(() => {
     if (name && name !== "User") {
@@ -98,8 +107,11 @@ export function TopHeader({
         const liveRole =
           data.role === "Admin" || data.role === "Student Leader" || data.role === "Organization Member"
             ? data.role
-            : role;
-        const liveName = typeof data.fullName === "string" && data.fullName.trim() ? data.fullName : name;
+            : fallbackRoleRef.current;
+        const liveName =
+          typeof data.fullName === "string" && data.fullName.trim()
+            ? data.fullName
+            : fallbackNameRef.current;
         const liveOrgId = typeof data.organizationId === "string" ? data.organizationId : null;
         const liveOrgName =
           typeof data.organizationName === "string" && data.organizationName.trim()
@@ -123,7 +135,7 @@ export function TopHeader({
     );
 
     return () => unsubscribe();
-  }, [name, role, userId]);
+  }, [userId]);
 
   // Fallback: If organizationId is present but organizationName is not yet set, fetch via API
   useEffect(() => {

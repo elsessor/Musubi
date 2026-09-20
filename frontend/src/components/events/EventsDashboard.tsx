@@ -154,7 +154,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
     } catch {}
   }
 
-  function handleAddCustomStatus(statusName: string, color: StatusThemeColor) {
+  function handleAddCustomStatus(statusName: string, color: StatusThemeColor, insertIndex?: number) {
     if (
       customStatuses.some((cs) => cs.name.toLowerCase() === statusName.toLowerCase()) ||
       DEFAULT_EVENT_STATUSES.some((ds) => ds.toLowerCase() === statusName.toLowerCase())
@@ -163,7 +163,9 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
     }
     const updated = [...customStatuses, { name: statusName, color }];
     setCustomStatuses(updated);
-    const updatedOrder = [...statusOrder, statusName];
+    const updatedOrder = [...statusOrder];
+    const idx = typeof insertIndex === "number" ? insertIndex : updatedOrder.length;
+    updatedOrder.splice(idx, 0, statusName);
     setStatusOrder(updatedOrder);
     try {
       localStorage.setItem("musubi_custom_event_statuses", JSON.stringify(updated));
