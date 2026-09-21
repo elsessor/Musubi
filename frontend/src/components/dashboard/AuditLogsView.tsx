@@ -138,6 +138,11 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
     return logs.filter((log) => {
       // Scope to organization for student leaders & organization members
       if (profile?.role !== "Admin") {
+        const lowerAction = (log.action ?? "").toLowerCase();
+        const lowerCat = (log.actionCategory ?? "").toLowerCase();
+        if (lowerAction.includes("signed in") || lowerAction.includes("login") || lowerCat.includes("security")) {
+          return false;
+        }
         if (log.orgId && profile?.organizationId && log.orgId !== profile.organizationId) {
           return false;
         }

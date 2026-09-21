@@ -189,7 +189,7 @@ export function TopHeader({
   const displayOrg =
     liveOrganizationName || organizationName || (liveUser.role === "Admin" ? "University Campus" : "University Student Council");
   const subtitle = liveUser.role === "Admin" ? "Administrative Console" : `${displayOrg} · ${academicYear} · ${greetingDate}`;
-  const effectiveNotificationCount = unreadCount !== null ? unreadCount : notificationCount;
+  const effectiveNotificationCount = unreadCount !== null ? unreadCount : (notificationCount || 0);
 
   return (
     <header className="sticky top-0 z-20 flex h-24 shrink-0 items-center justify-between border-b border-slate-200/70 bg-slate-100/80 px-4 backdrop-blur sm:px-8">

@@ -167,6 +167,11 @@ export function subscribeNotificationsFirestore(
 
         const category = typeof data.actionCategory === "string" ? data.actionCategory : "";
         const action = typeof data.action === "string" ? data.action : "System activity";
+
+        // Skip sign-in logs for notifications
+        if (category === "Security & Access" || action.toLowerCase().includes("signed in") || action.toLowerCase().includes("login")) {
+          return;
+        }
         const actorName = typeof data.actorName === "string" ? data.actorName : "System";
         const targetName = typeof data.targetName === "string" ? data.targetName : "";
 

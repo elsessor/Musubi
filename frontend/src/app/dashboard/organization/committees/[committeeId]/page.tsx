@@ -91,7 +91,7 @@ export default function CommitteePage() {
   };
 
   return (
-    <DashboardLayout activeNavId="organization" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems(profile.role)} notificationCount={2} onLogout={logout} user={user}>
+    <DashboardLayout activeNavId="organization" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems(profile.role)} notificationCount={0} onLogout={logout} user={user}>
       <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
         <Link href="/dashboard/organization" className="inline-flex items-center gap-2 text-sm font-semibold text-[#2868ed] hover:text-blue-700">
           <ArrowLeft className="size-4" />
