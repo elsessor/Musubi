@@ -972,10 +972,35 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
   const snap = await docRef.get();
   if (!snap.exists) throw new AppError("Event not found.", 404);
 
+  const beforeData = snap.data() ?? {};
   const updatePayload: Record<string, any> = { ...input, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() };
   delete updatePayload.id;
 
   await docRef.update(updatePayload);
+
+  let actionMsg = `Updated event "${beforeData.title || "Event"}"`;
+  if (Array.isArray(input.tasks) && Array.isArray(beforeData.tasks)) {
+    const newlyCompleted = input.tasks.filter(
+      (t: any) =>
+        (t.status === "Done" || t.status === "Completed") &&
+        !beforeData.tasks.some((bt: any) => (bt.id === t.id || bt.title === t.title) && (bt.status === "Done" || bt.status === "Completed"))
+    );
+    if (newlyCompleted.length > 0) {
+      const taskTitles = newlyCompleted.map((t: any) => t.title || t.description || "Subtask").join(", ");
+      actionMsg = `Completed subtask: ${taskTitles}`;
+    }
+  }
+
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: actionMsg,
+    actionCategory: "Events & Tasks",
+    targetType: "Event Goal",
+    targetName: typeof beforeData.title === "string" ? beforeData.title : "Event",
+    orgId: user.organizationId ?? (typeof beforeData.orgId === "string" ? beforeData.orgId : null)
+  });
 
   return { success: true };
 }
