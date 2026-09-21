@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Search, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Search, X, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -13,9 +13,88 @@ import { useToastStore } from "@/store/toastStore";
 type Role = "leader" | "member";
 type Stage = "role" | "leader-check" | "organization" | "details" | "pending";
 
-const skills = ["Event Planning", "Coordination", "Documentation", "Communication", "Finance", "Budgeting", "Logistics", "Venue Management", "Design", "Photography", "Networking", "HR", "Scheduling", "Research", "Writing", "Social Media", "Video Editing", "Public Speaking"];
-const years = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "Graduate"];
-const positionOptions = ["President", "Vice President", "Secretary", "Treasurer", "Finance Officer", "Auditor", "Public Relations Officer", "Committee Chair", "Project Coordinator", "Team Lead", "Organization Member"];
+const skills = [
+  // Media, Design & Creative Writing
+  "Editing & Proofreading",
+  "Photography",
+  "Photo Editing",
+  "Video Editing",
+  "Videography",
+  "Graphic Design",
+  "UI/UX Design",
+  "Content Creation",
+  "Copywriting",
+  "Journalism & Reporting",
+  "Broadcasting",
+  "Publication & Layout Design",
+  "Scriptwriting",
+  "Illustration & Digital Art",
+  "Brand Identity Design",
+  "Social Media Management",
+
+  // Finance, Accounting & Business
+  "Finance",
+  "Financial Reporting",
+  "Budgeting",
+  "Auditing",
+  "Accounting",
+  "Bookkeeping",
+  "Sponsorship & Fundraising",
+  "Market Research",
+  "Business Planning",
+  "Risk Management",
+  "Project Management",
+  "Strategic Planning",
+  "Leadership",
+  "Team Building",
+
+  // Tech, Computing & Data
+  "Web Development",
+  "Mobile App Development",
+  "Software Engineering",
+  "Data Analysis & Visualization",
+  "Database Management",
+  "Cybersecurity & IT Support",
+  "Artificial Intelligence & ML",
+  "Systems Analysis",
+
+  // Engineering, Sciences & Math
+  "CAD & Technical Drawing",
+  "Circuit & Hardware Design",
+  "Statistical Analysis",
+  "Scientific Research",
+  "Laboratory Techniques",
+  "Environmental & Safety Management",
+
+  // Events, Operations & Hospitality
+  "Event Planning",
+  "Logistics & Supply Chain",
+  "Venue & Stage Operations",
+  "Audio/Visual Operations",
+  "Catering & Hospitality",
+  "Registration & Check-in",
+  "Protocol & Security",
+
+  // Legal, Governance, HR & Communication
+  "Parliamentary Procedure",
+  "Legal Research & Drafting",
+  "Policy Making",
+  "Conflict Resolution",
+  "HR & Membership",
+  "Communication",
+  "Public Speaking",
+  "Public Relations",
+  "Community Outreach",
+  "Documentation & Record Keeping",
+
+  // Education & Training
+  "Academic Tutoring & Mentorship",
+  "Curriculum & Module Design",
+  "Educational Technology"
+];
+const years = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
+const leaderPositionOptions = ["President", "Vice President", "Secretary", "Treasurer", "Finance Officer", "Auditor", "Public Relations Officer", "Committee Chair", "Project Coordinator", "Team Lead"];
+const memberPositionOptions = ["Organization Member", "Committee Member", "Project Member", "Volunteer", "Staff", "Associate", "Sub-committee Member"];
 const programOptions = [
   "Bachelor of Science in Accountancy",
   "Bachelor of Science in Accounting Information Management",
@@ -132,6 +211,17 @@ export default function OnboardingPage() {
   const [birthYear, setBirthYear] = useState("");
   const [error, setError] = useState("");
   const [isCompleting, setIsCompleting] = useState(false);
+
+  const activePositionOptions = useMemo(
+    () => (role === "leader" ? leaderPositionOptions : memberPositionOptions),
+    [role]
+  );
+
+  useEffect(() => {
+    if (role === "member" && leaderPositionOptions.includes(position)) {
+      setPosition("");
+    }
+  }, [role, position]);
 
   const availableOrganizations = useMemo(
     () => (organizations.length > 0 ? organizations : DEFAULT_DIRECTORY_ORGANIZATIONS),
@@ -327,10 +417,31 @@ export default function OnboardingPage() {
 
           {stage === "details" && <>
             <SectionTitle title="Tell us about yourself" description="Keep your profile current so your team can find the right people for each task." />
-            <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Your skills {role === "member" && <span className="text-red-500">*</span>}</label><p className="mt-1 text-xs text-slate-500">Select all that apply - used to match you with the right tasks.</p><div className="mt-3 flex flex-wrap gap-2">{skills.map((skill) => <button key={skill} type="button" onClick={() => { toggleSkill(skill); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${selectedSkills.includes(skill) ? "border-brand bg-brand text-white" : "border-slate-200 bg-[#f3f6fa] text-slate-600 hover:border-blue-300"}`}>{skill}</button>)}</div><div className="mt-4 flex gap-2"><input value={customSkill} onChange={(event) => setCustomSkill(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomSkill(); } }} className="onboarding-input h-10 flex-1" placeholder="Add another skill..." /><button type="button" onClick={addCustomSkill} disabled={!customSkill.trim()} className="h-10 rounded-xl bg-[#e8edf5] px-4 text-sm font-bold text-[#244775] transition hover:bg-[#dce5f2] disabled:cursor-not-allowed disabled:opacity-50">Add</button></div>{manualSkills.length > 0 && <div className="mt-3"><p className="text-xs font-semibold text-slate-500">Added skills</p><div className="mt-2 flex flex-wrap gap-2">{manualSkills.map((skill) => <button key={skill} type="button" onClick={() => removeManualSkill(skill)} className="rounded-full border border-brand bg-brand text-white px-3 py-1.5 text-xs font-bold transition hover:bg-[#193960]" aria-label={`Remove ${skill}`}>{skill} <span aria-hidden>×</span></button>)}</div></div>}</div>
+            <div className="mt-6">
+              <SkillsComboboxInput
+                selectedSkills={selectedSkills}
+                onToggleSkill={toggleSkill}
+                onAddSkill={(newSkill) => {
+                  if (!newSkill.trim()) return;
+                  const suggestedSkill = skills.find((item) => item.toLowerCase() === newSkill.trim().toLowerCase());
+                  const skillToAdd = suggestedSkill ?? newSkill.trim();
+                  setSelectedSkills((current) => current.some((item) => item.toLowerCase() === skillToAdd.toLowerCase()) ? current : [...current, skillToAdd]);
+                  if (!suggestedSkill) {
+                    setManualSkills((current) => current.some((item) => item.toLowerCase() === skillToAdd.toLowerCase()) ? current : [...current, skillToAdd]);
+                  }
+                }}
+                onRemoveSkill={(skill) => {
+                  setSelectedSkills((current) => current.filter((item) => item !== skill));
+                  setManualSkills((current) => current.filter((item) => item !== skill));
+                }}
+                allSkills={skills}
+                isRequired={role === "member"}
+                clearError={() => setError("")}
+              />
+            </div>
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Year level <span className="text-red-500">*</span></label><div className="mt-3 flex flex-wrap gap-2">{years.map((item) => <button key={item} type="button" onClick={() => { setYear(item); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${year === item ? "border-brand bg-brand text-white" : "border-slate-200 text-slate-600 hover:border-blue-300"}`}>{item}</button>)}</div></div>
             <div className="mt-5"><Field label="Program"><ComboboxInput value={program} onChange={(val) => { setProgram(val); setError(""); }} options={programOptions} placeholder="Choose or type your program" className="onboarding-input h-10 bg-white text-[13px] text-slate-900" /></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your program manually.</p></div>
-            <div className="mt-5"><Field label="Organization position"><ComboboxInput value={position} onChange={(val) => { setPosition(val); setError(""); }} options={positionOptions} placeholder="Choose or type your position" className="onboarding-input h-10 bg-white text-[13px] text-slate-900" /></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your position manually.</p></div>
+            <div className="mt-5"><Field label="Organization position"><ComboboxInput value={position} onChange={(val) => { setPosition(val); setError(""); }} options={activePositionOptions} placeholder="Choose or type your position" className="onboarding-input h-10 bg-white text-[13px] text-slate-900" /></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your position manually.</p></div>
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Birthdate</label><div className="mt-2 flex gap-2"><CustomSelect value={birthMonth} onChange={setBirthMonth} options={["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]} placeholder="Month" className="flex-1" /><CustomSelect value={birthDay} onChange={setBirthDay} options={Array.from({ length: 31 }, (_, index) => index + 1)} placeholder="Day" className="w-24" /><CustomSelect value={birthYear} onChange={setBirthYear} options={Array.from({ length: 60 }, (_, index) => new Date().getFullYear() - index)} placeholder="Year" className="w-28" /></div></div>
             <ErrorMessage message={error} />
             <div className="mt-7 flex gap-3"><SecondaryButton onClick={() => setStage("organization")}>Back</SecondaryButton><PrimaryButton onClick={submitDetails}>{isNewOrganization ? "Submit for review" : isJoiningOrganizationLater ? "Complete setup" : "Submit request"} <span aria-hidden>→</span></PrimaryButton></div>
@@ -516,3 +627,232 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
 function PrimaryButton({ children, onClick, disabled, className = "" }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; className?: string }) { return <Button type="button" disabled={disabled} onClick={onClick} className={`!h-[52px] flex-1 rounded-xl bg-[#244775] text-[16px] font-extrabold hover:bg-[#193960] disabled:bg-[#a7b5c8] ${className}`}>{children}</Button>; }
 function SecondaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) { return <button type="button" onClick={onClick} className="flex h-[52px] flex-1 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-50">{children}</button>; }
 function ErrorMessage({ message }: { message: string }) { return message ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600" role="alert">{message}</p> : null; }
+
+const popularSkills = [
+  "Editing & Proofreading",
+  "Photography",
+  "Video Editing",
+  "Graphic Design",
+  "Finance",
+  "Auditing",
+  "Event Planning",
+  "Social Media Management",
+  "Project Management",
+  "Public Speaking"
+];
+
+function SkillsComboboxInput({
+  selectedSkills,
+  onToggleSkill,
+  onAddSkill,
+  onRemoveSkill,
+  allSkills,
+  isRequired,
+  clearError
+}: {
+  selectedSkills: string[];
+  onToggleSkill: (skill: string) => void;
+  onAddSkill: (skill: string) => void;
+  onRemoveSkill: (skill: string) => void;
+  allSkills: string[];
+  isRequired: boolean;
+  clearError: () => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filteredSkills = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return allSkills;
+    return allSkills.filter((s) => s.toLowerCase().includes(q));
+  }, [allSkills, searchQuery]);
+
+  const exactMatchExists = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return allSkills.some((s) => s.toLowerCase() === q) || selectedSkills.some((s) => s.toLowerCase() === q);
+  }, [allSkills, selectedSkills, searchQuery]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function handleSelectSkill(skill: string) {
+    onToggleSkill(skill);
+    setSearchQuery("");
+    clearError();
+  }
+
+  function handleAddCustom() {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+    onAddSkill(trimmed);
+    setSearchQuery("");
+    clearError();
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          Your skills {isRequired && <span className="text-red-500">*</span>}
+        </label>
+        <p className="mt-1 text-xs text-slate-500">
+          Search skills or select popular quick picks. Type custom skills if not listed.
+        </p>
+      </div>
+
+      {/* Popular Skills Quick Pills */}
+      <div>
+        <span className="text-[11px] font-semibold text-slate-400">Popular Quick-Select:</span>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {popularSkills.map((skill) => {
+            const isSelected = selectedSkills.includes(skill);
+            return (
+              <button
+                key={skill}
+                type="button"
+                onClick={() => handleSelectSkill(skill)}
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+                  isSelected
+                    ? "border-[#244775] bg-[#244775] text-white shadow-xs"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-slate-50"
+                }`}
+              >
+                {isSelected ? "✓ " : "+ "}
+                {skill}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Searchable Combobox & Tag Box */}
+      <div ref={containerRef} className="relative w-full">
+        <div
+          onClick={() => {
+            setIsOpen(true);
+            inputRef.current?.focus();
+          }}
+          className={`flex min-h-[46px] w-full flex-wrap items-center gap-1.5 rounded-xl border bg-white p-2 transition cursor-text ${
+            isOpen ? "border-[#244775] ring-2 ring-[#244775]/15" : "border-slate-200 hover:border-blue-300"
+          }`}
+        >
+          <Search className="size-4 shrink-0 text-slate-400 ml-1" />
+
+          {/* Selected Tag Badges */}
+          {selectedSkills.map((skill) => (
+            <span
+              key={skill}
+              className="inline-flex items-center gap-1 rounded-lg bg-[#e8edf5] px-2.5 py-1 text-xs font-bold text-[#193960]"
+            >
+              <span>{skill}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveSkill(skill);
+                  clearError();
+                }}
+                className="rounded p-0.5 text-slate-500 hover:bg-[#d5e0f0] hover:text-slate-900"
+                aria-label={`Remove ${skill}`}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+
+          {/* Input field */}
+          <input
+            ref={inputRef}
+            type="text"
+            value={searchQuery}
+            onFocus={() => setIsOpen(true)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setIsOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (searchQuery.trim()) {
+                  const match = filteredSkills.find((s) => s.toLowerCase() === searchQuery.trim().toLowerCase());
+                  if (match) {
+                    handleSelectSkill(match);
+                  } else {
+                    handleAddCustom();
+                  }
+                }
+              }
+            }}
+            placeholder={selectedSkills.length === 0 ? "Type to search skills or enter custom..." : "Add more..."}
+            className="flex-1 min-w-[140px] bg-transparent text-[13px] text-slate-900 outline-none placeholder:text-slate-400 py-0.5 px-1"
+          />
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen((prev) => !prev);
+            }}
+            className="ml-auto text-slate-400 hover:text-slate-600 transition p-1"
+          >
+            <ChevronDown className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+
+        {/* Dropdown list */}
+        {isOpen && (
+          <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10 transition-all">
+            {searchQuery.trim() && !exactMatchExists && (
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleAddCustom();
+                }}
+                className="flex w-full items-center justify-between border-b border-slate-100 px-3.5 py-2.5 text-left text-[13px] font-medium text-[#244775] hover:bg-[#edf3fc]"
+              >
+                <span>Add custom skill: &quot;{searchQuery.trim()}&quot;</span>
+                <span className="rounded bg-[#244775] px-2 py-0.5 text-[11px] font-bold text-white">+ Add</span>
+              </button>
+            )}
+
+            {filteredSkills.length > 0 ? (
+              filteredSkills.map((skill) => {
+                const isSelected = selectedSkills.includes(skill);
+                return (
+                  <button
+                    key={skill}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSelectSkill(skill);
+                    }}
+                    className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-[13px] transition ${
+                      isSelected
+                        ? "bg-[#edf3fc] font-semibold text-[#1d3b63]"
+                        : "text-slate-700 hover:bg-[#f3f6fa] hover:text-[#12213a]"
+                    }`}
+                  >
+                    <span>{skill}</span>
+                    {isSelected && <Check className="size-3.5 text-[#244775]" />}
+                  </button>
+                );
+              })
+            ) : !searchQuery.trim() ? (
+              <p className="px-3.5 py-2.5 text-xs text-slate-400">Type to search skills...</p>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

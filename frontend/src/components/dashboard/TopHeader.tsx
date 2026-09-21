@@ -125,8 +125,10 @@ export function TopHeader({
           organizationId: liveOrgId
         });
 
-        if (liveOrgName) {
+        if (liveOrgName && liveOrgId) {
           setLiveOrganizationName(liveOrgName);
+        } else if (!liveOrgId) {
+          setLiveOrganizationName("");
         }
       },
       (error) => {
@@ -176,13 +178,22 @@ export function TopHeader({
     };
   }, []);
 
-  const displayOrg =
-    liveOrganizationName || organizationName || (liveUser.role === "Admin" ? "University Campus" : "University Student Council");
+  const hasJoinedOrg = Boolean(
+    liveUser.role !== "Admin" &&
+    liveUser.organizationId &&
+    (liveOrganizationName?.trim() || organizationName?.trim())
+  );
+  const displayOrg = hasJoinedOrg
+    ? (liveOrganizationName?.trim() || organizationName?.trim() || "")
+    : liveUser.role === "Admin"
+    ? "University Campus"
+    : "";
+
   const subtitle =
     liveUser.role === "Admin"
       ? `University Campus · ${greetingDate}`
       : [
-          `${displayOrg}${academicYear ? ` · ${academicYear}` : ""}`,
+          displayOrg ? `${displayOrg}${academicYear ? ` · ${academicYear}` : ""}` : academicYear,
           greetingDate
         ]
           .filter(Boolean)
