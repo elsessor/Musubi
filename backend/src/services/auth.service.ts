@@ -47,12 +47,14 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
   if (snapshot.exists) {
     const data = snapshot.data() ?? {};
     let orgName = typeof data.organizationName === "string" && data.organizationName.trim() ? data.organizationName : null;
-    if (!orgName && typeof data.organizationId === "string" && data.organizationId.trim()) {
+    if (typeof data.organizationId === "string" && data.organizationId.trim()) {
       try {
         const orgDoc = await firestore.collection("organizations").doc(data.organizationId).get();
-        if (orgDoc.exists && typeof orgDoc.data()?.name === "string") {
+        if (orgDoc.exists && typeof orgDoc.data()?.name === "string" && orgDoc.data()?.name.trim()) {
           orgName = orgDoc.data()?.name;
-          await userRef.update({ organizationName: orgName });
+          if (data.organizationName !== orgName) {
+            await userRef.update({ organizationName: orgName });
+          }
         }
       } catch (err) {
         console.error("[getOrCreateUserDocument] Error syncing organizationName:", err);
@@ -163,7 +165,24 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     throw new AppError("User profile was not found.", 404);
   }
 
-  const user = normalizeUserDocument(uid, snapshot.data() ?? {});
+  const data = snapshot.data() ?? {};
+  let orgName = typeof data.organizationName === "string" && data.organizationName.trim() ? data.organizationName : null;
+  if (typeof data.organizationId === "string" && data.organizationId.trim()) {
+    try {
+      const orgDoc = await firestore.collection("organizations").doc(data.organizationId).get();
+      if (orgDoc.exists && typeof orgDoc.data()?.name === "string" && orgDoc.data()?.name.trim()) {
+        const latestOrgName = orgDoc.data()?.name;
+        if (data.organizationName !== latestOrgName) {
+          orgName = latestOrgName;
+          await snapshot.ref.update({ organizationName: latestOrgName });
+        }
+      }
+    } catch (err) {
+      console.error("[getCurrentUser] Error syncing organizationName:", err);
+    }
+  }
+
+  const user = normalizeUserDocument(uid, { ...data, organizationName: orgName });
 
   return {
     uid: user.uid,
@@ -492,7 +511,22 @@ export async function updateOrganizationForAdmin(uid: string, organizationId: st
   const before = await ref.get();
   if (!before.exists) throw new AppError("Organization was not found.", 404);
   const update: Record<string, unknown> = { updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() };
-  if (input.name !== undefined) update.name = input.name.trim();
+  if (input.name !== undefined) {
+    const newOrgName = input.name.trim();
+    update.name = newOrgName;
+    try {
+      const usersSnap = await firestore.collection("users").where("organizationId", "==", organizationId).get();
+      if (!usersSnap.empty) {
+        const batch = firestore.batch();
+        usersSnap.docs.forEach((userDoc) => {
+          batch.update(userDoc.ref, { organizationName: newOrgName });
+        });
+        await batch.commit();
+      }
+    } catch (err) {
+      console.error("[updateOrganizationForAdmin] Error updating user organizationNames:", err);
+    }
+  }
   if (input.type !== undefined) update.type = input.type.trim();
   if (input.description !== undefined) update.description = input.description.trim();
   if (input.setupStatus !== undefined) update.setupStatus = input.setupStatus;

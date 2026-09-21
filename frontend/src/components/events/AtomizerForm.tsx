@@ -1,7 +1,7 @@
 "use client";
 
-import { Loader2, SlidersHorizontal, Zap } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronDown, Loader2, SlidersHorizontal, Zap } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
@@ -12,6 +12,180 @@ import type { OrganizationMember } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 
 const DEFAULT_STATUS_LIST: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
+
+function ModernStatusDropdown({
+  value,
+  onChange,
+  options
+}: {
+  value: string;
+  onChange: (val: TaskStatus) => void;
+  options: string[];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "To Do":
+        return { bg: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" };
+      case "In Progress":
+        return { bg: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" };
+      case "In Review":
+        return { bg: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" };
+      case "Completed":
+        return { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" };
+      default:
+        return { bg: "bg-slate-100 text-slate-700 border-slate-200", dot: "bg-slate-400" };
+    }
+  };
+
+  const activeBadge = getStatusBadge(value);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex h-11 w-full items-center justify-between rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 text-sm font-semibold text-slate-800 shadow-xs transition-all hover:border-blue-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+      >
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold ${activeBadge.bg}`}>
+            <span className={`size-1.5 rounded-full ${activeBadge.dot}`} />
+            {value}
+          </span>
+        </div>
+        <ChevronDown className={`size-4 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all">
+          {options.map((status) => {
+            const badge = getStatusBadge(status);
+            const isSelected = value === status;
+            return (
+              <button
+                key={status}
+                type="button"
+                onClick={() => {
+                  onChange(status as TaskStatus);
+                  setIsOpen(false);
+                }}
+                className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm font-semibold transition ${
+                  isSelected
+                    ? "bg-blue-50/80 text-blue-900 font-bold"
+                    : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold ${badge.bg}`}>
+                    <span className={`size-1.5 rounded-full ${badge.dot}`} />
+                    {status}
+                  </span>
+                </div>
+                {isSelected && <Check className="size-4 text-blue-600" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModernEventDropdown({
+  events,
+  value,
+  onChange
+}: {
+  events: Event[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedEvent = events.find((e) => e.id === value);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex h-11 w-full items-center justify-between rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 text-sm font-semibold text-slate-800 shadow-xs transition-all hover:border-blue-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+      >
+        <span className="truncate">
+          {selectedEvent ? `${selectedEvent.title} (${selectedEvent.status || "Planning"})` : "— Select an event —"}
+        </span>
+        <ChevronDown className={`size-4 shrink-0 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all">
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setIsOpen(false);
+            }}
+            className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm font-medium transition ${
+              !value ? "bg-blue-50/80 font-bold text-blue-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+            }`}
+          >
+            <span>— Select an event —</span>
+            {!value && <Check className="size-4 text-blue-600" />}
+          </button>
+          {events.map((ev) => {
+            const isSelected = value === ev.id;
+            return (
+              <button
+                key={ev.id}
+                type="button"
+                onClick={() => {
+                  onChange(ev.id);
+                  setIsOpen(false);
+                }}
+                className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm transition ${
+                  isSelected
+                    ? "bg-blue-50/80 font-bold text-blue-900"
+                    : "text-slate-700 font-semibold hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <span className="truncate">{ev.title}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                    {ev.status || "Planning"}
+                  </span>
+                </div>
+                {isSelected && <Check className="size-4 shrink-0 text-blue-600" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type AtomizerFormProps = {
   events: Event[];
@@ -118,7 +292,12 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
       setActiveGoalDraft(draft);
     } catch (err: unknown) {
       console.error("[Atomizer] Error running Genkit flow:", err);
-      setErrorMsg(err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.");
+      const rawMsg = err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.";
+      if (rawMsg.includes("429") || rawMsg.includes("quota") || rawMsg.includes("Too Many Requests")) {
+        setErrorMsg("Gemini API rate limit reached (5 requests/min on Free Tier). Please wait ~30 seconds before trying again.");
+      } else {
+        setErrorMsg(rawMsg);
+      }
     } finally {
       setIsAtomizing(false);
     }
@@ -210,18 +389,11 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
                 New Event from Atomizer (Planning)
               </div>
             ) : (
-              <select
+              <ModernEventDropdown
+                events={events}
                 value={selectedEventId}
-                onChange={(e) => setSelectedEventId(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="">— Select an event —</option>
-                {events.map((ev) => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.title} ({ev.status})
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedEventId}
+              />
             )}
           </div>
 
@@ -240,15 +412,11 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
                 Manage
               </button>
             </div>
-            <select
+            <ModernStatusDropdown
               value={defaultStatus}
-              onChange={(e) => setDefaultStatus(e.target.value as TaskStatus)}
-              className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-            >
-              {statusOrder.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+              onChange={setDefaultStatus}
+              options={statusOrder}
+            />
           </div>
         </div>
 

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
-import { X, Check } from "lucide-react";
+import { X, Check, ChevronDown } from "lucide-react";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { getFirebaseDb } from "@/firebase/config";
@@ -21,6 +21,80 @@ function greetingDate() {
     day: "numeric",
     year: "numeric"
   }).format(new Date());
+}
+
+const LEADER_POSITIONS = [
+  "President",
+  "Vice President",
+  "Secretary",
+  "Treasurer",
+  "Finance Officer",
+  "Auditor",
+  "Public Relations Officer",
+  "Committee Chair",
+  "Project Coordinator",
+  "Team Lead"
+];
+
+function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder = "Select position"
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setIsOpen((previous) => !previous)}
+        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-blue-100"
+      >
+        <span className="truncate">{value || placeholder}</span>
+        <ChevronDown className={`size-4 shrink-0 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg transition-all">
+          {options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => {
+                onChange(option);
+                setIsOpen(false);
+              }}
+              className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm font-semibold transition ${
+                value === option
+                  ? "bg-blue-50/80 text-[#2563eb]"
+                  : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <span>{option}</span>
+              {value === option && <Check className="size-4 text-[#2563eb]" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 type EditableField = "organizationName" | "fullName" | "email" | "position";
@@ -59,6 +133,19 @@ export default function DashboardSettingsPage() {
       router.replace("/sign-in");
     }
   }, [authLoading, profile, router]);
+
+  // Hydrate preferences from localStorage on mount
+  useEffect(() => {
+    const uid = profile?.uid ?? firebaseUser?.uid;
+    if (!uid) return;
+    try {
+      const saved = localStorage.getItem(`musubi_user_prefs_${uid}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setPrefs((prev) => ({ ...prev, ...parsed }));
+      }
+    } catch {}
+  }, [firebaseUser, profile]);
 
   // Real-time listener for user document in Firestore
   useEffect(() => {
@@ -234,19 +321,6 @@ export default function DashboardSettingsPage() {
       setSaving(false);
     }
   };
-
-  // Hydrate preferences from localStorage on mount
-  useEffect(() => {
-    const uid = profile?.uid ?? firebaseUser?.uid;
-    if (!uid) return;
-    try {
-      const saved = localStorage.getItem(`musubi_user_prefs_${uid}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setPrefs((prev) => ({ ...prev, ...parsed }));
-      }
-    } catch {}
-  }, [firebaseUser, profile]);
 
   const togglePref = async (key: keyof typeof prefs) => {
     const nextVal = !prefs[key];
@@ -490,14 +564,25 @@ export default function DashboardSettingsPage() {
                 <label className="block text-xs font-semibold text-slate-600">
                   {getFieldLabel(editingField)}
                 </label>
-                <input
-                  type="text"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-blue-100"
-                  placeholder={`Enter new ${getFieldLabel(editingField).toLowerCase()}`}
-                  autoFocus
-                />
+                {editingField === "position" ? (
+                  <div className="mt-1.5">
+                    <CustomSelect
+                      value={editValue}
+                      onChange={(val) => setEditValue(val)}
+                      options={LEADER_POSITIONS}
+                      placeholder="Select position"
+                    />
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-blue-100"
+                    placeholder={`Enter new ${getFieldLabel(editingField).toLowerCase()}`}
+                    autoFocus
+                  />
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-2">

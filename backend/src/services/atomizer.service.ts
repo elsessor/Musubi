@@ -49,16 +49,48 @@ Guidelines:
 5. Calculate a realistic AI Match Score (between 65% and 98%) reflecting suitability.
 `;
 
-    const { output } = await ai.generate({
-      prompt,
-      output: { schema: AtomizeGoalOutputSchema }
-    });
+    const candidateModels = [
+      "googleai/gemini-3.6-flash",
+      "googleai/gemini-3.5-flash",
+      "googleai/gemini-3.5-flash-lite",
+      "googleai/gemini-3.7-flash",
+      "googleai/gemini-flash-latest"
+    ];
 
-    if (!output) {
-      throw new Error("Genkit AI model returned an empty response.");
+    let lastError: unknown = null;
+
+    // Helper delay for rate limit / service unavailable retries
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    for (const model of candidateModels) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const { output } = await ai.generate({
+            model,
+            prompt,
+            output: { schema: AtomizeGoalOutputSchema }
+          });
+          if (output) return output;
+        } catch (err) {
+          lastError = err;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.warn(`[Atomizer] Model ${model} attempt ${attempt} failed:`, errMsg);
+          
+          if (errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("Quota")) {
+            await delay(1500 * attempt);
+          } else {
+            // Non-transient error for this model (e.g. 404 or unsupported), skip to next model
+            break;
+          }
+        }
+      }
     }
 
-    return output;
+    throw new Error(
+      lastError instanceof Error
+        ? `Genkit AI generation failed: ${lastError.message}`
+        : "Genkit AI model returned an empty response."
+    );
   }
 );
 

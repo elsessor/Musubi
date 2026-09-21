@@ -22,8 +22,11 @@ export function errorMiddleware(
   }
 
   const message = error instanceof Error ? error.message : "Internal server error.";
+  const isRateLimit = message.includes("429 Too Many Requests") || message.includes("Quota exceeded");
 
-  response.status(500).json({
-    message
+  response.status(isRateLimit ? 429 : 500).json({
+    message: isRateLimit
+      ? "Gemini AI API rate limit exceeded (Free Tier limit is 5 requests/min). Please wait ~30 seconds before trying again, or upgrade your API key billing."
+      : message
   });
 }
