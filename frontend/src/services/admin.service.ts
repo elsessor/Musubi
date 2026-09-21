@@ -19,7 +19,7 @@ export type AdminMemberItem = {
   id: string;
   name: string;
   organizationName: string;
-  role: "Leader" | "Member" | "Admin";
+  role: "Leader" | "Student Leader" | "Member" | "Organization Member" | "Admin";
   initials: string;
 };
 

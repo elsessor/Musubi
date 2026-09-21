@@ -237,6 +237,14 @@ export function DashboardPage() {
 
     if (Array.isArray(rawAuditLogs)) {
       rawAuditLogs.forEach((log) => {
+        const lowerAction = (log.action ?? "").toLowerCase();
+        const lowerCat = (log.actionCategory ?? "").toLowerCase();
+
+        // Skip sign-in logs for organization dashboard view
+        if (lowerAction.includes("signed in") || lowerAction.includes("login") || lowerCat.includes("security")) {
+          return;
+        }
+
         let title = log.action;
         if (log.targetName) {
           if (log.action.toLowerCase().includes(log.targetName.toLowerCase())) {
@@ -300,7 +308,7 @@ export function DashboardPage() {
       goals={goals}
       kpis={kpis}
       navItems={getDashboardNavItems(dashboardUser.role)}
-      notificationCount={2}
+      notificationCount={0}
       onLogout={logout}
       user={dashboardUser}
     />

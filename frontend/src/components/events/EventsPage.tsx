@@ -133,7 +133,7 @@ export function EventsPage() {
       goals={[]}
       kpis={[]}
       navItems={getDashboardNavItems(dashboardUser.role)}
-      notificationCount={2}
+      notificationCount={0}
       onLogout={logout}
       user={dashboardUser}
     >

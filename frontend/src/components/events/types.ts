@@ -51,6 +51,8 @@ export type Event = {
   progress: number; // 0–100
   committee?: string;
   tasks: Task[];
+  customStatuses?: import("./statusUtils").CustomStatusConfig[];
+  statusOrder?: string[];
 };
 
 // ── Generated task from atomizer ──────────────────────────────────────────────

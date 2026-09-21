@@ -7,7 +7,6 @@ import { doc, onSnapshot } from "firebase/firestore";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { getOrganization } from "@/services/auth.service";
-import { subscribeNotificationsFirestore } from "@/services/notifications.service";
 import { useAuthStore } from "@/store/authStore";
 import type { UserRole } from "@/types/auth";
 
@@ -33,9 +32,8 @@ function Avatar({ name, role }: { name: string; role: UserRole }) {
 
   return (
     <div
-      className={`relative flex size-12 items-center justify-center rounded-full text-base font-extrabold text-white ${
-        role === "Admin" ? "bg-[#ef2360]" : "bg-[#213f68]"
-      }`}
+      className={`relative flex size-12 items-center justify-center rounded-full text-base font-extrabold text-white ${role === "Admin" ? "bg-[#ef2360]" : "bg-[#213f68]"
+        }`}
     >
       {initials}
       {role !== "Admin" ? (
@@ -58,32 +56,36 @@ export function TopHeader({
 }: TopHeaderProps) {
   const router = useRouter();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [liveOrganizationName, setLiveOrganizationName] = useState(organizationName);
-  const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const fallbackNameRef = useRef(name);
-  const fallbackRoleRef = useRef(role);
-  const [liveUser, setLiveUser] = useState<{
-    name: string;
-    role: UserRole;
-    position: string;
-    organizationId: string | null;
-  }>({
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [liveUser, setLiveUser] = useState({
     name,
     role,
     position: "",
-    organizationId: null
+    organizationId: null as string | null
   });
+  const [liveOrganizationName, setLiveOrganizationName] = useState(organizationName);
 
+  const fallbackNameRef = useRef(name);
+  const fallbackRoleRef = useRef(role);
   useEffect(() => {
     fallbackNameRef.current = name;
-    setLiveUser((prev) => ({ ...prev, name }));
+  }, [name]);
+  useEffect(() => {
+    fallbackRoleRef.current = role;
+  }, [role]);
+
+  // Sync state when incoming props update
+  useEffect(() => {
+    if (name && name !== "User") {
+      setLiveUser((prev) => ({ ...prev, name }));
+    }
   }, [name]);
 
   useEffect(() => {
-    fallbackRoleRef.current = role;
-    setLiveUser((prev) => ({ ...prev, role }));
+    if (role) {
+      setLiveUser((prev) => ({ ...prev, role }));
+    }
   }, [role]);
 
   useEffect(() => {
@@ -122,10 +124,8 @@ export function TopHeader({
           organizationId: liveOrgId
         });
 
-        if (liveOrgName && liveOrgId) {
+        if (liveOrgName) {
           setLiveOrganizationName(liveOrgName);
-        } else if (!liveOrgId) {
-          setLiveOrganizationName("");
         }
       },
       (error) => {
@@ -136,21 +136,9 @@ export function TopHeader({
     return () => unsubscribe();
   }, [userId]);
 
-  // Subscribe to live notifications for unread count badge
+  // Fallback: If organizationId is present but organizationName is not yet set, fetch via API
   useEffect(() => {
-    const authUser = firebaseUser ?? useAuthStore.getState().firebaseUser;
-    const unsubscribe = subscribeNotificationsFirestore(authUser, liveUser.organizationId, (notifs) => {
-      const count = notifs.filter((n) => n.unread).length;
-      setUnreadCount(count);
-    });
-    return () => {
-      if (typeof unsubscribe === "function") unsubscribe();
-    };
-  }, [firebaseUser, liveUser.organizationId]);
-
-  // Fetch organization name if organizationId exists but name is not yet set
-  useEffect(() => {
-    if (!liveUser.organizationId || liveUser.organizationId.startsWith("new-") || liveOrganizationName) return;
+    if (!liveUser.organizationId || liveOrganizationName) return;
 
     let cancelled = false;
     const authUser = firebaseUser ?? useAuthStore.getState().firebaseUser;
@@ -161,7 +149,7 @@ export function TopHeader({
             setLiveOrganizationName(org.name);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
 
     return () => {
@@ -187,43 +175,59 @@ export function TopHeader({
     };
   }, []);
 
-  const effectiveOrgName = (liveOrganizationName || organizationName || "").trim();
-  const isPendingOrgId = Boolean(liveUser.organizationId && liveUser.organizationId.startsWith("new-"));
+  const profile = useAuthStore((state) => state.profile);
+
+  useEffect(() => {
+    if (profile?.organizationId) {
+      setLiveUser((prev) => ({ ...prev, organizationId: profile.organizationId }));
+    }
+    if (profile?.organizationName && profile.organizationName.trim()) {
+      setLiveOrganizationName(profile.organizationName);
+    }
+  }, [profile?.organizationId, profile?.organizationName]);
+
+  const effectiveOrgId = liveUser.organizationId || profile?.organizationId || null;
+  const effectiveOrgName =
+    liveOrganizationName?.trim() ||
+    organizationName?.trim() ||
+    profile?.organizationName?.trim() ||
+    "";
+
   const hasJoinedOrg = Boolean(
     liveUser.role !== "Admin" &&
-    !isPendingOrgId &&
+    (effectiveOrgId || effectiveOrgName) &&
     effectiveOrgName
   );
+
   const displayOrg = hasJoinedOrg
     ? effectiveOrgName
     : liveUser.role === "Admin"
-    ? "University Campus"
-    : "";
+      ? "University Campus"
+      : "";
 
   const subtitle =
     liveUser.role === "Admin"
-      ? "Administrative Console"
+      ? `University Campus · ${greetingDate}`
       : [
-          displayOrg ? `${displayOrg}${academicYear ? ` · ${academicYear}` : ""}` : academicYear,
-          greetingDate
-        ]
-          .filter(Boolean)
-          .join(" · ");
-  const effectiveNotificationCount = unreadCount !== null ? unreadCount : notificationCount;
+        displayOrg ? `${displayOrg}${academicYear ? ` · ${academicYear}` : ""}` : academicYear,
+        greetingDate
+      ]
+        .filter(Boolean)
+        .join(" · ");
 
   return (
-    <header className="sticky top-0 z-20 flex h-24 shrink-0 items-center justify-between border-b border-slate-200/70 bg-slate-100/80 px-4 backdrop-blur sm:px-8">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-20 flex min-h-[76px] items-center justify-between gap-3 border-b border-slate-200/80 bg-[#f1f4f8]/95 px-4 py-4 backdrop-blur sm:px-6 lg:min-h-[108px] lg:px-9 lg:py-5">
+      <div className="flex min-w-0 items-center gap-3">
         <button
-          aria-label="Open menu"
-          className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 md:hidden"
+          aria-label="Open navigation"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-200 md:hidden"
           onClick={onMenuToggle}
           type="button"
         >
           <Menu className="size-6" />
         </button>
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-extrabold tracking-[-0.02em] text-[#12213a] sm:text-[25px]">
+          <h1 className="truncate text-xl font-extrabold tracking-[-0.02em] text-slate-900 sm:text-[25px]">
             {liveUser.role === "Admin"
               ? "Admin Dashboard"
               : `Welcome, ${liveUser.name}${liveUser.role === "Student Leader" ? " 👋" : ""}`}
@@ -236,17 +240,14 @@ export function TopHeader({
       <div className="flex shrink-0 items-center gap-3 sm:gap-5">
         {liveUser.role !== "Admin" ? (
           <button
-            aria-label={`Notifications ${effectiveNotificationCount}`}
-            onClick={() => router.push("/dashboard/notifications")}
+            aria-label={`Notifications ${notificationCount}`}
             className="relative flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:size-14 sm:rounded-[18px]"
             type="button"
           >
             <Bell className="size-5 sm:size-6" strokeWidth={1.75} />
-            {effectiveNotificationCount > 0 ? (
-              <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
-                {effectiveNotificationCount}
-              </span>
-            ) : null}
+            <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
+              {notificationCount}
+            </span>
           </button>
         ) : null}
         <div ref={menuRef} className="relative">

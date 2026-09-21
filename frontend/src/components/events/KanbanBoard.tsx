@@ -75,35 +75,42 @@ export function KanbanBoard({
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [statusModalTarget, setStatusModalTarget] = useState<"Completed" | "Cancelled" | null>(null);
 
-  // Custom task statuses state & localStorage
+  // Custom task statuses state & localStorage (scoped per event)
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
   const [isAddStatusModalOpen, setIsAddStatusModalOpen] = useState(false);
   const [draggedStatusPill, setDraggedStatusPill] = useState<string | null>(null);
   const [dragOverStatusPill, setDragOverStatusPill] = useState<string | null>(null);
 
-  const [statusOrder, setStatusOrder] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem("musubi_task_status_order");
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch {}
-    return DEFAULT_STATUSES;
-  });
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("musubi_custom_task_statuses");
-      if (saved) {
-        setCustomStatuses(JSON.parse(saved));
-      }
-    } catch {}
-  }, []);
+  const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_STATUSES);
 
   // Sync state if event prop changes
   useEffect(() => {
     setCurrentEvent(event);
     setTasks(event.tasks || []);
+
+    const loadedCustom = Array.isArray(event.customStatuses) && event.customStatuses.length > 0
+      ? event.customStatuses
+      : (() => {
+          try {
+            const saved = localStorage.getItem(`musubi_custom_task_statuses_${event.id}`);
+            return saved ? JSON.parse(saved) : [];
+          } catch {
+            return [];
+          }
+        })();
+    setCustomStatuses(loadedCustom);
+
+    const loadedOrder = Array.isArray(event.statusOrder) && event.statusOrder.length > 0
+      ? event.statusOrder
+      : (() => {
+          try {
+            const saved = localStorage.getItem(`musubi_task_status_order_${event.id}`);
+            return saved ? JSON.parse(saved) : DEFAULT_STATUSES;
+          } catch {
+            return DEFAULT_STATUSES;
+          }
+        })();
+    setStatusOrder(loadedOrder);
   }, [event]);
 
   // Synchronize statusOrder with customStatuses and defaultStatuses
@@ -122,17 +129,27 @@ export function KanbanBoard({
       }
       const updated = [...filtered, ...missingDefaults, ...missingCustom];
       try {
-        localStorage.setItem("musubi_task_status_order", JSON.stringify(updated));
+        if (currentEvent?.id) {
+          localStorage.setItem(`musubi_task_status_order_${currentEvent.id}`, JSON.stringify(updated));
+        }
       } catch {}
       return updated;
     });
-  }, [customStatuses]);
+  }, [customStatuses, currentEvent?.id]);
 
   function handleReorderStatusOrder(newOrder: string[]) {
     setStatusOrder(newOrder);
     try {
-      localStorage.setItem("musubi_task_status_order", JSON.stringify(newOrder));
+      if (currentEvent?.id) {
+        localStorage.setItem(`musubi_task_status_order_${currentEvent.id}`, JSON.stringify(newOrder));
+      }
     } catch {}
+    const updatedEvent = { ...currentEvent, statusOrder: newOrder };
+    setCurrentEvent(updatedEvent);
+    if (onUpdateEvent) onUpdateEvent(updatedEvent);
+    void updateEventFirestore(firebaseUser, currentEvent.id, { statusOrder: newOrder }).catch((err) => {
+      console.error("Failed to update status order in Firestore:", err);
+    });
   }
 
   function handleAddCustomStatus(statusName: string, color: StatusThemeColor, insertIndex?: number) {
@@ -149,9 +166,18 @@ export function KanbanBoard({
     updatedOrder.splice(idx, 0, statusName);
     setStatusOrder(updatedOrder);
     try {
-      localStorage.setItem("musubi_custom_task_statuses", JSON.stringify(updated));
-      localStorage.setItem("musubi_task_status_order", JSON.stringify(updatedOrder));
+      if (currentEvent?.id) {
+        localStorage.setItem(`musubi_custom_task_statuses_${currentEvent.id}`, JSON.stringify(updated));
+        localStorage.setItem(`musubi_task_status_order_${currentEvent.id}`, JSON.stringify(updatedOrder));
+      }
     } catch {}
+
+    const updatedEvent = { ...currentEvent, customStatuses: updated, statusOrder: updatedOrder };
+    setCurrentEvent(updatedEvent);
+    if (onUpdateEvent) onUpdateEvent(updatedEvent);
+    void updateEventFirestore(firebaseUser, currentEvent.id, { customStatuses: updated, statusOrder: updatedOrder }).catch((err) => {
+      console.error("Failed to update custom statuses in Firestore:", err);
+    });
   }
 
   function handleDeleteCustomStatus(statusName: string) {
@@ -160,12 +186,21 @@ export function KanbanBoard({
     setCustomStatuses(updated);
     setStatusOrder(updatedOrder);
     try {
-      localStorage.setItem("musubi_custom_task_statuses", JSON.stringify(updated));
-      localStorage.setItem("musubi_task_status_order", JSON.stringify(updatedOrder));
+      if (currentEvent?.id) {
+        localStorage.setItem(`musubi_custom_task_statuses_${currentEvent.id}`, JSON.stringify(updated));
+        localStorage.setItem(`musubi_task_status_order_${currentEvent.id}`, JSON.stringify(updatedOrder));
+      }
     } catch {}
     if (statusFilter === statusName) {
       setStatusFilter("All");
     }
+
+    const updatedEvent = { ...currentEvent, customStatuses: updated, statusOrder: updatedOrder };
+    setCurrentEvent(updatedEvent);
+    if (onUpdateEvent) onUpdateEvent(updatedEvent);
+    void updateEventFirestore(firebaseUser, currentEvent.id, { customStatuses: updated, statusOrder: updatedOrder }).catch((err) => {
+      console.error("Failed to update custom statuses in Firestore:", err);
+    });
   }
 
   function handleDropStatusPill(targetStatusName: string) {
