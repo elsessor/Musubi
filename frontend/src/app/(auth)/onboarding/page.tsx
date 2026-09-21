@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Search, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronRight, Search, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -314,7 +314,7 @@ export default function OnboardingPage() {
             </div>}
             {isNewOrganization ? <div className="mt-6 space-y-4">
               <Field label="Organization name"><input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} className="onboarding-input" placeholder="e.g. Computer Science Society" /></Field>
-              <Field label="Organization type"><select value={organizationType} onChange={(event) => setOrganizationType(event.target.value)} className="onboarding-input"><option value="">Select a type</option><option>Academic</option><option>Arts & Culture</option><option>Sports</option><option>Student Government</option><option>Community Service</option></select></Field>
+              <Field label="Organization type"><CustomSelect value={organizationType} onChange={setOrganizationType} options={["Academic", "Arts & Culture", "Sports", "Student Government", "Community Service"]} placeholder="Select a type" className="w-full" /></Field>
               <Field label="Organization description"><textarea value={organizationDescription} onChange={(event) => setOrganizationDescription(event.target.value)} className="onboarding-input min-h-24 h-auto py-3" placeholder="Describe your organization, its purpose, and planned activities." /></Field>
               <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">New organization registrations are reviewed by a Musubi administrator before activation.</p>
             </div> : <div className="mt-6">
@@ -329,9 +329,9 @@ export default function OnboardingPage() {
             <SectionTitle title="Tell us about yourself" description="Keep your profile current so your team can find the right people for each task." />
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Your skills {role === "member" && <span className="text-red-500">*</span>}</label><p className="mt-1 text-xs text-slate-500">Select all that apply - used to match you with the right tasks.</p><div className="mt-3 flex flex-wrap gap-2">{skills.map((skill) => <button key={skill} type="button" onClick={() => { toggleSkill(skill); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${selectedSkills.includes(skill) ? "border-brand bg-brand text-white" : "border-slate-200 bg-[#f3f6fa] text-slate-600 hover:border-blue-300"}`}>{skill}</button>)}</div><div className="mt-4 flex gap-2"><input value={customSkill} onChange={(event) => setCustomSkill(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomSkill(); } }} className="onboarding-input h-10 flex-1" placeholder="Add another skill..." /><button type="button" onClick={addCustomSkill} disabled={!customSkill.trim()} className="h-10 rounded-xl bg-[#e8edf5] px-4 text-sm font-bold text-[#244775] transition hover:bg-[#dce5f2] disabled:cursor-not-allowed disabled:opacity-50">Add</button></div>{manualSkills.length > 0 && <div className="mt-3"><p className="text-xs font-semibold text-slate-500">Added skills</p><div className="mt-2 flex flex-wrap gap-2">{manualSkills.map((skill) => <button key={skill} type="button" onClick={() => removeManualSkill(skill)} className="rounded-full border border-brand bg-brand text-white px-3 py-1.5 text-xs font-bold transition hover:bg-[#193960]" aria-label={`Remove ${skill}`}>{skill} <span aria-hidden>×</span></button>)}</div></div>}</div>
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Year level <span className="text-red-500">*</span></label><div className="mt-3 flex flex-wrap gap-2">{years.map((item) => <button key={item} type="button" onClick={() => { setYear(item); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${year === item ? "border-brand bg-brand text-white" : "border-slate-200 text-slate-600 hover:border-blue-300"}`}>{item}</button>)}</div></div>
-            <div className="mt-5"><Field label="Program"><input list="program-options" value={program} onChange={(event) => { setProgram(event.target.value); setError(""); }} className="onboarding-input h-10 bg-white text-[13px] text-slate-900 [color-scheme:light]" placeholder="Choose or type your program" /><datalist id="program-options">{programOptions.map((item) => <option key={item} value={item} />)}</datalist></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your program manually.</p></div>
-            <div className="mt-5"><Field label="Organization position"><input list="position-options" value={position} onChange={(event) => { setPosition(event.target.value); setError(""); }} className="onboarding-input h-10 bg-white text-[13px] text-slate-900 [color-scheme:light]" placeholder="Choose or type your position" /><datalist id="position-options">{positionOptions.map((item) => <option key={item} value={item} />)}</datalist></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your position manually.</p></div>
-            <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Birthdate</label><div className="mt-2 flex gap-2"><select value={birthMonth} onChange={(event) => setBirthMonth(event.target.value)} className="onboarding-input flex-1"><option value="">Month</option>{["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((month) => <option key={month}>{month}</option>)}</select><select value={birthDay} onChange={(event) => setBirthDay(event.target.value)} className="onboarding-input w-20"><option value="">Day</option>{Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <option key={day}>{day}</option>)}</select><select value={birthYear} onChange={(event) => setBirthYear(event.target.value)} className="onboarding-input w-28"><option value="">Year</option>{Array.from({ length: 60 }, (_, index) => new Date().getFullYear() - index).map((year) => <option key={year}>{year}</option>)}</select></div></div>
+            <div className="mt-5"><Field label="Program"><ComboboxInput value={program} onChange={(val) => { setProgram(val); setError(""); }} options={programOptions} placeholder="Choose or type your program" className="onboarding-input h-10 bg-white text-[13px] text-slate-900" /></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your program manually.</p></div>
+            <div className="mt-5"><Field label="Organization position"><ComboboxInput value={position} onChange={(val) => { setPosition(val); setError(""); }} options={positionOptions} placeholder="Choose or type your position" className="onboarding-input h-10 bg-white text-[13px] text-slate-900" /></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your position manually.</p></div>
+            <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Birthdate</label><div className="mt-2 flex gap-2"><CustomSelect value={birthMonth} onChange={setBirthMonth} options={["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]} placeholder="Month" className="flex-1" /><CustomSelect value={birthDay} onChange={setBirthDay} options={Array.from({ length: 31 }, (_, index) => index + 1)} placeholder="Day" className="w-24" /><CustomSelect value={birthYear} onChange={setBirthYear} options={Array.from({ length: 60 }, (_, index) => new Date().getFullYear() - index)} placeholder="Year" className="w-28" /></div></div>
             <ErrorMessage message={error} />
             <div className="mt-7 flex gap-3"><SecondaryButton onClick={() => setStage("organization")}>Back</SecondaryButton><PrimaryButton onClick={submitDetails}>{isNewOrganization ? "Submit for review" : isJoiningOrganizationLater ? "Complete setup" : "Submit request"} <span aria-hidden>→</span></PrimaryButton></div>
           </>}
@@ -341,6 +341,169 @@ export default function OnboardingPage() {
         {stage !== "pending" && <p className="mt-4 text-center text-xs font-medium text-slate-400">You can update these details anytime from your profile settings.</p>}
       </div>
     </main>
+  );
+}
+
+function ComboboxInput({
+  value,
+  onChange,
+  options,
+  placeholder,
+  className = ""
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: string[];
+  placeholder: string;
+  className?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filteredOptions = useMemo(() => {
+    const query = value.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter((option) => option.toLowerCase().includes(query));
+  }, [options, value]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          value={value}
+          onFocus={() => setIsOpen(true)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setIsOpen(true);
+          }}
+          className={`${className} pr-9`}
+          placeholder={placeholder}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setIsOpen((previous) => !previous)}
+          className="absolute right-2.5 text-slate-400 hover:text-slate-600 transition"
+        >
+          <ChevronDown className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+
+      {isOpen && filteredOptions.length > 0 && (
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10 transition-all">
+          {filteredOptions.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onChange(option);
+                setIsOpen(false);
+              }}
+              className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-[13px] transition ${
+                value === option
+                  ? "bg-[#edf3fc] font-semibold text-[#1d3b63]"
+                  : "text-slate-700 hover:bg-[#f3f6fa] hover:text-[#12213a]"
+              }`}
+            >
+              <span>{option}</span>
+              {value === option && <Check className="size-3.5 text-[#244775]" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  className = ""
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: (string | number)[];
+  placeholder: string;
+  className?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const stringOptions = useMemo(() => options.map(String), [options]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setIsOpen((previous) => !previous)}
+        className={`flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-[13px] transition hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-[#244775]/20 ${
+          value ? "font-medium text-slate-900" : "text-slate-400"
+        }`}
+      >
+        <span className="truncate">{value || placeholder}</span>
+        <ChevronDown className={`size-4 shrink-0 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10 transition-all">
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setIsOpen(false);
+            }}
+            className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-[13px] transition ${
+              !value ? "bg-[#edf3fc] font-semibold text-[#1d3b63]" : "text-slate-400 hover:bg-[#f3f6fa]"
+            }`}
+          >
+            <span>{placeholder}</span>
+            {!value && <Check className="size-3.5 text-[#244775]" />}
+          </button>
+          {stringOptions.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => {
+                onChange(option);
+                setIsOpen(false);
+              }}
+              className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-[13px] transition ${
+                value === option
+                  ? "bg-[#edf3fc] font-semibold text-[#1d3b63]"
+                  : "text-slate-700 hover:bg-[#f3f6fa] hover:text-[#12213a]"
+              }`}
+            >
+              <span>{option}</span>
+              {value === option && <Check className="size-3.5 text-[#244775]" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -38,6 +38,8 @@ import {
   type OrganizationCommitteeRecord,
   type OrganizationRecord
 } from "@/services/auth.service";
+import { subscribeEventsFirestore } from "@/services/events.service";
+import type { Event } from "@/components/events/types";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
 
@@ -76,6 +78,7 @@ export default function OrganizationPage() {
   const [accessModalOpen, setAccessModalOpen] = useState(false);
   const [committeeModalOpen, setCommitteeModalOpen] = useState(false);
   const [profileMember, setProfileMember] = useState<MemberRow | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
 
   useEffect(() => {
     if (!authLoading && !profile) router.replace("/sign-in");
@@ -108,6 +111,19 @@ export default function OrganizationPage() {
       if (typeof unsubscribe === "function") unsubscribe();
     };
   }, [profile?.organizationId]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile?.organizationId) {
+      setEvents([]);
+      return;
+    }
+    const unsubscribe = subscribeEventsFirestore(firebaseUser, profile.organizationId, (realtimeEvents) => {
+      setEvents(realtimeEvents);
+    });
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
+  }, [firebaseUser, profile?.organizationId]);
 
   useEffect(() => {
     if (!firebaseUser || profile?.role !== "Student Leader" || !profile.organizationId) { setJoinRequests([]); return; }
@@ -171,7 +187,7 @@ export default function OrganizationPage() {
           <TabButton active={activeTab === "announcements"} icon={Bell} label="Announcements" onClick={() => setActiveTab("announcements")} />
         </div>
 
-        {loading ? <LoadCard message="Loading organization profile..." /> : error ? <ErrorCard message={error} /> : !organization ? myJoinRequest ? <PendingJoinCard organizationName={myJoinRequest.organizationName} /> : <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." /> : activeTab === "overview" ? <Overview organization={organization} members={members} memberCount={members.length} firebaseUser={firebaseUser} onUpdate={setOrganization} onNavigateMembers={() => setActiveTab("members")} /> : activeTab === "members" ? <Members search={memberSearch} members={filteredMembers} onSearch={setMemberSearch} joinRequests={joinRequests} isLeader={profile.role === "Student Leader"} reviewingRequestId={reviewingRequestId} onReview={reviewJoinRequest} onViewProfile={setProfileMember} currentUserId={profile.uid} currentUserName={profile.fullName} /> : activeTab === "committees" ? <Committees committees={committees} members={members} canCreate={profile.role === "Student Leader"} onCreate={() => setCommitteeModalOpen(true)} currentUserId={profile.uid} currentUserName={profile.fullName} /> : <EmptyPanel tab={activeTab} />}
+        {loading ? <LoadCard message="Loading organization profile..." /> : error ? <ErrorCard message={error} /> : !organization ? myJoinRequest ? <PendingJoinCard organizationName={myJoinRequest.organizationName} /> : <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." /> : activeTab === "overview" ? <Overview organization={organization} members={members} memberCount={members.length} events={events} firebaseUser={firebaseUser} onUpdate={setOrganization} onNavigateMembers={() => setActiveTab("members")} /> : activeTab === "members" ? <Members search={memberSearch} members={filteredMembers} onSearch={setMemberSearch} joinRequests={joinRequests} isLeader={profile.role === "Student Leader"} reviewingRequestId={reviewingRequestId} onReview={reviewJoinRequest} onViewProfile={setProfileMember} currentUserId={profile.uid} currentUserName={profile.fullName} /> : activeTab === "committees" ? <Committees committees={committees} members={members} canCreate={profile.role === "Student Leader"} onCreate={() => setCommitteeModalOpen(true)} currentUserId={profile.uid} currentUserName={profile.fullName} /> : <EmptyPanel tab={activeTab} />}
       </section>
       {accessModalOpen && firebaseUser && profile.role !== "Admin" ? <OrganizationAccessModal role={profile.role} user={firebaseUser} onClose={() => setAccessModalOpen(false)} onComplete={(updatedProfile) => { setProfile({ ...profile, ...updatedProfile }); setOrganization(null); setMembers([]); setLoading(true); }} /> : null}
       {committeeModalOpen ? <CreateCommitteeModal members={members} onClose={() => setCommitteeModalOpen(false)} onCreate={createCommittee} /> : null}
@@ -188,6 +204,7 @@ function Overview({
   organization,
   members,
   memberCount,
+  events,
   firebaseUser,
   onUpdate,
   onNavigateMembers
@@ -195,10 +212,15 @@ function Overview({
   organization: OrganizationRecord;
   members: OrganizationMember[];
   memberCount: number;
+  events: Event[];
   firebaseUser: import("firebase/auth").User | null;
   onUpdate: (updated: OrganizationRecord) => void;
   onNavigateMembers: () => void;
 }) {
+  const doneGoalsCount = useMemo(() => events.filter((e) => e.status === "Completed").length, [events]);
+  const activeGoalsCount = useMemo(() => events.filter((e) => e.status === "Active").length, [events]);
+  const pendingGoalsCount = useMemo(() => events.filter((e) => e.status !== "Completed" && e.status !== "Active").length, [events]);
+
   return (
     <div className="mt-5 space-y-4">
       <article className="overflow-hidden rounded-2xl border border-[#d9e1ec] bg-white">
@@ -222,7 +244,7 @@ function Overview({
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-[#dce3ed] lg:grid-cols-4 lg:divide-y-0">
           <Stat value={String(memberCount)} label="Total Members" color="text-[#2868ed]" />
-          <Stat value="2" label="Active Goals" color="text-[#7c3aed]" />
+          <Stat value={String(activeGoalsCount)} label="Active Goals" color="text-[#7c3aed]" />
           <Stat
             value={typeof organization.organizationConfig.delegationMode === "string" ? organization.organizationConfig.delegationMode : "Heuristic"}
             label="Delegation"
@@ -294,17 +316,37 @@ function Overview({
       </div>
 
       <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white">
-        <div className="flex min-h-12 items-center justify-between gap-3 px-4 py-3">
+        <div className="flex min-h-12 items-center justify-between gap-3 px-4 py-3 border-b border-[#e5eaf1]">
           <div>
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">GOALS</h3>
             <p className="mt-0.5 text-[11px] text-slate-500">Organizational goals - managed in Goals &amp; Tasks</p>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-bold">
-            <span className="text-emerald-600">1 done</span>
-            <span className="text-blue-600">2 active</span>
-            <span className="text-amber-600">2 pending</span>
+            <span className="text-emerald-600">{doneGoalsCount} done</span>
+            <span className="text-blue-600">{activeGoalsCount} active</span>
+            <span className="text-amber-600">{pendingGoalsCount} pending</span>
           </div>
         </div>
+        {events.length > 0 ? (
+          <div className="divide-y divide-[#e5eaf1]">
+            {events.slice(0, 5).map((e) => {
+              const goalStatusLabel = e.status === "Completed" ? "Completed" : e.status === "Active" ? "In Progress" : "Pending";
+              return (
+                <div key={e.id} className="flex items-center justify-between px-4 py-3 text-xs">
+                  <div>
+                    <p className="font-semibold text-slate-800">{e.title}</p>
+                    {e.description && <p className="text-[11px] text-slate-500 line-clamp-1">{e.description}</p>}
+                  </div>
+                  <GoalStatus status={goalStatusLabel} />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="px-4 py-6 text-center text-xs font-medium text-slate-500">
+            No organizational goals set yet. Goals will appear here once created in Goals &amp; Tasks.
+          </div>
+        )}
       </article>
     </div>
   );
