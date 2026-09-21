@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { DashboardGoal } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
 
@@ -51,9 +52,9 @@ export function RecentGoals({ goals }: RecentGoalsProps) {
         <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
           Recent Goals
         </h2>
-        <a className="text-sm font-semibold text-blue-600 transition hover:text-blue-700" href="#">
+        <Link className="text-sm font-semibold text-blue-600 transition hover:text-blue-700" href="/dashboard/events">
           View All →
-        </a>
+        </Link>
       </div>
 
       {goals.length > 0 ? (

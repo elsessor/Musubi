@@ -114,7 +114,7 @@ export default function AnalyticsPage() {
       goals={[]}
       kpis={[]}
       navItems={getDashboardNavItems(profile.role)}
-      notificationCount={2}
+      notificationCount={0}
       onLogout={logout}
       user={user}
     >

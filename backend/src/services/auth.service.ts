@@ -902,9 +902,22 @@ function normalizeAuditLog(id: string, data: FirebaseFirestore.DocumentData): Au
 }
 
 export async function getAuditLogs(uid: string): Promise<AuditLogEntry[]> {
-  await requireAdmin(uid);
-  const snapshot = await firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200).get();
-  return snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+  const user = await getCurrentUser(uid);
+  let queryRef: FirebaseFirestore.Query = firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200);
+
+  if (user.role !== "Admin") {
+    if (!user.organizationId) return [];
+    queryRef = firestore.collection("audit_logs").where("orgId", "==", user.organizationId).limit(200);
+  }
+
+  const snapshot = await queryRef.get();
+  const logs = snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+  logs.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(String(a.createdAt)).getTime() : 0;
+    const timeB = b.createdAt ? new Date(String(b.createdAt)).getTime() : 0;
+    return timeB - timeA;
+  });
+  return logs;
 }
 
 export async function watchAuditLogs(
@@ -912,23 +925,33 @@ export async function watchAuditLogs(
   onData: (logs: AuditLogEntry[]) => void,
   onError: (error: Error) => void
 ): Promise<() => void> {
-  await requireAdmin(uid);
+  const user = await getCurrentUser(uid);
+  let queryRef: FirebaseFirestore.Query = firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200);
 
-  const unsubscribe = firestore
-    .collection("audit_logs")
-    .orderBy("createdAt", "desc")
-    .limit(200)
-    .onSnapshot(
-      (snapshot) => {
-        try {
-          const logs = snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
-          onData(logs);
-        } catch (error) {
-          onError(error instanceof Error ? error : new Error(String(error)));
-        }
-      },
-      (error) => onError(error)
-    );
+  if (user.role !== "Admin") {
+    if (!user.organizationId) {
+      onData([]);
+      return () => {};
+    }
+    queryRef = firestore.collection("audit_logs").where("orgId", "==", user.organizationId).limit(200);
+  }
+
+  const unsubscribe = queryRef.onSnapshot(
+    (snapshot) => {
+      try {
+        const logs = snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+        logs.sort((a, b) => {
+          const timeA = a.createdAt ? new Date(String(a.createdAt)).getTime() : 0;
+          const timeB = b.createdAt ? new Date(String(b.createdAt)).getTime() : 0;
+          return timeB - timeA;
+        });
+        onData(logs);
+      } catch (error) {
+        onError(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    (error) => onError(error)
+  );
 
   return unsubscribe;
 }
@@ -972,10 +995,35 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
   const snap = await docRef.get();
   if (!snap.exists) throw new AppError("Event not found.", 404);
 
+  const beforeData = snap.data() ?? {};
   const updatePayload: Record<string, any> = { ...input, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() };
   delete updatePayload.id;
 
   await docRef.update(updatePayload);
+
+  let actionMsg = `Updated event "${beforeData.title || "Event"}"`;
+  if (Array.isArray(input.tasks) && Array.isArray(beforeData.tasks)) {
+    const newlyCompleted = input.tasks.filter(
+      (t: any) =>
+        (t.status === "Done" || t.status === "Completed") &&
+        !beforeData.tasks.some((bt: any) => (bt.id === t.id || bt.title === t.title) && (bt.status === "Done" || bt.status === "Completed"))
+    );
+    if (newlyCompleted.length > 0) {
+      const taskTitles = newlyCompleted.map((t: any) => t.title || t.description || "Subtask").join(", ");
+      actionMsg = `Completed subtask: ${taskTitles}`;
+    }
+  }
+
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: actionMsg,
+    actionCategory: "Events & Tasks",
+    targetType: "Event Goal",
+    targetName: typeof beforeData.title === "string" ? beforeData.title : "Event",
+    orgId: user.organizationId ?? (typeof beforeData.orgId === "string" ? beforeData.orgId : null)
+  });
 
   return { success: true };
 }
