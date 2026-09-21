@@ -62,7 +62,6 @@ export function TopHeader({
   const [liveOrganizationName, setLiveOrganizationName] = useState(organizationName);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-
   const fallbackNameRef = useRef(name);
   const fallbackRoleRef = useRef(role);
   const [liveUser, setLiveUser] = useState<{
@@ -149,9 +148,9 @@ export function TopHeader({
     };
   }, [firebaseUser, liveUser.organizationId]);
 
-  // Fallback: If organizationId is present but organizationName is not yet set, fetch via API
+  // Fetch organization name if organizationId exists but name is not yet set
   useEffect(() => {
-    if (!liveUser.organizationId || liveOrganizationName) return;
+    if (!liveUser.organizationId || liveUser.organizationId.startsWith("new-") || liveOrganizationName) return;
 
     let cancelled = false;
     const authUser = firebaseUser ?? useAuthStore.getState().firebaseUser;
@@ -188,33 +187,29 @@ export function TopHeader({
     };
   }, []);
 
-<<<<<<< HEAD
+  const effectiveOrgName = (liveOrganizationName || organizationName || "").trim();
+  const isPendingOrgId = Boolean(liveUser.organizationId && liveUser.organizationId.startsWith("new-"));
   const hasJoinedOrg = Boolean(
     liveUser.role !== "Admin" &&
-    liveUser.organizationId &&
-    (liveOrganizationName?.trim() || organizationName?.trim())
+    !isPendingOrgId &&
+    effectiveOrgName
   );
   const displayOrg = hasJoinedOrg
-    ? (liveOrganizationName?.trim() || organizationName?.trim() || "")
+    ? effectiveOrgName
     : liveUser.role === "Admin"
     ? "University Campus"
     : "";
 
   const subtitle =
     liveUser.role === "Admin"
-      ? `University Campus · ${greetingDate}`
+      ? "Administrative Console"
       : [
           displayOrg ? `${displayOrg}${academicYear ? ` · ${academicYear}` : ""}` : academicYear,
           greetingDate
         ]
           .filter(Boolean)
           .join(" · ");
-=======
-  const displayOrg =
-    liveOrganizationName || organizationName || (liveUser.role === "Admin" ? "University Campus" : "University Student Council");
-  const subtitle = liveUser.role === "Admin" ? "Administrative Console" : `${displayOrg} · ${academicYear} · ${greetingDate}`;
   const effectiveNotificationCount = unreadCount !== null ? unreadCount : notificationCount;
->>>>>>> 6f6894af57f6e9856f5d93fddaecf253127b44d3
 
   return (
     <header className="sticky top-0 z-20 flex h-24 shrink-0 items-center justify-between border-b border-slate-200/70 bg-slate-100/80 px-4 backdrop-blur sm:px-8">
