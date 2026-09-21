@@ -136,6 +136,13 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
   // Filtering
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
+      // Scope to organization for student leaders & organization members
+      if (profile?.role !== "Admin") {
+        if (log.orgId && profile?.organizationId && log.orgId !== profile.organizationId) {
+          return false;
+        }
+      }
+
       const query = searchQuery.toLowerCase();
       const matchesSearch =
         !query ||
@@ -164,7 +171,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
 
       return matchesSearch && matchesCategory && matchesDate;
     });
-  }, [logs, searchQuery, categoryFilter, dateRangeFilter]);
+  }, [logs, searchQuery, categoryFilter, dateRangeFilter, profile?.role, profile?.organizationId]);
 
   // Pagination calculation
   const totalPages = Math.ceil(filteredLogs.length / pageSize) || 1;

@@ -902,9 +902,22 @@ function normalizeAuditLog(id: string, data: FirebaseFirestore.DocumentData): Au
 }
 
 export async function getAuditLogs(uid: string): Promise<AuditLogEntry[]> {
-  await requireAdmin(uid);
-  const snapshot = await firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200).get();
-  return snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+  const user = await getCurrentUser(uid);
+  let queryRef: FirebaseFirestore.Query = firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200);
+
+  if (user.role !== "Admin") {
+    if (!user.organizationId) return [];
+    queryRef = firestore.collection("audit_logs").where("orgId", "==", user.organizationId).limit(200);
+  }
+
+  const snapshot = await queryRef.get();
+  const logs = snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+  logs.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(String(a.createdAt)).getTime() : 0;
+    const timeB = b.createdAt ? new Date(String(b.createdAt)).getTime() : 0;
+    return timeB - timeA;
+  });
+  return logs;
 }
 
 export async function watchAuditLogs(
@@ -912,23 +925,33 @@ export async function watchAuditLogs(
   onData: (logs: AuditLogEntry[]) => void,
   onError: (error: Error) => void
 ): Promise<() => void> {
-  await requireAdmin(uid);
+  const user = await getCurrentUser(uid);
+  let queryRef: FirebaseFirestore.Query = firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200);
 
-  const unsubscribe = firestore
-    .collection("audit_logs")
-    .orderBy("createdAt", "desc")
-    .limit(200)
-    .onSnapshot(
-      (snapshot) => {
-        try {
-          const logs = snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
-          onData(logs);
-        } catch (error) {
-          onError(error instanceof Error ? error : new Error(String(error)));
-        }
-      },
-      (error) => onError(error)
-    );
+  if (user.role !== "Admin") {
+    if (!user.organizationId) {
+      onData([]);
+      return () => {};
+    }
+    queryRef = firestore.collection("audit_logs").where("orgId", "==", user.organizationId).limit(200);
+  }
+
+  const unsubscribe = queryRef.onSnapshot(
+    (snapshot) => {
+      try {
+        const logs = snapshot.docs.map((doc) => normalizeAuditLog(doc.id, doc.data()));
+        logs.sort((a, b) => {
+          const timeA = a.createdAt ? new Date(String(a.createdAt)).getTime() : 0;
+          const timeB = b.createdAt ? new Date(String(b.createdAt)).getTime() : 0;
+          return timeB - timeA;
+        });
+        onData(logs);
+      } catch (error) {
+        onError(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+    (error) => onError(error)
+  );
 
   return unsubscribe;
 }
