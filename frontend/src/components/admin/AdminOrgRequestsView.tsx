@@ -129,8 +129,9 @@ export function AdminOrgRequestsView() {
   useEffect(() => {
     void fetchRequests();
     const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
       void fetchRequests();
-    }, 4000);
+    }, 25000);
     return () => clearInterval(interval);
   }, [firebaseUser]);
 

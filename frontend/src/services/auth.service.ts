@@ -373,6 +373,7 @@ export function subscribeOrganizationMembersFirestore(
 
   const loadMembers = () => {
     if (!user) return;
+    if (typeof document !== "undefined" && document.hidden) return;
     void getOrganizationMembers(user, targetOrgId)
       .then((members) => {
         if (isMounted) onData(members);
@@ -383,7 +384,7 @@ export function subscribeOrganizationMembersFirestore(
   };
 
   loadMembers();
-  intervalId = setInterval(loadMembers, 4000);
+  intervalId = setInterval(loadMembers, 25000);
 
   return () => {
     isMounted = false;

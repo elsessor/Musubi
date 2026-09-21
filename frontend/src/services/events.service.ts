@@ -91,12 +91,13 @@ export function subscribeEventsFirestore(
     onData(events);
   });
 
-  // 2. Poll every 3 seconds to keep live data synced with backend
+  // 2. Poll every 25 seconds (and pause if tab is hidden) to preserve Firestore quota
   const interval = setInterval(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
     void fetchEvents(user, targetOrgId).then((events) => {
       onData(events);
     });
-  }, 3000);
+  }, 25000);
 
   return () => {
     clearInterval(interval);

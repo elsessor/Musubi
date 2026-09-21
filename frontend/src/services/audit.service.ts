@@ -60,6 +60,7 @@ export function subscribeAuditLogsFirestore(
   let isMounted = true;
 
   const loadLogs = () => {
+    if (typeof document !== "undefined" && document.hidden) return;
     void fetchAuditLogs(user ?? null)
       .then((res) => {
         if (isMounted) callbacks.onData(res.logs);
@@ -73,7 +74,7 @@ export function subscribeAuditLogsFirestore(
   };
 
   loadLogs();
-  intervalId = setInterval(loadLogs, 4000);
+  intervalId = setInterval(loadLogs, 30000);
 
   return () => {
     isMounted = false;

@@ -229,8 +229,9 @@ export function subscribeAdminDashboardData(
   });
 
   intervalId = setInterval(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
     void loadDashboardData();
-  }, 5000);
+  }, 30000);
 
   return () => {
     isMounted = false;
