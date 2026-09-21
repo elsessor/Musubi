@@ -1021,7 +1021,9 @@ export async function getEventsForUser(uid: string, orgId?: string) {
         }))
         : [],
       orgId: typeof data.orgId === "string" ? data.orgId : null,
-      createdBy: typeof data.createdBy === "string" ? data.createdBy : null
+      createdBy: typeof data.createdBy === "string" ? data.createdBy : null,
+      customStatuses: Array.isArray(data.customStatuses) ? data.customStatuses : [],
+      statusOrder: Array.isArray(data.statusOrder) ? data.statusOrder : []
     };
   });
 }

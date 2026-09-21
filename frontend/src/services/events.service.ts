@@ -53,7 +53,9 @@ export function normalizeEvent(id: string, data: Record<string, any>): Event {
             : "Untitled Subtask",
         description: typeof t.description === "string" ? t.description : ""
       }))
-      : []
+      : [],
+    customStatuses: Array.isArray(data.customStatuses) ? data.customStatuses : [],
+    statusOrder: Array.isArray(data.statusOrder) ? data.statusOrder : []
   };
 }
 
