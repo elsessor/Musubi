@@ -11,7 +11,7 @@ import { getFirebaseDb } from "@/firebase/config";
 import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
-import { fetchAuditLogs, type AuditLogRecord } from "@/services/audit.service";
+import { fetchAuditLogs, subscribeAuditLogsFirestore, type AuditLogRecord } from "@/services/audit.service";
 import { getOrganization, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
@@ -160,9 +160,13 @@ export function DashboardPage() {
     };
   }, [authLoading, firebaseUser, profile]);
 
+  const [realtimeEventsList, setRealtimeEventsList] = useState<Event[]>([]);
+  const [rawAuditLogs, setRawAuditLogs] = useState<AuditLogRecord[]>([]);
+
   // Subscribe to real-time events in Cloud Firestore
   useEffect(() => {
     const unsubscribe = subscribeEventsFirestore(firebaseUser, profile?.organizationId, (realtimeEvents: Event[]) => {
+      setRealtimeEventsList(realtimeEvents);
       const activeCount = realtimeEvents.filter((e) => e.status === "Active").length;
       let totalSubtasks = 0;
       let pendingDelegations = 0;
@@ -212,38 +216,68 @@ export function DashboardPage() {
     };
   }, [profile?.organizationId]);
 
-  // Fetch audit logs via backend API to update activities cleanly
+  // Subscribe to real-time audit logs
   useEffect(() => {
     if (!firebaseUser) return;
-    void fetchAuditLogs(firebaseUser)
-      .then(({ logs }) => {
-        if (!logs) {
-          setActivities([]);
-          return;
-        }
-        const mappedActivities: DashboardActivity[] = logs.slice(0, 6).map((log) => {
-          let title = log.action;
-          if (log.targetName) {
-            if (log.action.toLowerCase().includes(log.targetName.toLowerCase())) {
-              title = log.action;
-            } else {
-              title = `${log.action} - ${log.targetName}`;
-            }
-          }
-          return {
-            id: log.id,
-            title,
-            time: formatRelativeTime(log.createdAt),
-            icon: getAuditLogIcon(log.action, log.actionCategory)
-          };
-        });
-
-        setActivities(mappedActivities);
-      })
-      .catch(() => {
-        setActivities([]);
-      });
+    const unsubscribe = subscribeAuditLogsFirestore(
+      {
+        onData: (logs) => setRawAuditLogs(logs),
+        onError: () => setRawAuditLogs([])
+      },
+      firebaseUser
+    );
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
   }, [firebaseUser]);
+
+  // Merge audit logs and completed subtasks for Recent Activity feed
+  useEffect(() => {
+    const list: DashboardActivity[] = [];
+
+    if (Array.isArray(rawAuditLogs)) {
+      rawAuditLogs.forEach((log) => {
+        let title = log.action;
+        if (log.targetName) {
+          if (log.action.toLowerCase().includes(log.targetName.toLowerCase())) {
+            title = log.action;
+          } else {
+            title = `${log.action} - ${log.targetName}`;
+          }
+        }
+        list.push({
+          id: `audit_${log.id}`,
+          title,
+          time: formatRelativeTime(log.createdAt),
+          icon: getAuditLogIcon(log.action, log.actionCategory)
+        });
+      });
+    }
+
+    if (Array.isArray(realtimeEventsList)) {
+      realtimeEventsList.forEach((e) => {
+        if (Array.isArray(e.tasks)) {
+          e.tasks.forEach((t) => {
+            if (t.status === "Done" || t.status === "Completed") {
+              list.push({
+                id: `task_${e.id}_${t.id}`,
+                title: `Subtask completed: "${t.title || t.description || "Subtask"}" (${e.title})`,
+                time: formatRelativeTime(e.updatedAt || e.createdAt),
+                icon: "check"
+              });
+            }
+          });
+        }
+      });
+    }
+
+    const map = new Map<string, DashboardActivity>();
+    list.forEach((item) => {
+      if (!map.has(item.id)) map.set(item.id, item);
+    });
+
+    setActivities(Array.from(map.values()).slice(0, 6));
+  }, [rawAuditLogs, realtimeEventsList]);
 
   useEffect(() => {
     if (!loading && dashboardUser.role === "Admin") {

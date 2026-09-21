@@ -41,4 +41,35 @@ export function writeAuditLog(data: AuditLogData): void {
     .catch((err: unknown) => {
       console.error("[audit] Failed to write audit log:", err);
     });
+
+  let notifType: "ai" | "task" | "organization" | "system" = "system";
+  let title = "System Notification";
+
+  if (data.actionCategory === "AI Agent Actions") {
+    notifType = "ai";
+    title = "AI Atomization Completed";
+  } else if (data.actionCategory === "Events & Tasks") {
+    notifType = "task";
+    title = "Task / Event Activity";
+  } else if (data.actionCategory === "Organization") {
+    notifType = "organization";
+    title = "Organization Update";
+  }
+
+  firestore
+    .collection("notifications")
+    .add({
+      orgId: data.orgId ?? null,
+      title,
+      description: data.targetName
+        ? `${data.action} on '${data.targetName}' by ${data.actorName ?? "System"}`
+        : `${data.action} by ${data.actorName ?? "System"}`,
+      type: notifType,
+      read: false,
+      readBy: [],
+      createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+    })
+    .catch((err: unknown) => {
+      console.error("[notification] Failed to write notification from audit:", err);
+    });
 }
