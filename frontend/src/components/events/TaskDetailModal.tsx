@@ -44,7 +44,8 @@ export function TaskDetailModal({
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [priority, setPriority] = useState<TaskPriority>(task.priority || "Medium");
   const [committee, setCommittee] = useState<string>(task.committee || "General");
-  const [dueDate, setDueDate] = useState<string>(task.dueDate || "Aug 30, 2026");
+  const [startDate, setStartDate] = useState<string>(task.startDate || "");
+  const [dueDate, setDueDate] = useState<string>(task.dueDate || "");
   const [isLeaderOnly, setIsLeaderOnly] = useState<boolean>(Boolean(task.isLeaderOnly));
 
   // Assignee selection
@@ -78,6 +79,7 @@ export function TaskDetailModal({
       status,
       priority,
       committee,
+      startDate: startDate.trim(),
       dueDate: dueDate.trim(),
       isLeaderOnly,
       assignee: {
@@ -209,16 +211,30 @@ export function TaskDetailModal({
             </div>
           </div>
 
-          {/* DUE DATE WITH MINI CALENDAR */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-              Due Date
-            </label>
-            <MiniCalendarPicker
-              value={dueDate}
-              onChange={setDueDate}
-              placeholder="Select due date"
-            />
+          {/* START DATE & DUE/END DATE WITH TIME */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                Start Date &amp; Time
+              </label>
+              <MiniCalendarPicker
+                value={startDate}
+                onChange={setStartDate}
+                placeholder="Select start date & time"
+                includeTime={true}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                Due Date &amp; Time
+              </label>
+              <MiniCalendarPicker
+                value={dueDate}
+                onChange={setDueDate}
+                placeholder="Select due date & time"
+                includeTime={true}
+              />
+            </div>
           </div>
 
           {/* LEADER ONLY RESTRICTION */}

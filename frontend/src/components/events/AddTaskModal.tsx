@@ -83,7 +83,8 @@ export function AddTaskModal({
   const [priority, setPriority] = useState<TaskPriority>("Medium");
   const [assigneeId, setAssigneeId] = useState(activeRoster[0]?.id || "m1");
   const [committee, setCommittee] = useState("General");
-  const [dueDate, setDueDate] = useState("Aug 30, 2026");
+  const [startDate, setStartDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
 
   const defaultStatuses: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
@@ -103,6 +104,7 @@ export function AddTaskModal({
 
     const selectedMember = activeRoster.find((m) => m.id === assigneeId) || activeRoster[0];
 
+    const nowStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const newTask: Task = {
       id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: title.trim(),
@@ -110,7 +112,8 @@ export function AddTaskModal({
       status,
       priority,
       committee,
-      dueDate: dueDate.trim() || "Aug 30, 2026",
+      startDate: startDate.trim() || nowStr,
+      dueDate: dueDate.trim() || nowStr,
       assignee: {
         initials: selectedMember.initials,
         color: selectedMember.color,
@@ -237,13 +240,30 @@ export function AddTaskModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Due Date</label>
-            <MiniCalendarPicker
-              value={dueDate}
-              onChange={setDueDate}
-              placeholder="Select due date"
-            />
+          {/* START DATE & DUE/END DATE WITH TIME */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                Start Date &amp; Time
+              </label>
+              <MiniCalendarPicker
+                value={startDate}
+                onChange={setStartDate}
+                placeholder="Select start date & time"
+                includeTime={true}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                Due Date &amp; Time
+              </label>
+              <MiniCalendarPicker
+                value={dueDate}
+                onChange={setDueDate}
+                placeholder="Select due date & time"
+                includeTime={true}
+              />
+            </div>
           </div>
 
           {/* Leader Only Restriction */}

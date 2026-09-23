@@ -67,7 +67,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack 
       setLiveMembers(members);
       return;
     }
-    const unsub = subscribeOrganizationMembersFirestore((m) => {
+    const unsub = subscribeOrganizationMembersFirestore(null, (m) => {
       setLiveMembers(m);
     });
     return () => unsub();

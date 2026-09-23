@@ -284,26 +284,28 @@ export function EventsTasksView() {
                 />
               </div>
 
-              {/* START DATE & END DATE */}
+              {/* START DATE & END DATE WITH TIME */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
-                    START DATE <span className="text-rose-500">*</span>
+                    START DATE &amp; TIME <span className="text-rose-500">*</span>
                   </label>
                   <MiniCalendarPicker
                     value={startDate}
                     onChange={setStartDate}
-                    placeholder="Select start date"
+                    placeholder="Select start date & time"
+                    includeTime={true}
                   />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
-                    END DATE <span className="text-rose-500">*</span>
+                    END DATE &amp; TIME <span className="text-rose-500">*</span>
                   </label>
                   <MiniCalendarPicker
                     value={endDate}
                     onChange={setEndDate}
-                    placeholder="Select end date"
+                    placeholder="Select end date & time"
+                    includeTime={true}
                   />
                 </div>
               </div>

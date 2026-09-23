@@ -24,6 +24,8 @@ export type Task = {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: string;
+  startDate?: string;
+  time?: string;
   assignee: Assignee;
   requiredSkills?: string[];
   isLeaderOnly?: boolean;
