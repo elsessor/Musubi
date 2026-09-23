@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 
 import { cn } from "./utils";
-import { buttonVariants } from "./button";
+import { buttonVariants } from "./Button";
 
 function Calendar({
   className,
@@ -57,16 +57,16 @@ function Calendar({
         day_range_middle:
           "aria-selected:bg-accent aria-selected:text-accent-foreground",
         day_hidden: "invisible",
-        ...classNames,
+        ...(classNames as any),
       }}
       components={{
-        IconLeft: ({ className, ...props }) => (
+        IconLeft: ({ className, ...props }: any) => (
           <ChevronLeft className={cn("size-4", className)} {...props} />
         ),
-        IconRight: ({ className, ...props }) => (
+        IconRight: ({ className, ...props }: any) => (
           <ChevronRight className={cn("size-4", className)} {...props} />
         ),
-      }}
+      } as any}
       {...props}
     />
   );

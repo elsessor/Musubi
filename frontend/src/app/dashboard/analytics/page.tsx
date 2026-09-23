@@ -104,7 +104,7 @@ export default function AnalyticsPage() {
   );
   const aiSubtasksCount = Math.max(
     aiTasks.length,
-    aiAuditLogs.reduce((acc, log) => acc + (log.context?.taskCount ?? 0), 0)
+    aiAuditLogs.reduce((acc, log) => acc + ((log.context as { taskCount?: number } | null | undefined)?.taskCount ?? 0), 0)
   );
 
   return (

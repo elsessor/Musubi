@@ -270,7 +270,7 @@ export function DashboardPage() {
               list.push({
                 id: `task_${e.id}_${t.id}`,
                 title: `Subtask completed: "${t.title || t.description || "Subtask"}" (${e.title})`,
-                time: formatRelativeTime(e.updatedAt || e.createdAt),
+                time: formatRelativeTime((e as any).updatedAt || (e as any).createdAt),
                 icon: "check"
               });
             }

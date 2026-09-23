@@ -46,8 +46,11 @@ const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ s
   { mode: "calendar", title: "Calendar View", icon: Calendar }
 ];
 
+import type { OrganizationMember } from "@/services/auth.service";
+
 type KanbanBoardProps = {
   event: Event;
+  members?: OrganizationMember[];
   onBack: () => void;
   onUpdateEvent?: (updatedEvent: Event) => void;
   committees?: { id: string; name: string }[];
@@ -56,6 +59,7 @@ type KanbanBoardProps = {
 
 export function KanbanBoard({
   event,
+  members,
   onBack,
   onUpdateEvent,
   committees = [],
@@ -673,6 +677,7 @@ export function KanbanBoard({
       {showAddTaskModal && (
         <AddTaskModal
           eventName={currentEvent.title}
+          members={members}
           onClose={() => setShowAddTaskModal(false)}
           onAddTask={handleAddTask}
         />
@@ -682,6 +687,7 @@ export function KanbanBoard({
       {reassignTaskTarget && (
         <ReassignTaskModal
           task={reassignTaskTarget}
+          members={members}
           onClose={() => setReassignTaskTarget(null)}
           onConfirmReassign={handleReassignConfirm}
         />

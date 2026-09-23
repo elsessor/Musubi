@@ -1,27 +1,65 @@
 "use client";
 
 import { Check, Search, UserCheck, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Task } from "./types";
-import { MOCK_ROSTER, type OrgMemberItem } from "./AddTaskModal";
+import { memberToOrgItem, type OrgMemberItem } from "./AddTaskModal";
+import {
+  subscribeOrganizationMembersFirestore,
+  type OrganizationMember
+} from "@/services/auth.service";
+import { useAuthStore } from "@/store/authStore";
 
 type ReassignTaskModalProps = {
   task: Task;
+  members?: OrganizationMember[];
   onClose: () => void;
   onConfirmReassign: (taskId: string, newAssignee: OrgMemberItem) => void;
 };
 
 export function ReassignTaskModal({
   task,
+  members,
   onClose,
   onConfirmReassign
 }: ReassignTaskModalProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedMemberId, setSelectedMemberId] = useState<string>(
-    MOCK_ROSTER.find((m) => m.name === task.assignee.name || m.initials === task.assignee.initials)?.id || "m1"
-  );
+  const profile = useAuthStore((state) => state.profile);
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
 
-  const filteredMembers = MOCK_ROSTER.filter(
+  const [liveMembers, setLiveMembers] = useState<OrganizationMember[]>(members || []);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedMemberId, setSelectedMemberId] = useState<string>("");
+
+  useEffect(() => {
+    const assigneeName = task.assignee?.name ?? "";
+    if (members && members.length > 0) {
+      setLiveMembers(members);
+      const matched = members.find(
+        (m) => m.name.toLowerCase() === assigneeName.toLowerCase()
+      );
+      setSelectedMemberId(matched ? matched.id : members[0].id);
+      return;
+    }
+
+    const unsub = subscribeOrganizationMembersFirestore(
+      profile?.organizationId ?? null,
+      (fetchedMembers) => {
+        setLiveMembers(fetchedMembers);
+        if (fetchedMembers.length > 0) {
+          const matched = fetchedMembers.find(
+            (m) => m.name.toLowerCase() === assigneeName.toLowerCase()
+          );
+          setSelectedMemberId(matched ? matched.id : fetchedMembers[0].id);
+        }
+      },
+      firebaseUser
+    );
+    return () => unsub();
+  }, [members, profile?.organizationId, firebaseUser, task.assignee?.name]);
+
+  const orgMembers: OrgMemberItem[] = liveMembers.map(memberToOrgItem);
+
+  const filteredMembers = orgMembers.filter(
     (m) =>
       m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       m.position.toLowerCase().includes(searchQuery.toLowerCase())
@@ -29,7 +67,7 @@ export function ReassignTaskModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const selected = MOCK_ROSTER.find((m) => m.id === selectedMemberId);
+    const selected = orgMembers.find((m) => m.id === selectedMemberId) || orgMembers[0];
     if (!selected) return;
     onConfirmReassign(task.id, selected);
     onClose();
@@ -69,36 +107,42 @@ export function ReassignTaskModal({
         {/* Member Roster List */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-            {filteredMembers.map((member) => {
-              const isSelected = selectedMemberId === member.id;
-              return (
-                <label
-                  key={member.id}
-                  onClick={() => setSelectedMemberId(member.id)}
-                  className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
-                    isSelected
-                      ? "border-blue-500 bg-blue-50/60 ring-2 ring-blue-100"
-                      : "border-slate-200/80 bg-white hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-white font-bold text-xs ${member.color}`}>
-                      {member.initials}
-                    </span>
-                    <div>
-                      <span className="block text-xs font-bold text-slate-900">{member.name}</span>
-                      <span className="block text-[10px] text-slate-500 font-medium">{member.position}</span>
+            {filteredMembers.length === 0 ? (
+              <div className="p-4 text-center text-xs font-medium text-slate-400">
+                {liveMembers.length === 0 ? "Loading organization members..." : "No members found matching query."}
+              </div>
+            ) : (
+              filteredMembers.map((member) => {
+                const isSelected = selectedMemberId === member.id;
+                return (
+                  <label
+                    key={member.id}
+                    onClick={() => setSelectedMemberId(member.id)}
+                    className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
+                      isSelected
+                        ? "border-blue-500 bg-blue-50/60 ring-2 ring-blue-100"
+                        : "border-slate-200/80 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-white font-bold text-xs ${member.color}`}>
+                        {member.initials}
+                      </span>
+                      <div>
+                        <span className="block text-xs font-bold text-slate-900">{member.name}</span>
+                        <span className="block text-[10px] text-slate-500 font-medium">{member.position}</span>
+                      </div>
                     </div>
-                  </div>
 
-                  {isSelected && (
-                    <span className="flex size-5 items-center justify-center rounded-full bg-blue-600 text-white">
-                      <Check size={12} />
-                    </span>
-                  )}
-                </label>
-              );
-            })}
+                    {isSelected && (
+                      <span className="flex size-5 items-center justify-center rounded-full bg-blue-600 text-white">
+                        <Check size={12} />
+                      </span>
+                    )}
+                  </label>
+                );
+              })
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
@@ -111,7 +155,8 @@ export function ReassignTaskModal({
             </button>
             <button
               type="submit"
-              className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
+              disabled={filteredMembers.length === 0}
+              className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition disabled:opacity-50"
             >
               Confirm Reassignment
             </button>
