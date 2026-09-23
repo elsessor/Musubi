@@ -1,152 +1,120 @@
 "use client";
 
-import { Plus, Shield, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Edit3,
+  Lock,
+  Shield,
+  Sparkles,
+  X,
+  Zap
+} from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { MOCK_ROSTER, type OrgMemberItem } from "./AddTaskModal";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
-import type { CustomStatusConfig } from "./statusUtils";
-import type { OrganizationMember } from "@/services/auth.service";
 
-export type OrgMemberItem = {
-  id: string;
-  name: string;
-  initials: string;
-  color: string;
-  position: string;
-};
+const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
+const ALL_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Critical"];
 
-export function mapOrgMemberToItem(member: OrganizationMember): OrgMemberItem {
-  const initials = member.name
-    ? member.name
-        .trim()
-        .split(/\s+/)
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()
-    : "ME";
-
-  const colors = [
-    "bg-[#1e3a5f]",
-    "bg-purple-600",
-    "bg-emerald-600",
-    "bg-[#d97706]",
-    "bg-rose-600",
-    "bg-blue-600",
-    "bg-indigo-600"
-  ];
-  let hash = 0;
-  for (let i = 0; i < (member.id || "").length; i++) {
-    hash = (member.id || "").charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const colorIndex = Math.abs(hash) % colors.length;
-
-  return {
-    id: member.id,
-    name: member.name,
-    initials: initials || "ME",
-    color: colors[colorIndex],
-    position: member.position || member.role || "Member"
-  };
-}
-
-export const MOCK_ROSTER: OrgMemberItem[] = [
-  { id: "m1", name: "Luis Garcia", initials: "LG", color: "bg-[#1e3a5f]", position: "Operations Lead" },
-  { id: "m2", name: "Beatrice Lim", initials: "BL", color: "bg-purple-600", position: "Marketing Lead" },
-  { id: "m3", name: "Marco Dela Cruz", initials: "MC", color: "bg-emerald-600", position: "Tech Lead" },
-  { id: "m4", name: "Ana Reyes", initials: "AR", color: "bg-[#d97706]", position: "Logistics Lead" },
-  { id: "m5", name: "Patricia Uy", initials: "PU", color: "bg-rose-600", position: "Finance Lead" }
-];
-
-type AddTaskModalProps = {
-  eventName: string;
+type TaskDetailModalProps = {
+  task: Task;
   onClose: () => void;
-  onAddTask: (newTask: Task) => void;
-  roster?: OrgMemberItem[];
-  committees?: { id: string; name: string }[];
+  onUpdateTask: (updatedTask: Task) => void;
   customStatuses?: CustomStatusConfig[];
+  committees?: { id: string; name: string }[];
+  roster?: OrgMemberItem[];
 };
 
-export function AddTaskModal({
-  eventName,
+export function TaskDetailModal({
+  task,
   onClose,
-  onAddTask,
-  roster,
+  onUpdateTask,
+  customStatuses = [],
   committees = [],
-  customStatuses = []
-}: AddTaskModalProps) {
-  const activeRoster = roster && roster.length > 0 ? roster : MOCK_ROSTER;
+  roster = MOCK_ROSTER
+}: TaskDetailModalProps) {
+  const activeRoster = Array.isArray(roster) && roster.length > 0 ? roster : MOCK_ROSTER;
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<TaskStatus>("To Do");
-  const [priority, setPriority] = useState<TaskPriority>("Medium");
-  const [assigneeId, setAssigneeId] = useState(activeRoster[0]?.id || "m1");
-  const [committee, setCommittee] = useState("General");
-  const [dueDate, setDueDate] = useState("Aug 30, 2026");
-  const [isLeaderOnly, setIsLeaderOnly] = useState(false);
+  const [title, setTitle] = useState(task.title || "");
+  const [description, setDescription] = useState(task.description || "");
+  const [status, setStatus] = useState<TaskStatus>(task.status);
+  const [priority, setPriority] = useState<TaskPriority>(task.priority || "Medium");
+  const [committee, setCommittee] = useState<string>(task.committee || "General");
+  const [dueDate, setDueDate] = useState<string>(task.dueDate || "Aug 30, 2026");
+  const [isLeaderOnly, setIsLeaderOnly] = useState<boolean>(Boolean(task.isLeaderOnly));
 
-  const defaultStatuses: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
+  // Assignee selection
+  const currentMemberMatch = activeRoster.find(
+    (m) => m.name === task.assignee?.name || m.initials === task.assignee?.initials
+  );
+  const [selectedMemberId, setSelectedMemberId] = useState<string>(
+    currentMemberMatch?.id || activeRoster[0]?.id || "m1"
+  );
+
   const allStatuses: TaskStatus[] = [
-    ...defaultStatuses,
+    ...DEFAULT_STATUSES,
     ...customStatuses.map((cs) => cs.name as TaskStatus)
   ];
 
   const defaultCommittees = ["General", "Executive", "Logistics", "Marketing", "Finance", "Technical"];
   const committeeOptions = Array.from(
-    new Set([...defaultCommittees, ...committees.map((c) => c.name)])
+    new Set([...defaultCommittees, ...committees.map((c) => c.name), ...(task.committee ? [task.committee] : [])])
   );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
 
-    const selectedMember = activeRoster.find((m) => m.id === assigneeId) || activeRoster[0];
+    const selectedMember = activeRoster.find((m) => m.id === selectedMemberId) || activeRoster[0] || MOCK_ROSTER[0];
 
-    const newTask: Task = {
-      id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    const updated: Task = {
+      ...task,
       title: title.trim(),
-      description: description.trim() || "Leader-authored event task.",
+      description: description.trim(),
       status,
       priority,
       committee,
-      dueDate: dueDate.trim() || "Aug 30, 2026",
+      dueDate: dueDate.trim(),
+      isLeaderOnly,
       assignee: {
         initials: selectedMember.initials,
         color: selectedMember.color,
         name: selectedMember.name
       },
       assignedMemberName: selectedMember.name,
-      assignedMemberUID: selectedMember.id,
-      isLeaderOnly,
-      requiredSkills: ["Event Coordination"]
+      assignedMemberUID: selectedMember.id
     };
 
-    onAddTask(newTask);
+    onUpdateTask(updated);
     onClose();
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
       <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
+        {/* Header matching AddTaskModal */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="flex size-9 items-center justify-center rounded-2xl bg-[#e0e7ff] text-[#2563eb]">
-              <Plus size={18} />
+              <Edit3 size={18} />
             </span>
             <div>
-              <h3 className="text-base font-extrabold text-slate-900">Add Task to Event</h3>
-              <p className="text-xs text-slate-500 font-medium">Adding to &quot;{eventName}&quot;</p>
+              <h3 className="text-base font-extrabold text-slate-900">Task Details &amp; Settings</h3>
+              <p className="text-xs text-slate-500 font-medium">Editing &quot;{task.title}&quot;</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
             <X size={18} />
           </button>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* TASK TITLE */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
               Task Title <span className="text-rose-500">*</span>
@@ -156,11 +124,12 @@ export function AddTaskModal({
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Secure AV & Sound Equipment Clearance"
-              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+              placeholder="e.g. Secure Event Permits & Clearances"
+              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
             />
           </div>
 
+          {/* DESCRIPTION */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
               Description
@@ -174,6 +143,7 @@ export function AddTaskModal({
             />
           </div>
 
+          {/* STATUS & PRIORITY */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Status</label>
@@ -197,20 +167,22 @@ export function AddTaskModal({
                 onChange={(e) => setPriority(e.target.value as TaskPriority)}
                 className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
               >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
+                {ALL_PRIORITIES.map((pr) => (
+                  <option key={pr} value={pr}>
+                    {pr}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
+          {/* ASSIGNEE & COMMITTEE */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
               <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
+                value={selectedMemberId}
+                onChange={(e) => setSelectedMemberId(e.target.value)}
                 className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
               >
                 {activeRoster.map((m) => (
@@ -237,8 +209,11 @@ export function AddTaskModal({
             </div>
           </div>
 
+          {/* DUE DATE WITH MINI CALENDAR */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Due Date</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+              Due Date
+            </label>
             <MiniCalendarPicker
               value={dueDate}
               onChange={setDueDate}
@@ -246,7 +221,7 @@ export function AddTaskModal({
             />
           </div>
 
-          {/* Leader Only Restriction */}
+          {/* LEADER ONLY RESTRICTION */}
           <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">
             <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer select-none">
               <input
@@ -260,6 +235,31 @@ export function AddTaskModal({
             </label>
           </div>
 
+          {/* ADDITIONAL METADATA BADGES */}
+          {(typeof task.matchPercentage === "number" || (task.blockedBy && task.blockedBy > 0) || task.isAiGenerated) && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+              {task.isAiGenerated && (
+                <span className="inline-flex items-center gap-1 rounded-xl bg-purple-50 px-2.5 py-1 text-xs font-bold text-purple-700 border border-purple-200">
+                  <Zap size={11} className="text-purple-500" />
+                  AI Generated
+                </span>
+              )}
+              {typeof task.matchPercentage === "number" && task.matchPercentage > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-xl bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 border border-indigo-200">
+                  <Sparkles size={11} className="text-indigo-500" />
+                  Skill Match: {task.matchPercentage}%
+                </span>
+              )}
+              {task.blockedBy && task.blockedBy > 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-xl bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 border border-rose-200">
+                  <AlertTriangle size={11} className="text-rose-500" />
+                  Blocked by {task.blockedBy} task(s)
+                </span>
+              ) : null}
+            </div>
+          )}
+
+          {/* ACTION BUTTONS */}
           <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
             <button
               type="button"
@@ -272,7 +272,7 @@ export function AddTaskModal({
               type="submit"
               className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md"
             >
-              Add Task
+              Save Changes
             </button>
           </div>
         </form>

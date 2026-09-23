@@ -20,10 +20,11 @@ type TaskTableViewProps = {
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
   onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
+  onSelectTask?: (task: Task) => void;
   customStatuses?: CustomStatusConfig[];
 };
 
-export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customStatuses }: TaskTableViewProps) {
+export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses }: TaskTableViewProps) {
   // Status Dropdown State
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{
@@ -59,7 +60,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customS
         setAllStatuses(ordered);
         return;
       }
-    } catch {}
+    } catch { }
     setAllStatuses(baseStatuses);
   }, [customStatuses]);
 
@@ -165,10 +166,16 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customS
               const isPriorityOpen = openPriorityDropdownId === task.id;
 
               return (
-                <tr key={task.id} className="transition-colors hover:bg-slate-50/80">
+                <tr
+                  key={task.id}
+                  onClick={() => onSelectTask?.(task)}
+                  className="transition-colors hover:bg-slate-50/80 cursor-pointer"
+                >
                   {/* Title & Description */}
                   <td className="px-5 py-3.5">
-                    <div className="font-semibold text-slate-900">{task.title || task.description}</div>
+                    <div className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+                      {task.title || task.description}
+                    </div>
                     {task.description && task.title && task.description.trim() !== task.title.trim() && (
                       <div className="mt-0.5 text-[11px] text-slate-400 line-clamp-1">{task.description}</div>
                     )}
@@ -185,10 +192,12 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customS
                   <td className="px-4 py-3.5">
                     <button
                       type="button"
-                      onClick={(e) => handleToggleDropdown(task.id, e)}
-                      className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                        theme.badge
-                      } ${isStatusOpen ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleDropdown(task.id, e);
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${theme.badge
+                        } ${isStatusOpen ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
                     >
                       <span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />
                       {task.status}
@@ -201,10 +210,12 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customS
                     {onUpdatePriority ? (
                       <button
                         type="button"
-                        onClick={(e) => handleTogglePriorityDropdown(task.id, e)}
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset transition-all hover:brightness-95 cursor-pointer ${
-                          pCfg.classes
-                        } ${isPriorityOpen ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePriorityDropdown(task.id, e);
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset transition-all hover:brightness-95 cursor-pointer ${pCfg.classes
+                          } ${isPriorityOpen ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
                       >
                         <span className="h-1.5 w-1.5 rounded-full bg-current" />
                         {pCfg.label}
@@ -269,7 +280,10 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customS
                     {task.status !== "Completed" ? (
                       <button
                         type="button"
-                        onClick={() => onUpdateStatus(task.id, "Completed")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUpdateStatus(task.id, "Completed");
+                        }}
                         className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
                       >
                         <CheckCircle size={12} />
@@ -325,11 +339,10 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customS
                         setOpenDropdownId(null);
                         setDropdownPos(null);
                       }}
-                      className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium text-left transition-colors ${
-                        isSelected
+                      className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium text-left transition-colors ${isSelected
                           ? "bg-slate-100 font-bold text-slate-900"
                           : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-2">
                         <span className={`h-2 w-2 rounded-full ${stTheme.dot}`} />
@@ -384,11 +397,10 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customS
                         setOpenPriorityDropdownId(null);
                         setPriorityDropdownPos(null);
                       }}
-                      className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium text-left transition-colors ${
-                        isSelected
+                      className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium text-left transition-colors ${isSelected
                           ? "bg-slate-100 font-bold text-slate-900"
                           : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-2">
                         <span className={`h-2 w-2 rounded-full ${cfg.dot}`} />

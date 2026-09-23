@@ -1,7 +1,7 @@
 "use client";
 
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2, Clock, Plus } from "lucide-react";
-import type { Task, TaskStatus } from "./types";
+import type { Task, TaskPriority, TaskStatus } from "./types";
 import { useState } from "react";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
@@ -10,11 +10,13 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 type TaskCalendarViewProps = {
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
+  onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
+  onSelectTask?: (task: Task) => void;
   onAddTask?: () => void;
   customStatuses?: CustomStatusConfig[];
 };
 
-export function TaskCalendarView({ tasks, onUpdateStatus, onAddTask, customStatuses }: TaskCalendarViewProps) {
+export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, onAddTask, customStatuses }: TaskCalendarViewProps) {
   // Default to August 2026 (matching event timelines in mock data)
   const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -183,7 +185,13 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onAddTask, customStatu
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => setSelectedTask(t)}
+                      onClick={() => {
+                        if (onSelectTask) {
+                          onSelectTask(t);
+                        } else {
+                          setSelectedTask(t);
+                        }
+                      }}
                       className={`group/task flex items-center justify-between rounded-lg border px-2 py-1 text-left text-[11px] font-semibold transition-all ${theme.bg} ${theme.text} ${theme.border} hover:opacity-90`}
                       title={`${t.title} (${t.status})`}
                     >

@@ -20,11 +20,13 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Event, EventStatus, Task, TaskPriority, TaskStatus } from "./types";
-import { AddTaskModal, type OrgMemberItem } from "./AddTaskModal";
+import type { OrganizationMember } from "@/services/auth.service";
+import { AddTaskModal, mapOrgMemberToItem, type OrgMemberItem } from "./AddTaskModal";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { EventStatusModal } from "./EventStatusModal";
 import { KanbanColumn } from "./KanbanColumn";
 import { ReassignTaskModal } from "./ReassignTaskModal";
+import { TaskDetailModal } from "./TaskDetailModal";
 import { TaskGridView } from "./TaskGridView";
 import { TaskTableView } from "./TaskTableView";
 import { TaskExpandedView } from "./TaskExpandedView";
@@ -51,6 +53,7 @@ type KanbanBoardProps = {
   onBack: () => void;
   onUpdateEvent?: (updatedEvent: Event) => void;
   committees?: { id: string; name: string }[];
+  members?: OrganizationMember[];
   isLeader?: boolean;
 };
 
@@ -59,11 +62,14 @@ export function KanbanBoard({
   onBack,
   onUpdateEvent,
   committees = [],
+  members = [],
   isLeader = true
 }: KanbanBoardProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const [currentEvent, setCurrentEvent] = useState<Event>(event);
   const [tasks, setTasks] = useState<Task[]>(event.tasks || []);
+
+  const realRoster = Array.isArray(members) && members.length > 0 ? members.map(mapOrgMemberToItem) : undefined;
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
@@ -74,6 +80,7 @@ export function KanbanBoard({
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [statusModalTarget, setStatusModalTarget] = useState<"Completed" | "Cancelled" | null>(null);
+  const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
 
   // Custom task statuses state & localStorage (scoped per event)
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
@@ -291,6 +298,12 @@ export function KanbanBoard({
   function handleUpdateTaskPriority(taskId: string, newPriority: TaskPriority) {
     const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, priority: newPriority } : t));
     syncEvent(updatedTasks);
+  }
+
+  function handleUpdateTask(updatedTask: Task) {
+    const updatedTasks = tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+    syncEvent(updatedTasks);
+    setSelectedDetailTask(null);
   }
 
   function handleDrop(targetStatus: TaskStatus) {
@@ -590,6 +603,8 @@ export function KanbanBoard({
           <TaskGridView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
+            onUpdatePriority={handleUpdateTaskPriority}
+            onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
           />
         )}
@@ -599,6 +614,7 @@ export function KanbanBoard({
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
             onUpdatePriority={handleUpdateTaskPriority}
+            onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
           />
         )}
@@ -607,6 +623,8 @@ export function KanbanBoard({
           <TaskExpandedView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
+            onUpdatePriority={handleUpdateTaskPriority}
+            onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
           />
         )}
@@ -622,6 +640,8 @@ export function KanbanBoard({
                 onDragStart={(id) => setDraggedId(id)}
                 onDrop={handleDrop}
                 onReassignTask={(t) => setReassignTaskTarget(t)}
+                onSelectTask={(task) => setSelectedDetailTask(task)}
+                onUpdatePriority={handleUpdateTaskPriority}
                 customStatuses={customStatuses}
                 isLeader={isLeader}
                 onColumnDragStart={(st) => setDraggedStatusPill(st)}
@@ -634,6 +654,7 @@ export function KanbanBoard({
                 onColumnDrop={(st) => handleDropStatusPill(st)}
                 isColumnDragging={draggedStatusPill === status}
                 isColumnDragOver={dragOverStatusPill === status}
+                draggedStatusPill={draggedStatusPill}
               />
             ))}
 
@@ -658,6 +679,8 @@ export function KanbanBoard({
           <TaskCalendarView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
+            onUpdatePriority={handleUpdateTaskPriority}
+            onSelectTask={(task) => setSelectedDetailTask(task)}
             onAddTask={() => setShowAddTaskModal(true)}
             customStatuses={customStatuses}
           />
@@ -669,12 +692,27 @@ export function KanbanBoard({
         {completedCount} of {tasks.length} tasks completed ({currentEvent.progress}% overall)
       </p>
 
+      {/* Task Detail Modal */}
+      {selectedDetailTask && (
+        <TaskDetailModal
+          task={selectedDetailTask}
+          onClose={() => setSelectedDetailTask(null)}
+          onUpdateTask={handleUpdateTask}
+          customStatuses={customStatuses}
+          committees={committees}
+          roster={realRoster}
+        />
+      )}
+
       {/* Add Task Modal */}
       {showAddTaskModal && (
         <AddTaskModal
           eventName={currentEvent.title}
           onClose={() => setShowAddTaskModal(false)}
           onAddTask={handleAddTask}
+          committees={committees}
+          customStatuses={customStatuses}
+          roster={realRoster}
         />
       )}
 
@@ -684,6 +722,7 @@ export function KanbanBoard({
           task={reassignTaskTarget}
           onClose={() => setReassignTaskTarget(null)}
           onConfirmReassign={handleReassignConfirm}
+          roster={realRoster}
         />
       )}
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { GripVertical, Plus } from "lucide-react";
-import type { Task, TaskStatus } from "./types";
+import type { Task, TaskPriority, TaskStatus } from "./types";
 import { TaskCard } from "./TaskCard";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
@@ -12,6 +12,8 @@ type KanbanColumnProps = {
   onDragStart?: (taskId: string) => void;
   onDrop?: (status: TaskStatus) => void;
   onReassignTask?: (task: Task) => void;
+  onSelectTask?: (task: Task) => void;
+  onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
   customStatuses?: CustomStatusConfig[];
   isLeader?: boolean;
   onColumnDragStart?: (status: TaskStatus) => void;
@@ -19,6 +21,7 @@ type KanbanColumnProps = {
   onColumnDrop?: (status: TaskStatus) => void;
   isColumnDragging?: boolean;
   isColumnDragOver?: boolean;
+  draggedStatusPill?: string | null;
 };
 
 export function KanbanColumn({
@@ -28,13 +31,16 @@ export function KanbanColumn({
   onDragStart,
   onDrop,
   onReassignTask,
+  onSelectTask,
+  onUpdatePriority,
   customStatuses,
   isLeader = false,
   onColumnDragStart,
   onColumnDragOver,
   onColumnDrop,
   isColumnDragging = false,
-  isColumnDragOver = false
+  isColumnDragOver = false,
+  draggedStatusPill = null
 }: KanbanColumnProps) {
   const theme = getStatusTheme(status, customStatuses);
   const isDraggableColumn = Boolean(isLeader && onColumnDragStart);
@@ -69,9 +75,10 @@ export function KanbanColumn({
           onColumnDragOver?.(e, status);
         }}
         onDrop={(e) => {
-          if (!isDraggableColumn) return;
-          e.stopPropagation();
-          onColumnDrop?.(status);
+          if (isDraggableColumn && draggedStatusPill) {
+            e.stopPropagation();
+            onColumnDrop?.(status);
+          }
         }}
         className={`flex items-center gap-2 px-4 py-3.5 ${
           isDraggableColumn ? "cursor-grab active:cursor-grabbing hover:bg-slate-200/50 rounded-t-2xl transition" : ""
@@ -96,7 +103,14 @@ export function KanbanColumn({
           </div>
         ) : (
           tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onDragStart={onDragStart} onReassign={onReassignTask} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              onDragStart={onDragStart}
+              onReassign={onReassignTask}
+              onSelectTask={onSelectTask}
+              onUpdatePriority={onUpdatePriority}
+            />
           ))
         )}
       </div>
@@ -113,3 +127,4 @@ export function KanbanColumn({
     </div>
   );
 }
+

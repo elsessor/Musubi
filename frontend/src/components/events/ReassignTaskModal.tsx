@@ -9,19 +9,22 @@ type ReassignTaskModalProps = {
   task: Task;
   onClose: () => void;
   onConfirmReassign: (taskId: string, newAssignee: OrgMemberItem) => void;
+  roster?: OrgMemberItem[];
 };
 
 export function ReassignTaskModal({
   task,
   onClose,
-  onConfirmReassign
+  onConfirmReassign,
+  roster
 }: ReassignTaskModalProps) {
+  const activeRoster = roster && roster.length > 0 ? roster : MOCK_ROSTER;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMemberId, setSelectedMemberId] = useState<string>(
-    MOCK_ROSTER.find((m) => m.name === task.assignee.name || m.initials === task.assignee.initials)?.id || "m1"
+    activeRoster.find((m) => m.name === task.assignee?.name || m.initials === task.assignee?.initials)?.id || activeRoster[0]?.id || "m1"
   );
 
-  const filteredMembers = MOCK_ROSTER.filter(
+  const filteredMembers = activeRoster.filter(
     (m) =>
       m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       m.position.toLowerCase().includes(searchQuery.toLowerCase())
@@ -29,7 +32,7 @@ export function ReassignTaskModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const selected = MOCK_ROSTER.find((m) => m.id === selectedMemberId);
+    const selected = activeRoster.find((m) => m.id === selectedMemberId);
     if (!selected) return;
     onConfirmReassign(task.id, selected);
     onClose();

@@ -6,12 +6,13 @@ import { BookOpen, CalendarDays, Plus, X, Zap } from "lucide-react";
 import { AtomizerForm } from "./AtomizerForm";
 import { EventsDashboard } from "./EventsDashboard";
 import { KanbanBoard } from "./KanbanBoard";
+import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import type { Event, Task } from "./types";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { createEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
-import { subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
+import { getOrganizationCommittees, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 
 type Tab = "events" | "atomizer";
 
@@ -24,6 +25,7 @@ export function EventsTasksView() {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
+  const [committees, setCommittees] = useState<{ id: string; name: string }[]>([]);
   const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(profile?.organizationId ?? null);
 
   // Modal state
@@ -72,6 +74,18 @@ export function EventsTasksView() {
       if (typeof unsubscribe === "function") unsubscribe();
     };
   }, [effectiveOrgId, firebaseUser]);
+
+  useEffect(() => {
+    if (firebaseUser && effectiveOrgId) {
+      void getOrganizationCommittees(firebaseUser, effectiveOrgId)
+        .then((realCommittees) => {
+          if (Array.isArray(realCommittees)) {
+            setCommittees(realCommittees.map((c) => ({ id: c.id, name: c.name })));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [firebaseUser, effectiveOrgId]);
 
   const currentTab = isLeader ? activeTab : "events";
 
@@ -142,11 +156,11 @@ export function EventsTasksView() {
     setCreating(true);
 
     const startFormatted = startDate
-      ? new Date(startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      ? (!isNaN(new Date(startDate).getTime()) ? new Date(startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : startDate)
       : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
     const endFormatted = endDate
-      ? new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      ? (!isNaN(new Date(endDate).getTime()) ? new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : endDate)
       : new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
     try {
@@ -199,7 +213,13 @@ export function EventsTasksView() {
         {currentTab === "atomizer" && isLeader ? (
           <AtomizerForm events={events} members={members} onPublishGoalTasks={handlePublishGoalTasks} />
         ) : selectedEvent ? (
-          <KanbanBoard event={selectedEvent} onBack={handleBack} onUpdateEvent={handleUpdateEvent} />
+          <KanbanBoard
+            event={selectedEvent}
+            onBack={handleBack}
+            onUpdateEvent={handleUpdateEvent}
+            members={members}
+            committees={committees}
+          />
         ) : (
           <EventsDashboard
             events={events}
@@ -270,24 +290,20 @@ export function EventsTasksView() {
                   <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
                     START DATE <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="date"
-                    required
+                  <MiniCalendarPicker
                     value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200/60 bg-[#F0F4F8] px-3 py-2.5 text-xs text-slate-700 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                    onChange={setStartDate}
+                    placeholder="Select start date"
                   />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
                     END DATE <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="date"
-                    required
+                  <MiniCalendarPicker
                     value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200/60 bg-[#F0F4F8] px-3 py-2.5 text-xs text-slate-700 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                    onChange={setEndDate}
+                    placeholder="Select end date"
                   />
                 </div>
               </div>
