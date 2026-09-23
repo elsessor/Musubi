@@ -8,9 +8,9 @@ export type DashboardNavItem = {
 export type DashboardKPI = {
   id: string;
   label: string;
-  value: number;
-  icon: "target" | "briefcase" | "users" | "clock";
-  accent: "blue" | "purple" | "green" | "orange";
+  value: number | string;
+  icon: "target" | "briefcase" | "users" | "clock" | "check" | "award";
+  accent: "blue" | "purple" | "green" | "orange" | "amber";
 };
 
 export type DashboardGoalStatus = "In Progress" | "Completed" | "Pending";

@@ -1,6 +1,7 @@
 import type { User } from "firebase/auth";
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, arrayUnion, limit } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, arrayUnion, limit } from "firebase/firestore";
 import { getFirebaseDb } from "../firebase/config";
+import { subscribeEventsFirestore } from "./events.service";
 
 export type NotificationRecord = {
   id: string;
@@ -89,16 +90,27 @@ export function subscribeNotificationsFirestore(
 
   let directNotifs: NotificationRecord[] = [];
   let auditNotifs: NotificationRecord[] = [];
+  let eventNotifs: NotificationRecord[] = [];
 
   function emitMerged() {
     const readStorage = getReadNotifIdsFromStorage();
     const map = new Map<string, NotificationRecord>();
 
+    // 1. Direct Notifications
     directNotifs.forEach((item) => {
       const isRead = !item.unread || readStorage.includes(item.id);
       map.set(item.id, { ...item, unread: !isRead });
     });
 
+    // 2. Event Nudges & Subtasks
+    eventNotifs.forEach((item) => {
+      if (!map.has(item.id)) {
+        const isRead = !item.unread || readStorage.includes(item.id);
+        map.set(item.id, { ...item, unread: !isRead });
+      }
+    });
+
+    // 3. Audit Logs
     auditNotifs.forEach((item) => {
       if (!map.has(item.id)) {
         const isRead = !item.unread || readStorage.includes(item.id);
@@ -116,7 +128,67 @@ export function subscribeNotificationsFirestore(
     onData(merged);
   }
 
-  const notifQuery = query(collection(db, "notifications"), orderBy("createdAt", "desc"), limit(50));
+  // Initial immediate emit
+  emitMerged();
+
+  // Subscribe to real-time events & tasks for Nudges / Deadline Alerts
+  const unsubEvents = subscribeEventsFirestore(user, targetOrgId, (events) => {
+    eventNotifs = [];
+    events.forEach((event) => {
+      if (Array.isArray(event.tasks)) {
+        event.tasks.forEach((task) => {
+          const isCompleted = (task.status || "").toLowerCase().includes("completed") || (task.status || "").toLowerCase().includes("done");
+          const dueDateStr = task.dueDate || task.deadline;
+          const taskTitle = task.title || task.description || "Subtask";
+
+          if (isCompleted) {
+            eventNotifs.push({
+              id: `event_task_done_${event.id}_${task.id}`,
+              orgId: targetOrgId,
+              title: `Completed Subtask: "${taskTitle}"`,
+              description: `@ ${event.title}`,
+              type: "task",
+              unread: false,
+              time: "Completed",
+              createdAt: new Date().toISOString()
+            });
+          } else {
+            const parsedDate = dueDateStr ? new Date(dueDateStr) : null;
+            const now = new Date();
+            const diffDays = parsedDate && !isNaN(parsedDate.getTime()) ? Math.ceil((parsedDate.getTime() - now.getTime()) / (1000 * 3600 * 24)) : 99;
+
+            if (diffDays <= 3 || task.priority === "Critical" || task.priority === "High") {
+              eventNotifs.push({
+                id: `event_task_alert_${event.id}_${task.id}`,
+                orgId: targetOrgId,
+                title: `Deadline Alert: ${taskTitle}`,
+                description: `@ ${event.title}${dueDateStr ? ` • Due ${dueDateStr}` : ""}`,
+                type: "task",
+                unread: true,
+                time: dueDateStr || "Upcoming",
+                createdAt: new Date().toISOString()
+              });
+            } else {
+              eventNotifs.push({
+                id: `event_task_followup_${event.id}_${task.id}`,
+                orgId: targetOrgId,
+                title: `Follow-up: ${taskTitle}`,
+                description: `@ ${event.title}${dueDateStr ? ` • Due ${dueDateStr}` : ""}`,
+                type: "task",
+                unread: true,
+                time: dueDateStr || "Upcoming",
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+        });
+      }
+    });
+    emitMerged();
+  });
+
+  // Subscribe to direct notifications
+  const notifQuery = query(collection(db, "notifications"), limit(50));
   const unsubNotifs = onSnapshot(
     notifQuery,
     (snapshot) => {
@@ -150,11 +222,13 @@ export function subscribeNotificationsFirestore(
       emitMerged();
     },
     (err) => {
-      console.warn("[subscribeNotificationsFirestore] Notifications collection error:", err);
+      console.warn("[subscribeNotificationsFirestore] Notifications error:", err);
+      emitMerged();
     }
   );
 
-  const auditQuery = query(collection(db, "audit_logs"), orderBy("createdAt", "desc"), limit(40));
+  // Subscribe to audit logs
+  const auditQuery = query(collection(db, "audit_logs"), limit(40));
   const unsubAudit = onSnapshot(
     auditQuery,
     (snapshot) => {
@@ -168,7 +242,6 @@ export function subscribeNotificationsFirestore(
         const category = typeof data.actionCategory === "string" ? data.actionCategory : "";
         const action = typeof data.action === "string" ? data.action : "System activity";
 
-        // Skip sign-in logs for notifications
         if (category === "Security & Access" || action.toLowerCase().includes("signed in") || action.toLowerCase().includes("login")) {
           return;
         }
@@ -212,11 +285,13 @@ export function subscribeNotificationsFirestore(
       emitMerged();
     },
     (err) => {
-      console.warn("[subscribeNotificationsFirestore] Audit logs fallback error:", err);
+      console.warn("[subscribeNotificationsFirestore] Audit logs error:", err);
+      emitMerged();
     }
   );
 
   return () => {
+    unsubEvents();
     unsubNotifs();
     unsubAudit();
   };
@@ -224,7 +299,7 @@ export function subscribeNotificationsFirestore(
 
 export async function markNotificationAsRead(user: User | null, notificationId: string): Promise<void> {
   addReadNotifIdToStorage(notificationId);
-  if (!user || !notificationId || notificationId.startsWith("audit_")) return;
+  if (!user || !notificationId || notificationId.startsWith("audit_") || notificationId.startsWith("event_")) return;
 
   try {
     const db = getFirebaseDb();
@@ -240,7 +315,7 @@ export async function markNotificationAsRead(user: User | null, notificationId: 
 
 export async function markAllNotificationsAsRead(user: User | null, notificationIds: string[]): Promise<void> {
   addMultipleReadNotifIdsToStorage(notificationIds);
-  const directIds = notificationIds.filter((id) => !id.startsWith("audit_"));
+  const directIds = notificationIds.filter((id) => !id.startsWith("audit_") && !id.startsWith("event_"));
   if (user && directIds.length > 0) {
     await Promise.all(directIds.map((id) => markNotificationAsRead(user, id)));
   }

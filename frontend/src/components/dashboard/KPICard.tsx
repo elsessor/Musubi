@@ -6,7 +6,7 @@ import { cn } from "@/utils/cn";
 
 export type KPICardProps = {
   icon: LucideIcon;
-  value: number;
+  value: number | string;
   label: string;
   color: "blue" | "purple" | "green" | "amber";
 };

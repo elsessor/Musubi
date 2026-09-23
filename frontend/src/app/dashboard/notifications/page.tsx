@@ -33,7 +33,7 @@ export default function NotificationsPage() {
   }, [authLoading, profile, router]);
 
   useEffect(() => {
-    if (!firebaseUser || !profile) return;
+    if (!profile) return;
     setLoading(true);
 
     const unsubscribe = subscribeNotificationsFirestore(firebaseUser, profile.organizationId, (realtimeNotifs) => {
