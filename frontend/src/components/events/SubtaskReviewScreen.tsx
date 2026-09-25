@@ -57,12 +57,22 @@ type SubtaskReviewScreenProps = {
 export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack }: SubtaskReviewScreenProps) {
   const [currentGoal, setCurrentGoal] = useState<GoalDraft>(goalDraft);
   const [subtasks, setSubtasks] = useState<Subtask[]>(goalDraft.subtasks);
+  const [isEditingEventName, setIsEditingEventName] = useState(false);
+  const [eventNameInput, setEventNameInput] = useState(goalDraft.eventName || "");
   const [liveMembers, setLiveMembers] = useState<OrganizationMember[]>(members || []);
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
   const [regeneratingIds, setRegeneratingIds] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishing, setPublishing] = useState(false);
+
+  function handleSaveEventName() {
+    const trimmed = eventNameInput.trim();
+    if (trimmed) {
+      setCurrentGoal((prev) => ({ ...prev, eventName: trimmed }));
+    }
+    setIsEditingEventName(false);
+  }
 
   useEffect(() => {
     if (members && members.length > 0) {
@@ -366,9 +376,45 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack 
               ? "Manual Authored"
               : "AI Generated"}
           </span>
-          <span className="text-sm font-semibold text-slate-500">
-            for &quot;{currentGoal.eventName || "Culture Week"}&quot;
-          </span>
+          {isEditingEventName ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-slate-500">for &quot;</span>
+              <input
+                type="text"
+                value={eventNameInput}
+                onChange={(e) => setEventNameInput(e.target.value)}
+                className="h-7 rounded-lg border border-slate-300 px-2 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveEventName();
+                  if (e.key === "Escape") setIsEditingEventName(false);
+                }}
+              />
+              <span className="text-sm font-semibold text-slate-500">&quot;</span>
+              <button
+                type="button"
+                onClick={handleSaveEventName}
+                className="rounded-lg bg-blue-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-blue-700"
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-sm font-semibold text-slate-500">
+              for &quot;{currentGoal.eventName || "New Event"}&quot;
+              <button
+                type="button"
+                onClick={() => {
+                  setEventNameInput(currentGoal.eventName || "");
+                  setIsEditingEventName(true);
+                }}
+                className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                title="Edit Event Name"
+              >
+                <Edit2 size={13} />
+              </button>
+            </span>
+          )}
         </div>
 
         <p className="text-xs font-medium text-slate-400">
@@ -681,21 +727,22 @@ type OldEditTaskModalProps = {
 };
 
 function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModalProps) {
-  const bestMatch = findBestMemberForSubtask(subtask, members);
-  const initialAssignee =
-    subtask.assigneeName && subtask.assigneeName !== "Luis Garcia"
-      ? subtask.assigneeName
-      : bestMatch?.member.name || members[0]?.name || "Unassigned";
-
   const [title, setTitle] = useState(subtask.title);
   const [description, setDescription] = useState(subtask.description);
-  const [assigneeName, setAssigneeName] = useState(initialAssignee);
   const [priority, setPriority] = useState<TaskPriority>(subtask.priority);
   const [estimatedDays, setEstimatedDays] = useState(subtask.estimatedDays);
   const [isLeaderOnly, setIsLeaderOnly] = useState(subtask.isLeaderOnly);
   const [skills, setSkills] = useState<string[]>(subtask.requiredSkills);
   const [newSkillInput, setNewSkillInput] = useState("");
   const [selectedDay, setSelectedDay] = useState<number>(11);
+
+  const bestMatch = findBestMemberForSubtask({ title, description, requiredSkills: skills }, members);
+  const initialAssignee =
+    subtask.assigneeName && subtask.assigneeName !== "Luis Garcia"
+      ? subtask.assigneeName
+      : bestMatch?.member.name || members[0]?.name || "Unassigned";
+
+  const [assigneeName, setAssigneeName] = useState(initialAssignee);
 
   function handleAddSkill() {
     const trimmed = newSkillInput.trim();
@@ -785,7 +832,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
               buttonClassName="py-3 text-sm font-semibold"
             />
             {bestMatch && (
-              <div className="mt-2.5 rounded-2xl bg-indigo-50/80 p-3 border border-indigo-100/90 shadow-2xs space-y-1">
+              <div className="mt-2.5 rounded-2xl bg-indigo-50/80 p-3 border border-indigo-100/90 shadow-2xs space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
                     <Sparkles size={14} className="text-indigo-600 shrink-0" />
@@ -802,6 +849,24 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
                   <p className="text-[11px] font-medium text-indigo-700/90">
                     {bestMatch.explanation}
                   </p>
+                )}
+                {bestMatch.member.skills && bestMatch.member.skills.length > 0 && (
+                  <div className="pt-1 flex flex-wrap gap-1 items-center">
+                    <span className="text-[10px] font-bold text-indigo-600 mr-1">Onboarding Skills:</span>
+                    {bestMatch.member.skills.map((sk) => {
+                      const isMatched = bestMatch.matchedSkills.includes(sk);
+                      return (
+                        <span
+                          key={sk}
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            isMatched ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-white/80 text-indigo-700 border border-indigo-200"
+                          }`}
+                        >
+                          {sk} {isMatched ? "✓" : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}
