@@ -2,6 +2,7 @@
 
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type MiniCalendarPickerProps = {
   value: string;
@@ -30,7 +31,10 @@ export function MiniCalendarPicker({
   includeTime = false
 }: MiniCalendarPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
 
   const now = new Date();
 
@@ -70,7 +74,6 @@ export function MiniCalendarPicker({
     // Try standard JS date parsing
     const parsed = new Date(val);
     if (!isNaN(parsed.getTime())) {
-      // Fix V8 engine 2001 default year issue when year is omitted in string
       let yr = parsed.getFullYear();
       if (yr === 2001 && !val.includes("2001")) {
         yr = now.getFullYear();
@@ -114,17 +117,66 @@ export function MiniCalendarPicker({
     setSelectedAmPm(info.ampm);
   }, [value]);
 
-  // Close when clicking outside
+  // Recalculate floating position
+  const updatePosition = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const popoverHeight = includeTime ? 380 : 300;
+    const popoverWidth = 288; // 72 * 4 = 288px
+
+    let top = rect.bottom + 6;
+    if (top + popoverHeight > window.innerHeight - 10 && rect.top > popoverHeight) {
+      top = Math.max(10, rect.top - popoverHeight - 6);
+    }
+
+    let left = rect.left;
+    if (left + popoverWidth > window.innerWidth - 10) {
+      left = Math.max(10, window.innerWidth - popoverWidth - 10);
+    }
+
+    setPopoverPos({ top, left });
+  };
+
+  const handleToggleOpen = () => {
+    if (!isOpen) {
+      updatePosition();
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
+
+  // Close when clicking outside or scrolling parents
   useEffect(() => {
     if (!isOpen) return;
+
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        buttonRef.current && !buttonRef.current.contains(target) &&
+        popoverRef.current && !popoverRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     };
+
+    const handleScrollOrResize = (e: Event) => {
+      if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        return;
+      }
+      updatePosition();
+    };
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [isOpen, includeTime]);
 
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
@@ -203,11 +255,12 @@ export function MiniCalendarPicker({
   }
 
   return (
-    <div ref={containerRef} className={`relative inline-block w-full ${className}`}>
+    <div className={`relative inline-block w-full ${className}`}>
       {/* Trigger Button */}
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggleOpen}
         className={`flex w-full items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800 transition hover:bg-white hover:border-blue-400 focus:outline-none ${buttonClassName}`}
       >
         <div className="flex items-center gap-2 truncate">
@@ -217,161 +270,172 @@ export function MiniCalendarPicker({
         {includeTime && <Clock size={12} className="text-slate-400 shrink-0" />}
       </button>
 
-      {/* Mini Calendar Popover Dropdown */}
-      {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
-            <span className="text-xs font-extrabold text-slate-900">
-              {MONTH_NAMES[viewMonth]} {viewYear}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={prevMonth}
-                className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
-                title="Previous Month"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={nextMonth}
-                className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
-                title="Next Month"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-
-          {/* Weekday Labels */}
-          <div className="grid grid-cols-7 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-            {WEEKDAYS.map((wd) => (
-              <div key={wd} className="py-0.5">{wd}</div>
-            ))}
-          </div>
-
-          {/* Days Grid */}
-          <div className="grid grid-cols-7 gap-1">
-            {cells.map((cell, idx) => {
-              if (cell.isBlank) {
-                return <div key={`blank-${idx}`} className="h-7 w-7" />;
-              }
-
-              const isSelected = isSelectedMonth && cell.day === selectedDay;
-              const isToday =
-                cell.day === now.getDate() &&
-                viewMonth === now.getMonth() &&
-                viewYear === now.getFullYear();
-
-              return (
+      {/* Floating Pop-out Mini Calendar Popover Portal */}
+      {isOpen && popoverPos && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            style={{
+              position: "fixed",
+              top: `${popoverPos.top}px`,
+              left: `${popoverPos.left}px`,
+              zIndex: 99999
+            }}
+            className="w-72 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xl ring-1 ring-black/10 animate-in fade-in zoom-in-95 duration-100"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+              <span className="text-xs font-extrabold text-slate-900">
+                {MONTH_NAMES[viewMonth]} {viewYear}
+              </span>
+              <div className="flex items-center gap-1">
                 <button
-                  key={`day-${cell.day}`}
                   type="button"
-                  onClick={() => handleSelectDay(cell.day)}
-                  className={`flex h-7 w-7 items-center justify-center rounded-xl text-xs font-semibold transition ${
-                    isSelected
-                      ? "bg-blue-600 font-bold text-white shadow-xs"
-                      : isToday
-                      ? "bg-blue-50 text-blue-600 font-bold border border-blue-200"
-                      : "text-slate-700 hover:bg-slate-100"
-                  }`}
+                  onClick={prevMonth}
+                  className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+                  title="Previous Month"
                 >
-                  {cell.day}
+                  <ChevronLeft size={14} />
                 </button>
-              );
-            })}
-          </div>
-
-          {/* Optional Time Selector Bar */}
-          {includeTime && (
-            <div className="mt-3 border-t border-slate-100 pt-2.5 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <span className="flex items-center gap-1">
-                  <Clock size={12} className="text-blue-500" /> Time Selection
-                </span>
+                <button
+                  type="button"
+                  onClick={nextMonth}
+                  className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+                  title="Next Month"
+                >
+                  <ChevronRight size={14} />
+                </button>
               </div>
-              <div className="flex items-center justify-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200/80">
-                {/* Hours dropdown */}
-                <select
-                  value={selectedHour}
-                  onChange={(e) => {
-                    const h = parseInt(e.target.value, 10);
-                    setSelectedHour(h);
-                    formatAndEmit(selectedDay, h, selectedMinute, selectedAmPm);
-                  }}
-                  className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none focus:border-blue-500"
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
-                    <option key={h} value={h}>
-                      {String(h).padStart(2, "0")}
-                    </option>
-                  ))}
-                </select>
+            </div>
 
-                <span className="font-bold text-slate-400">:</span>
+            {/* Weekday Labels */}
+            <div className="grid grid-cols-7 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+              {WEEKDAYS.map((wd) => (
+                <div key={wd} className="py-0.5">{wd}</div>
+              ))}
+            </div>
 
-                {/* Minutes dropdown */}
-                <select
-                  value={selectedMinute}
-                  onChange={(e) => {
-                    const m = parseInt(e.target.value, 10);
-                    setSelectedMinute(m);
-                    formatAndEmit(selectedDay, selectedHour, m, selectedAmPm);
-                  }}
-                  className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none focus:border-blue-500"
-                >
-                  {[0, 15, 30, 45].map((m) => (
-                    <option key={m} value={m}>
-                      {String(m).padStart(2, "0")}
-                    </option>
-                  ))}
-                </select>
+            {/* Days Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {cells.map((cell, idx) => {
+                if (cell.isBlank) {
+                  return <div key={`blank-${idx}`} className="h-7 w-7" />;
+                }
 
-                {/* AM / PM selector */}
-                <div className="flex rounded-lg bg-white p-0.5 border border-slate-200 text-xs font-bold">
-                  {(["AM", "PM"] as const).map((period) => (
-                    <button
-                      key={period}
-                      type="button"
-                      onClick={() => {
-                        setSelectedAmPm(period);
-                        formatAndEmit(selectedDay, selectedHour, selectedMinute, period);
-                      }}
-                      className={`px-2 py-0.5 rounded-md transition ${
-                        selectedAmPm === period
-                          ? "bg-blue-600 text-white shadow-2xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      {period}
-                    </button>
-                  ))}
+                const isSelected = isSelectedMonth && cell.day === selectedDay;
+                const isToday =
+                  cell.day === now.getDate() &&
+                  viewMonth === now.getMonth() &&
+                  viewYear === now.getFullYear();
+
+                return (
+                  <button
+                    key={`day-${cell.day}`}
+                    type="button"
+                    onClick={() => handleSelectDay(cell.day)}
+                    className={`flex h-7 w-7 items-center justify-center rounded-xl text-xs font-semibold transition ${
+                      isSelected
+                        ? "bg-blue-600 font-bold text-white shadow-xs"
+                        : isToday
+                        ? "bg-blue-50 text-blue-600 font-bold border border-blue-200"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    {cell.day}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Optional Time Selector Bar */}
+            {includeTime && (
+              <div className="mt-3 border-t border-slate-100 pt-2.5 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <Clock size={12} className="text-blue-500" /> Time Selection
+                  </span>
+                </div>
+                <div className="flex items-center justify-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200/80">
+                  {/* Hours dropdown */}
+                  <select
+                    value={selectedHour}
+                    onChange={(e) => {
+                      const h = parseInt(e.target.value, 10);
+                      setSelectedHour(h);
+                      formatAndEmit(selectedDay, h, selectedMinute, selectedAmPm);
+                    }}
+                    className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none focus:border-blue-500"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                      <option key={h} value={h}>
+                        {String(h).padStart(2, "0")}
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className="font-bold text-slate-400">:</span>
+
+                  {/* Minutes dropdown (00-59 continuous, no gaps) */}
+                  <select
+                    value={selectedMinute}
+                    onChange={(e) => {
+                      const m = parseInt(e.target.value, 10);
+                      setSelectedMinute(m);
+                      formatAndEmit(selectedDay, selectedHour, m, selectedAmPm);
+                    }}
+                    className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none focus:border-blue-500 max-h-36 overflow-y-auto"
+                  >
+                    {Array.from({ length: 60 }, (_, i) => i).map((m) => (
+                      <option key={m} value={m}>
+                        {String(m).padStart(2, "0")}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* AM / PM selector */}
+                  <div className="flex rounded-lg bg-white p-0.5 border border-slate-200 text-xs font-bold">
+                    {(["AM", "PM"] as const).map((period) => (
+                      <button
+                        key={period}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAmPm(period);
+                          formatAndEmit(selectedDay, selectedHour, selectedMinute, period);
+                        }}
+                        className={`px-2 py-0.5 rounded-md transition ${
+                          selectedAmPm === period
+                            ? "bg-blue-600 text-white shadow-2xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        {period}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Preset & Close Actions */}
-          <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-            <button
-              type="button"
-              onClick={handleSelectToday}
-              className="font-bold text-blue-600 hover:underline"
-            >
-              Set Today ({now.toLocaleDateString("en-US", { month: "short", day: "numeric" })})
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="rounded-lg bg-slate-900 px-3 py-1 font-bold text-white hover:bg-slate-800 transition"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
+            {/* Preset & Close Actions */}
+            <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+              <button
+                type="button"
+                onClick={handleSelectToday}
+                className="font-bold text-blue-600 hover:underline"
+              >
+                Set Today ({now.toLocaleDateString("en-US", { month: "short", day: "numeric" })})
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="rounded-lg bg-slate-900 px-3 py-1 font-bold text-white hover:bg-slate-800 transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
