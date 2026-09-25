@@ -7,10 +7,12 @@ import {
   bulkUpdateMemberRolesForAdmin,
   clearEventsForOrg,
   completeUserOnboarding,
+  createAnnouncementService,
   createEventForUser,
   createOrganization,
   createOrganizationCommittee,
   getAdminMemberDirectory,
+  getAnnouncementsService,
   getAuditLogs,
   getCurrentUser,
   getEventsForUser,
@@ -545,3 +547,29 @@ export async function getEventsController(request: Request, response: Response, 
     next(error);
   }
 }
+
+export async function createAnnouncementController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const authReq = request as AuthenticatedRequest;
+    const uid = authReq.authUser?.uid;
+    if (!uid) throw new AppError("User authentication is required.", 401);
+    const announcement = await createAnnouncementService(uid, request.body);
+    response.status(201).json({ announcement });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAnnouncementsController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const authReq = request as AuthenticatedRequest;
+    const uid = authReq.authUser?.uid;
+    if (!uid) throw new AppError("User authentication is required.", 401);
+    const orgId = request.query.orgId as string | undefined;
+    const announcements = await getAnnouncementsService(uid, orgId);
+    response.status(200).json({ announcements });
+  } catch (error) {
+    next(error);
+  }
+}
+

@@ -42,6 +42,12 @@ import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
+import { AnnouncementsView, PostAnnouncementModal } from "@/components/dashboard/AnnouncementsView";
+import {
+  createAnnouncementFirestore,
+  subscribeAnnouncementsFirestore,
+  type Announcement
+} from "@/services/announcements.service";
 
 type OrganizationTab = "overview" | "members" | "committees" | "announcements";
 
@@ -150,6 +156,44 @@ export default function OrganizationPage() {
   const [committeeModalOpen, setCommitteeModalOpen] = useState(false);
   const [profileMember, setProfileMember] = useState<MemberRow | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [isPostAnnouncementOpen, setIsPostAnnouncementOpen] = useState(false);
+
+  useEffect(() => {
+    const orgId = profile?.organizationId || "default-org";
+    const unsubscribe = subscribeAnnouncementsFirestore(orgId, profile?.role, (data) => {
+      setAnnouncements(data);
+    });
+    return () => unsubscribe();
+  }, [profile?.organizationId, profile?.role]);
+
+  async function handlePostAnnouncement(data: {
+    title: string;
+    content: string;
+    targetAudience: string;
+    isPinned: boolean;
+  }) {
+    const orgId = profile?.organizationId || "default-org";
+    try {
+      const newAnn = await createAnnouncementFirestore(orgId, {
+        ...data,
+        authorName: profile?.fullName || "Student Leader",
+        authorUid: profile?.uid,
+        authorRole: profile?.position || profile?.role || "Student Leader"
+      });
+
+      setAnnouncements((prev) => {
+        if (prev.some((a) => a.id === newAnn.id)) return prev;
+        const updated = [newAnn, ...prev];
+        return updated.sort((a, b) => {
+          if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+          return (b.timestamp || 0) - (a.timestamp || 0);
+        });
+      });
+    } catch (err) {
+      console.warn("[OrganizationPage] Error creating announcement:", err);
+    }
+  }
 
   useEffect(() => {
     if (!authLoading && !profile) router.replace("/sign-in");
@@ -291,11 +335,84 @@ export default function OrganizationPage() {
           <TabButton active={activeTab === "announcements"} icon={Bell} label="Announcements" onClick={() => setActiveTab("announcements")} />
         </div>
 
-        {loading ? <LoadCard message="Loading organization profile..." /> : error ? <ErrorCard message={error} /> : !organization ? myJoinRequest ? <PendingJoinCard organizationName={myJoinRequest.organizationName} /> : <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." /> : activeTab === "overview" ? <Overview organization={organization} members={members} memberCount={members.length} events={events} firebaseUser={firebaseUser} onUpdate={setOrganization} onNavigateMembers={() => setActiveTab("members")} /> : activeTab === "members" ? <Members search={memberSearch} members={filteredMembers} onSearch={setMemberSearch} joinRequests={joinRequests} isLeader={profile.role === "Student Leader"} reviewingRequestId={reviewingRequestId} onReview={reviewJoinRequest} onViewProfile={setProfileMember} currentUserId={profile.uid} currentUserName={profile.fullName} /> : activeTab === "committees" ? <Committees committees={committees} members={members} canCreate={profile.role === "Student Leader"} onCreate={() => setCommitteeModalOpen(true)} currentUserId={profile.uid} currentUserName={profile.fullName} /> : <EmptyPanel tab={activeTab} />}
+        {loading ? (
+          <LoadCard message="Loading organization profile..." />
+        ) : error ? (
+          <ErrorCard message={error} />
+        ) : !organization ? (
+          myJoinRequest ? (
+            <PendingJoinCard organizationName={myJoinRequest.organizationName} />
+          ) : (
+            <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." />
+          )
+        ) : activeTab === "overview" ? (
+          <Overview
+            organization={organization}
+            members={members}
+            memberCount={members.length}
+            events={events}
+            firebaseUser={firebaseUser}
+            onUpdate={setOrganization}
+            onNavigateMembers={() => setActiveTab("members")}
+          />
+        ) : activeTab === "members" ? (
+          <Members
+            search={memberSearch}
+            members={filteredMembers}
+            onSearch={setMemberSearch}
+            joinRequests={joinRequests}
+            isLeader={profile.role === "Student Leader"}
+            reviewingRequestId={reviewingRequestId}
+            onReview={reviewJoinRequest}
+            onViewProfile={setProfileMember}
+            currentUserId={profile.uid}
+            currentUserName={profile.fullName}
+          />
+        ) : activeTab === "committees" ? (
+          <Committees
+            committees={committees}
+            members={members}
+            canCreate={profile.role === "Student Leader"}
+            onCreate={() => setCommitteeModalOpen(true)}
+            currentUserId={profile.uid}
+            currentUserName={profile.fullName}
+          />
+        ) : activeTab === "announcements" ? (
+          <AnnouncementsView
+            announcements={announcements}
+            isLeader={profile.role === "Student Leader" || profile.role === "Admin"}
+            onPostAnnouncement={() => setIsPostAnnouncementOpen(true)}
+          />
+        ) : (
+          <EmptyPanel tab={activeTab} />
+        )}
       </section>
-      {accessModalOpen && firebaseUser && profile.role !== "Admin" ? <OrganizationAccessModal role={profile.role} user={firebaseUser} onClose={() => setAccessModalOpen(false)} onComplete={(updatedProfile) => { setProfile({ ...profile, ...updatedProfile }); setOrganization(null); setMembers([]); setLoading(true); }} /> : null}
-      {committeeModalOpen ? <CreateCommitteeModal members={members} onClose={() => setCommitteeModalOpen(false)} onCreate={createCommittee} /> : null}
+      {accessModalOpen && firebaseUser && profile.role !== "Admin" ? (
+        <OrganizationAccessModal
+          role={profile.role}
+          user={firebaseUser}
+          onClose={() => setAccessModalOpen(false)}
+          onComplete={(updatedProfile) => {
+            setProfile({ ...profile, ...updatedProfile });
+            setOrganization(null);
+            setMembers([]);
+            setLoading(true);
+          }}
+        />
+      ) : null}
+      {committeeModalOpen ? (
+        <CreateCommitteeModal
+          members={members}
+          onClose={() => setCommitteeModalOpen(false)}
+          onCreate={createCommittee}
+        />
+      ) : null}
       {profileMember ? <MemberProfileModal member={profileMember} onClose={() => setProfileMember(null)} /> : null}
+      <PostAnnouncementModal
+        isOpen={isPostAnnouncementOpen}
+        onClose={() => setIsPostAnnouncementOpen(false)}
+        onSubmit={handlePostAnnouncement}
+      />
     </DashboardLayout>
   );
 }
