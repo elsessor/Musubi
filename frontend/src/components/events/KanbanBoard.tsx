@@ -50,10 +50,10 @@ const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ s
 
 type KanbanBoardProps = {
   event: Event;
+  members?: OrganizationMember[];
   onBack: () => void;
   onUpdateEvent?: (updatedEvent: Event) => void;
   committees?: { id: string; name: string }[];
-  members?: OrganizationMember[];
   isLeader?: boolean;
 };
 
@@ -708,6 +708,7 @@ export function KanbanBoard({
       {showAddTaskModal && (
         <AddTaskModal
           eventName={currentEvent.title}
+          members={members}
           onClose={() => setShowAddTaskModal(false)}
           onAddTask={handleAddTask}
           committees={committees}
@@ -720,6 +721,7 @@ export function KanbanBoard({
       {reassignTaskTarget && (
         <ReassignTaskModal
           task={reassignTaskTarget}
+          members={members}
           onClose={() => setReassignTaskTarget(null)}
           onConfirmReassign={handleReassignConfirm}
           roster={realRoster}

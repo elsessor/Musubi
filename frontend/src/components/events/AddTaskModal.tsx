@@ -6,6 +6,7 @@ import type { Task, TaskPriority, TaskStatus } from "./types";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import type { CustomStatusConfig } from "./statusUtils";
 import type { OrganizationMember } from "@/services/auth.service";
+import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
 
 export type OrgMemberItem = {
   id: string;
@@ -50,6 +51,8 @@ export function mapOrgMemberToItem(member: OrganizationMember): OrgMemberItem {
   };
 }
 
+export const memberToOrgItem = mapOrgMemberToItem;
+
 export const MOCK_ROSTER: OrgMemberItem[] = [
   { id: "m1", name: "Luis Garcia", initials: "LG", color: "bg-[#1e3a5f]", position: "Operations Lead" },
   { id: "m2", name: "Beatrice Lim", initials: "BL", color: "bg-purple-600", position: "Marketing Lead" },
@@ -60,6 +63,7 @@ export const MOCK_ROSTER: OrgMemberItem[] = [
 
 type AddTaskModalProps = {
   eventName: string;
+  members?: OrganizationMember[];
   onClose: () => void;
   onAddTask: (newTask: Task) => void;
   roster?: OrgMemberItem[];
@@ -76,7 +80,6 @@ export function AddTaskModal({
   customStatuses = []
 }: AddTaskModalProps) {
   const activeRoster = roster && roster.length > 0 ? roster : MOCK_ROSTER;
-
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>("To Do");
@@ -97,6 +100,15 @@ export function AddTaskModal({
   const committeeOptions = Array.from(
     new Set([...defaultCommittees, ...committees.map((c) => c.name)])
   );
+  const statusOptions: CustomSelectOption[] = allStatuses.map((value) => ({ value, label: value }));
+  const priorityOptions: CustomSelectOption[] = ["Low", "Medium", "High", "Critical"].map((value) => ({ value, label: value }));
+  const assigneeOptions: CustomSelectOption[] = activeRoster.map((member) => ({
+    value: member.id,
+    label: member.name,
+    sublabel: member.position,
+    initials: member.initials,
+    color: member.color
+  }));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -160,7 +172,7 @@ export function AddTaskModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Secure AV & Sound Equipment Clearance"
-              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none shadow-2xs"
             />
           </div>
 
@@ -173,55 +185,38 @@ export function AddTaskModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Specify requirements or instructions..."
-              className="w-full resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2 text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none"
+              className="w-full resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2 text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none shadow-2xs"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Status</label>
-              <select
+              <CustomSelect
                 value={status}
-                onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
-              >
-                {allStatuses.map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setStatus(val as TaskStatus)}
+                options={statusOptions}
+              />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Priority</label>
-              <select
+              <CustomSelect
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
-              >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
+                onChange={(val) => setPriority(val as TaskPriority)}
+                options={priorityOptions}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
-              <select
+              <CustomSelect
                 value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
-              >
-                {activeRoster.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.position})
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setAssigneeId(val)}
+                options={assigneeOptions}
+              />
             </div>
 
             <div>

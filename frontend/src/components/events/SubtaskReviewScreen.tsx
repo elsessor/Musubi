@@ -6,6 +6,7 @@ import {
   Calendar as CalendarIcon,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -26,7 +27,7 @@ import {
   X,
   Zap
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { validateSubtaskSafeguards } from "./starterTemplates";
 import type { GoalDraft, Subtask, TaskPriority } from "./types";
 import {
@@ -37,6 +38,7 @@ import {
   delegateSubtasksHeuristically,
   findBestMemberForSubtask
 } from "@/utils/heuristicDelegation";
+import { cn } from "@/components/ui/utils";
 
 const PRIORITY_BADGES: Record<TaskPriority, { bg: string; text: string }> = {
   Low: { bg: "bg-[#f1f5f9]", text: "text-[#475569]" },
@@ -610,7 +612,7 @@ function OldTaskCard({
       </div>
 
       {/* Leader Only Toggle Checkbox & Single Actions */}
-      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+      <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
         <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-600 hover:text-slate-900 select-none">
           <input
             type="checkbox"
@@ -666,6 +668,8 @@ function OldTaskCard({
     </div>
   );
 }
+
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 // ── Old Edit Task Modal (Exact Design from Screenshot 2) ─────────────────────
 
@@ -766,21 +770,20 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
               Assignee
             </label>
-            <select
+            <CustomSelect
               value={assigneeName}
-              onChange={(e) => setAssigneeName(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-            >
-              {members.length === 0 ? (
-                <option value={assigneeName}>{assigneeName || "Unassigned"}</option>
-              ) : (
-                members.map((m) => (
-                  <option key={m.id} value={m.name}>
-                    {m.name} {m.position || m.role ? `— ${m.position || m.role}` : ""}
-                  </option>
-                ))
-              )}
-            </select>
+              onChange={setAssigneeName}
+              options={
+                members.length === 0
+                  ? [{ value: assigneeName, label: assigneeName || "Unassigned" }]
+                  : members.map((m) => ({
+                      value: m.name,
+                      label: m.name,
+                      sublabel: m.position || m.role
+                    }))
+              }
+              buttonClassName="py-3 text-sm font-semibold"
+            />
             {bestMatch && (
               <div className="mt-2.5 rounded-2xl bg-indigo-50/80 p-3 border border-indigo-100/90 shadow-2xs space-y-1">
                 <div className="flex items-center justify-between">
@@ -851,16 +854,17 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Priority</label>
-              <select
+              <CustomSelect
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800"
-              >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
+                onChange={(val) => setPriority(val as TaskPriority)}
+                options={[
+                  { value: "Low", label: "Low" },
+                  { value: "Medium", label: "Medium" },
+                  { value: "High", label: "High" },
+                  { value: "Critical", label: "Critical" }
+                ]}
+                buttonClassName="py-2.5 text-xs font-semibold"
+              />
             </div>
 
             <div>
@@ -1045,35 +1049,35 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
-              <select
+              <CustomSelect
                 value={assigneeName}
-                onChange={(e) => setAssigneeName(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800"
-              >
-                {members.length === 0 ? (
-                  <option value={assigneeName}>{assigneeName}</option>
-                ) : (
-                  members.map((m) => (
-                    <option key={m.id} value={m.name}>
-                      {m.name} {m.position || m.role ? `— ${m.position || m.role}` : ""}
-                    </option>
-                  ))
-                )}
-              </select>
+                onChange={setAssigneeName}
+                options={
+                  members.length === 0
+                    ? [{ value: assigneeName, label: assigneeName }]
+                    : members.map((m) => ({
+                        value: m.name,
+                        label: m.name,
+                        sublabel: m.position || m.role
+                      }))
+                }
+                buttonClassName="py-2 text-xs font-semibold"
+              />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Priority</label>
-              <select
+              <CustomSelect
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800"
-              >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
+                onChange={(val) => setPriority(val as TaskPriority)}
+                options={[
+                  { value: "Low", label: "Low" },
+                  { value: "Medium", label: "Medium" },
+                  { value: "High", label: "High" },
+                  { value: "Critical", label: "Critical" }
+                ]}
+                buttonClassName="py-2 text-xs font-semibold"
+              />
             </div>
           </div>
 

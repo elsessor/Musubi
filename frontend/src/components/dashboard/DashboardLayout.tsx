@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, Clock3, Target, UserCheck } from "lucide-react";
+import { Award, Briefcase, CheckCircle, Clock3, Target, UserCheck } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -34,7 +34,9 @@ const kpiIconMap = {
   target: Target,
   briefcase: Briefcase,
   users: UserCheck,
-  clock: Clock3
+  clock: Clock3,
+  check: CheckCircle,
+  award: Award
 } as const;
 
 export function DashboardLayout({

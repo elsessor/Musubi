@@ -5,7 +5,7 @@ import { cn } from "@/utils/cn";
 
 type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   error?: string;
-  label: string;
+  label?: string;
 };
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
@@ -14,9 +14,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 ) {
   return (
     <div>
-      <label className="auth-label" htmlFor={id}>
-        {label} {required ? <span className="text-rose-500">*</span> : null}
-      </label>
+      {label ? (
+        <label className="auth-label" htmlFor={id}>
+          {label} {required ? <span className="text-rose-500">*</span> : null}
+        </label>
+      ) : null}
       <input
         aria-describedby={error ? `${id}-error` : undefined}
         aria-invalid={Boolean(error)}
