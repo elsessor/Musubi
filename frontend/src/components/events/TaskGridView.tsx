@@ -133,36 +133,57 @@ export function TaskGridView({ tasks, onUpdateStatus, customStatuses }: TaskGrid
             </div>
 
             {/* Card Footer */}
-            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
-                  title={task.assignedMemberName || task.assignee?.initials || "Assignee"}
-                >
-                  {task.assignee?.initials || "ME"}
-                </span>
-                <span className="text-xs font-medium text-slate-600 truncate max-w-[90px]">
-                  {task.assignedMemberName || "Unassigned"}
-                </span>
-              </div>
+            {(() => {
+              const displayAssigneeName =
+                task.assignedMemberName ||
+                task.assignee?.name ||
+                (task as any).assigneeName ||
+                "Unassigned";
+              const displayInitials =
+                task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
+                  ? task.assignee.initials
+                  : displayAssigneeName !== "Unassigned"
+                  ? displayAssigneeName
+                      .split(" ")
+                      .map((n: string) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : "UA";
 
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="flex items-center gap-1">
-                  <Calendar size={12} />
-                  {task.dueDate}
-                </span>
-                {task.status !== "Completed" && (
-                  <button
-                    type="button"
-                    onClick={() => onUpdateStatus(task.id, "Completed")}
-                    title="Mark Completed"
-                    className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                  >
-                    <CheckCircle2 size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
+              return (
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
+                      title={displayAssigneeName}
+                    >
+                      {displayInitials}
+                    </span>
+                    <span className="text-xs font-medium text-slate-600 truncate max-w-[100px]">
+                      {displayAssigneeName}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <Calendar size={12} />
+                      {task.dueDate}
+                    </span>
+                    {task.status !== "Completed" && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdateStatus(task.id, "Completed")}
+                        title="Mark Completed"
+                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                      >
+                        <CheckCircle2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })}

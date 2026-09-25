@@ -49,6 +49,23 @@ export function TaskExpandedView({ tasks, onUpdateStatus, customStatuses }: Task
         const theme = getStatusTheme(task.status, customStatuses);
         const currentStatusIndex = allStatuses.indexOf(task.status);
 
+        const displayAssigneeName =
+          task.assignedMemberName ||
+          task.assignee?.name ||
+          (task as any).assigneeName ||
+          "Unassigned";
+        const displayInitials =
+          task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
+            ? task.assignee.initials
+            : displayAssigneeName !== "Unassigned"
+            ? displayAssigneeName
+                .split(" ")
+                .map((n: string) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase()
+            : "UA";
+
         return (
           <div
             key={task.id}
@@ -84,7 +101,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, customStatuses }: Task
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span className="flex items-center gap-1">
                       <User size={12} className="text-slate-400" />
-                      {task.assignedMemberName || task.assignee?.initials || "Unassigned"}
+                      {displayAssigneeName}
                     </span>
                     <span className="flex items-center gap-1">
                       <Calendar size={12} className="text-slate-400" />
@@ -148,11 +165,11 @@ export function TaskExpandedView({ tasks, onUpdateStatus, customStatuses }: Task
                   <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
                     <span className="text-[11px] font-semibold text-slate-400">Assignee</span>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}>
-                        {task.assignee?.initials || "ME"}
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`} title={displayAssigneeName}>
+                        {displayInitials}
                       </span>
                       <span className="text-xs font-bold text-slate-800 truncate">
-                        {task.assignedMemberName || "Unassigned"}
+                        {displayAssigneeName}
                       </span>
                     </div>
                   </div>

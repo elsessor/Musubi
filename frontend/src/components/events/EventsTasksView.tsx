@@ -304,10 +304,10 @@ export function EventsTasksView() {
                 <button
                   type="submit"
                   disabled={creating || !title.trim()}
-                  className={`w-full rounded-xl py-2.5 text-xs font-semibold transition-all ${
+                  className={`w-full rounded-xl py-2.5 text-xs font-bold transition-all shadow-xs ${
                     title.trim() && !creating
-                      ? "bg-[#9CB0C9] text-white hover:bg-slate-500 active:scale-[0.98]"
-                      : "bg-[#CBD5E1] text-white cursor-not-allowed opacity-70"
+                      ? "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98]"
+                      : "bg-slate-300 text-slate-500 cursor-not-allowed opacity-70"
                   }`}
                 >
                   {creating ? "Creating..." : "Create Event"}

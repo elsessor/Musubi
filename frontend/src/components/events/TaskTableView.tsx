@@ -220,16 +220,38 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, customS
 
                   {/* Assignee */}
                   <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
-                      >
-                        {task.assignee?.initials || "ME"}
-                      </span>
-                      <span className="font-medium text-slate-700 truncate max-w-[120px]">
-                        {task.assignedMemberName || "Unassigned"}
-                      </span>
-                    </div>
+                    {(() => {
+                      const displayAssigneeName =
+                        task.assignedMemberName ||
+                        task.assignee?.name ||
+                        (task as any).assigneeName ||
+                        "Unassigned";
+                      const displayInitials =
+                        task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
+                          ? task.assignee.initials
+                          : displayAssigneeName !== "Unassigned"
+                          ? displayAssigneeName
+                              .split(" ")
+                              .map((n: string) => n[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()
+                          : "UA";
+
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
+                            title={displayAssigneeName}
+                          >
+                            {displayInitials}
+                          </span>
+                          <span className="font-medium text-slate-700 truncate max-w-[120px]">
+                            {displayAssigneeName}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   {/* Due Date */}
