@@ -99,7 +99,7 @@ export function EventsTasksView() {
       const endFormatted = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       try {
         await createEventFirestore(firebaseUser, effectiveOrgId || profile?.organizationId || "default-org", {
-          title: newEventDetails?.title || "New Event from Atomizer",
+          title: newEventDetails?.title || "New Event",
           description: newEventDetails?.description || "",
           status: "Planning",
           committee: "General",

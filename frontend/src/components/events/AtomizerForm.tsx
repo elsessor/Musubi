@@ -7,7 +7,7 @@ import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
 import type { CustomStatusConfig, StatusThemeColor } from "./statusUtils";
 import { atomizeGoal } from "@/services/auth.service";
-import { delegateSubtasksHeuristically } from "@/utils/heuristicDelegation";
+import { delegateSubtasksHeuristically, inferSkillsFromTask } from "@/utils/heuristicDelegation";
 import type { OrganizationMember } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 
@@ -201,6 +201,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [isCreateFromDescription, setIsCreateFromDescription] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState("");
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>("To Do");
   const [goalDescription, setGoalDescription] = useState("");
   const [isAtomizing, setIsAtomizing] = useState(false);
@@ -244,8 +245,9 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
     try {
       const selectedEvent = events.find((e) => e.id === selectedEventId);
+      const fallbackTitle = goalDescription.trim().split("\n")[0]?.slice(0, 40) || "New Event";
       const eventName = isCreateFromDescription
-        ? "New Event from Atomizer"
+        ? (newEventTitle.trim() || fallbackTitle)
         : selectedEvent
           ? selectedEvent.title
           : "Culture Week";
@@ -262,11 +264,11 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         description: `Actionable subtask breakdown for ${eventName}. Priority: ${item.priority}.`,
         assigneeName: item.assigneeName || "",
         requiredSkills:
-          idx % 3 === 0
-            ? ["Logistics", "Permits"]
-            : idx % 3 === 1
-              ? ["Design", "Promotions"]
-              : ["Coordination", "Ticketing"],
+          (item as unknown as { requiredSkills?: string[] }).requiredSkills &&
+          Array.isArray((item as unknown as { requiredSkills?: string[] }).requiredSkills) &&
+          (item as unknown as { requiredSkills?: string[] }).requiredSkills!.length > 0
+            ? (item as unknown as { requiredSkills: string[] }).requiredSkills
+            : inferSkillsFromTask(item.title, goalDescription),
         estimatedDays: item.dueDateOffsetDays || 3,
         isLeaderOnly: idx === 0,
         isAiGenerated: true,
@@ -337,7 +339,10 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               targetId,
               publishedTasks,
               isCreateFromDescription
-                ? { title: "New Event from Atomizer", description: goalDescription }
+                ? {
+                    title: publishedGoal.eventName || newEventTitle.trim() || goalDescription.trim().split("\n")[0]?.slice(0, 40) || "New Event",
+                    description: goalDescription
+                  }
                 : undefined
             );
           }
@@ -385,9 +390,13 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               </button>
             </div>
             {isCreateFromDescription ? (
-              <div className="w-full rounded-2xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-sm text-slate-800">
-                New Event from Atomizer (Planning)
-              </div>
+              <input
+                type="text"
+                value={newEventTitle}
+                onChange={(e) => setNewEventTitle(e.target.value)}
+                placeholder="Enter event title (e.g., Annual Tech Summit)..."
+                className="flex h-11 w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 text-sm font-semibold text-slate-800 shadow-xs transition-all placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
             ) : (
               <ModernEventDropdown
                 events={events}
