@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Menu } from "lucide-react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { Bell, Check, LogOut, Menu, Settings, User } from "lucide-react";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { getOrganization } from "@/services/auth.service";
@@ -22,7 +22,7 @@ type TopHeaderProps = {
   onMenuToggle: () => void;
 };
 
-function Avatar({ name, role }: { name: string; role: UserRole }) {
+function Avatar({ name, role, availability }: { name: string; role: UserRole; availability?: string }) {
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -30,14 +30,24 @@ function Avatar({ name, role }: { name: string; role: UserRole }) {
     .slice(0, 2)
     .join("");
 
+  const statusDotColor =
+    availability === "Busy"
+      ? "bg-amber-400"
+      : availability === "On Leave"
+      ? "bg-slate-400"
+      : "bg-emerald-500";
+
   return (
     <div
-      className={`relative flex size-12 items-center justify-center rounded-full text-base font-extrabold text-white ${role === "Admin" ? "bg-[#ef2360]" : "bg-[#213f68]"
-        }`}
+      className={`relative flex size-12 items-center justify-center rounded-full text-base font-extrabold text-white ${
+        role === "Admin" ? "bg-[#ef2360]" : "bg-[#213f68]"
+      }`}
     >
       {initials}
       {role !== "Admin" ? (
-        <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-[#f1f4f8] bg-emerald-500" />
+        <span
+          className={`absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-[#f1f4f8] ${statusDotColor} transition-colors duration-200`}
+        />
       ) : null}
     </div>
   );
@@ -56,13 +66,18 @@ export function TopHeader({
 }: TopHeaderProps) {
   const router = useRouter();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const profile = useAuthStore((state) => state.profile);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
   const [liveUser, setLiveUser] = useState({
     name,
     role,
-    position: "",
-    organizationId: null as string | null
+    position: profile?.position || "",
+    organizationId: profile?.organizationId || (null as string | null),
+    email: profile?.email || firebaseUser?.email || "",
+    availability: profile?.availability || profile?.status || "Available",
+    status: profile?.status || profile?.availability || "Available"
   });
   const [liveOrganizationName, setLiveOrganizationName] = useState(organizationName);
 
@@ -96,10 +111,11 @@ export function TopHeader({
 
   // Real-time listener for user document in Firestore
   useEffect(() => {
-    if (!userId) return;
+    const targetUid = userId || firebaseUser?.uid;
+    if (!targetUid) return;
 
     const unsubscribe = onSnapshot(
-      doc(getFirebaseDb(), "users", userId),
+      doc(getFirebaseDb(), "users", targetUid),
       (snapshot) => {
         const data = snapshot.data();
         if (!data) return;
@@ -117,11 +133,26 @@ export function TopHeader({
             ? data.organizationName
             : null;
 
+        const liveAvailability =
+          typeof data.availability === "string" && data.availability.trim()
+            ? data.availability
+            : typeof data.status === "string" && data.status.trim()
+            ? data.status
+            : "Available";
+
+        const liveEmail =
+          typeof data.email === "string" && data.email.trim()
+            ? data.email
+            : firebaseUser?.email || "";
+
         setLiveUser({
           name: liveName,
           role: liveRole,
           position: typeof data.position === "string" ? data.position : "",
-          organizationId: liveOrgId
+          organizationId: liveOrgId,
+          email: liveEmail,
+          availability: liveAvailability,
+          status: liveAvailability
         });
 
         if (liveOrgName) {
@@ -134,7 +165,23 @@ export function TopHeader({
     );
 
     return () => unsubscribe();
-  }, [userId]);
+  }, [userId, firebaseUser?.uid, firebaseUser?.email]);
+
+  useEffect(() => {
+    if (profile?.organizationId) {
+      setLiveUser((prev) => ({ ...prev, organizationId: profile.organizationId }));
+    }
+    if (profile?.organizationName && profile.organizationName.trim()) {
+      setLiveOrganizationName(profile.organizationName);
+    }
+    if (profile?.email) {
+      setLiveUser((prev) => ({ ...prev, email: profile.email }));
+    }
+    if (profile?.availability || profile?.status) {
+      const avail = profile.availability || profile.status || "Available";
+      setLiveUser((prev) => ({ ...prev, availability: avail, status: avail }));
+    }
+  }, [profile]);
 
   // Fallback: If organizationId is present but organizationName is not yet set, fetch via API
   useEffect(() => {
@@ -175,16 +222,31 @@ export function TopHeader({
     };
   }, []);
 
-  const profile = useAuthStore((state) => state.profile);
+  const handleAvailabilityChange = async (newStatus: "Available" | "Busy" | "On Leave") => {
+    setLiveUser((prev) => ({ ...prev, availability: newStatus, status: newStatus }));
 
-  useEffect(() => {
-    if (profile?.organizationId) {
-      setLiveUser((prev) => ({ ...prev, organizationId: profile.organizationId }));
+    const targetUid = userId || firebaseUser?.uid;
+    if (targetUid) {
+      try {
+        const userRef = doc(getFirebaseDb(), "users", targetUid);
+        await updateDoc(userRef, {
+          availability: newStatus,
+          status: newStatus
+        });
+      } catch (err) {
+        console.warn("[TopHeader] Error updating Firestore user availability:", err);
+      }
     }
-    if (profile?.organizationName && profile.organizationName.trim()) {
-      setLiveOrganizationName(profile.organizationName);
+
+    const currentProfile = useAuthStore.getState().profile;
+    if (currentProfile) {
+      useAuthStore.getState().setProfile({
+        ...currentProfile,
+        availability: newStatus,
+        status: newStatus
+      });
     }
-  }, [profile?.organizationId, profile?.organizationName]);
+  };
 
   const effectiveOrgId = liveUser.organizationId || profile?.organizationId || null;
   const effectiveOrgName =
@@ -214,6 +276,15 @@ export function TopHeader({
       ]
         .filter(Boolean)
         .join(" · ");
+
+  const currentAvailability =
+    liveUser.availability || profile?.availability || profile?.status || "Available";
+
+  const displayEmail =
+    liveUser.email ||
+    profile?.email ||
+    firebaseUser?.email ||
+    `${(liveUser.name || "user").toLowerCase().replace(/\s+/g, "")}@university.edu.ph`;
 
   return (
     <header className="sticky top-0 z-20 flex min-h-[76px] items-center justify-between gap-3 border-b border-slate-200/80 bg-[#f1f4f8]/95 px-4 py-4 backdrop-blur sm:px-6 lg:min-h-[108px] lg:px-9 lg:py-5">
@@ -259,53 +330,153 @@ export function TopHeader({
             onClick={() => setMenuOpen((current) => !current)}
             type="button"
           >
-            <Avatar name={liveUser.name} role={liveUser.role} />
+            <Avatar availability={currentAvailability} name={liveUser.name} role={liveUser.role} />
           </button>
+
           {menuOpen ? (
             <div
-              className="absolute right-0 z-30 mt-3 w-48 rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
+              className="absolute right-0 z-30 mt-3 w-72 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xl animate-in fade-in zoom-in-95 duration-150"
               role="menu"
             >
-              <div className="px-3 py-2">
-                <p className="text-sm font-semibold text-slate-900">{liveUser.name}</p>
-                <p className="text-xs text-slate-500">{liveUser.position || liveUser.role}</p>
+              {/* User Header Info */}
+              <div className="px-1 pb-3">
+                <p className="text-sm font-bold text-slate-900 leading-snug">{liveUser.name}</p>
+                <p className="mt-0.5 truncate text-xs font-medium text-slate-400">{displayEmail}</p>
               </div>
-              <div className="my-1 h-px bg-slate-200" />
-              <button
-                className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
-                onClick={() => {
-                  setMenuOpen(false);
-                  router.push("/dashboard/profile");
-                }}
-                type="button"
-              >
-                Profile
-              </button>
-              <button
-                className="mt-1 flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
-                onClick={() => {
-                  setMenuOpen(false);
-                  router.push("/dashboard/settings");
-                }}
-                type="button"
-              >
-                Settings
-              </button>
-              <div className="my-2 h-px bg-slate-200" />
-              <button
-                className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onLogout();
-                }}
-                type="button"
-              >
-                Logout
-              </button>
+
+              {/* Section Header */}
+              <div className="px-1 pb-2 pt-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  MY AVAILABILITY
+                </p>
+              </div>
+
+              {/* Availability Options */}
+              <div className="space-y-1.5">
+                {/* Available Option */}
+                <button
+                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
+                    currentAvailability === "Available"
+                      ? "border-emerald-300/90 bg-emerald-50/70"
+                      : "border-transparent hover:bg-slate-50"
+                  }`}
+                  onClick={() => handleAvailabilityChange("Available")}
+                  type="button"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-emerald-500" />
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 leading-tight">Available</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                        Ready for new tasks
+                      </p>
+                    </div>
+                  </div>
+                  {currentAvailability === "Available" ? (
+                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                      <Check className="size-3.5 stroke-[3]" />
+                    </div>
+                  ) : null}
+                </button>
+
+                {/* Busy Option */}
+                <button
+                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
+                    currentAvailability === "Busy"
+                      ? "border-amber-300/90 bg-amber-50/70"
+                      : "border-transparent hover:bg-slate-50"
+                  }`}
+                  onClick={() => handleAvailabilityChange("Busy")}
+                  type="button"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-amber-400" />
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 leading-tight">Busy</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                        Working, limited capacity
+                      </p>
+                    </div>
+                  </div>
+                  {currentAvailability === "Busy" ? (
+                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                      <Check className="size-3.5 stroke-[3]" />
+                    </div>
+                  ) : null}
+                </button>
+
+                {/* On Leave Option */}
+                <button
+                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
+                    currentAvailability === "On Leave"
+                      ? "border-slate-300/90 bg-slate-100/90"
+                      : "border-transparent hover:bg-slate-50"
+                  }`}
+                  onClick={() => handleAvailabilityChange("On Leave")}
+                  type="button"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-slate-400" />
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 leading-tight">On Leave</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                        Unavailable right now
+                      </p>
+                    </div>
+                  </div>
+                  {currentAvailability === "On Leave" ? (
+                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700">
+                      <Check className="size-3.5 stroke-[3]" />
+                    </div>
+                  ) : null}
+                </button>
+              </div>
+
+              {/* Divider */}
+              <div className="my-2.5 h-px bg-slate-100" />
+
+              {/* Navigation Menu */}
+              <div className="space-y-0.5">
+                <button
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push("/dashboard/profile");
+                  }}
+                  type="button"
+                >
+                  <User className="size-4 text-slate-500" />
+                  My Profile
+                </button>
+
+                <button
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push("/dashboard/settings");
+                  }}
+                  type="button"
+                >
+                  <Settings className="size-4 text-slate-500" />
+                  Settings
+                </button>
+
+                <button
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 transition"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onLogout();
+                  }}
+                  type="button"
+                >
+                  <LogOut className="size-4 text-rose-600" />
+                  Log Out
+                </button>
+              </div>
             </div>
           ) : null}
         </div>
       </div>
     </header>
   );
-}
+}

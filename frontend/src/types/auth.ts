@@ -15,6 +15,11 @@ export type AuthUserProfile = {
   organizationName?: string | null;
   profilePicture: string | null;
   skills: string[];
+  availability?: string | null;
+  status?: string | null;
+  yearLevel?: string | null;
+  program?: string | null;
+  birthdate?: string | null;
   onboardingCompleted: boolean;
 };
 
