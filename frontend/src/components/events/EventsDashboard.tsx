@@ -398,7 +398,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                   title={isPillDraggable ? "Drag to rearrange status order" : undefined}
                   className={`group flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
                     isActive
-                      ? "bg-slate-900 text-white shadow"
+                      ? key === "All" ? "bg-slate-900 text-white shadow" : `${theme.active} shadow-sm`
                       : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
                   } ${isPillDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
                     isDraggingThis ? "opacity-30 scale-95 border-dashed border-blue-400" : ""
@@ -408,10 +408,10 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                     <GripVertical size={11} className="-ml-1 text-slate-300 transition-opacity group-hover:text-slate-500" />
                   )}
                   {key !== "All" && (
-                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white/70" : theme.dot}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white" : theme.dot}`} />
                   )}
                   {label}
-                  <span className={`${isActive ? "text-white/70" : "text-slate-400"}`}>{count}</span>
+                  <span className={`${isActive ? "text-white/80" : "text-slate-400"}`}>{count}</span>
                 </button>
               );
             })}

@@ -231,16 +231,38 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
 
                   {/* Assignee */}
                   <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
-                      >
-                        {task.assignee?.initials || "ME"}
-                      </span>
-                      <span className="font-medium text-slate-700 truncate max-w-[120px]">
-                        {task.assignedMemberName || "Unassigned"}
-                      </span>
-                    </div>
+                    {(() => {
+                      const displayAssigneeName =
+                        task.assignedMemberName ||
+                        task.assignee?.name ||
+                        (task as any).assigneeName ||
+                        "Unassigned";
+                      const displayInitials =
+                        task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
+                          ? task.assignee.initials
+                          : displayAssigneeName !== "Unassigned"
+                          ? displayAssigneeName
+                              .split(" ")
+                              .map((n: string) => n[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()
+                          : "UA";
+
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
+                            title={displayAssigneeName}
+                          >
+                            {displayInitials}
+                          </span>
+                          <span className="font-medium text-slate-700 truncate max-w-[120px]">
+                            {displayAssigneeName}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   {/* Due Date */}
@@ -340,7 +362,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
                         setDropdownPos(null);
                       }}
                       className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium text-left transition-colors ${isSelected
-                          ? "bg-slate-100 font-bold text-slate-900"
+                          ? `${stTheme.active} font-bold ring-1 ring-inset`
                           : "text-slate-700 hover:bg-slate-50"
                         }`}
                     >
@@ -348,7 +370,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
                         <span className={`h-2 w-2 rounded-full ${stTheme.dot}`} />
                         <span>{st}</span>
                       </div>
-                      {isSelected && <Check size={13} className="text-slate-900" />}
+                      {isSelected && <Check size={13} className="text-white" />}
                     </button>
                   );
                 })}

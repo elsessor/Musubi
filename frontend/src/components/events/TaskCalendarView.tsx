@@ -2,6 +2,7 @@
 
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2, Clock, Plus } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
+import { PRIORITY_CONFIG } from "./priorityUtils";
 import { useState } from "react";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
@@ -229,7 +230,7 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
 
               <div className="flex items-center justify-between text-xs pt-2">
                 <span className="text-slate-400">Due: <strong className="text-slate-700">{selectedTask.dueDate}</strong></span>
-                <span className="text-slate-400">Priority: <strong className="text-slate-700">{selectedTask.priority}</strong></span>
+                <span className="text-slate-400">Priority: <strong className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset ${PRIORITY_CONFIG[selectedTask.priority || "Medium"].classes}`}><span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[selectedTask.priority || "Medium"].dot}`} />{selectedTask.priority || "Medium"}</strong></span>
               </div>
             </div>
 

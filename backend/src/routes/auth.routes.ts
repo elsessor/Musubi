@@ -9,10 +9,13 @@ import {
   auditLogsStreamController,
   bulkUpdateAdminMembersRoleController,
   clearEventsController,
+  createAnnouncementController,
   createEventController,
+  deleteEventController,
   createOrganizationCommitteeController,
   createOrganizationController,
   eventsController,
+  getAnnouncementsController,
   getEventsController,
   joinOrganizationController,
   loginController,
@@ -47,7 +50,10 @@ authRouter.get("/me", requireAuth, meController);
 authRouter.post("/atomize", atomizeGoalController);
 authRouter.get("/events", requireAuth, getEventsController);
 authRouter.post("/events", requireAuth, createEventController);
+authRouter.get("/announcements", requireAuth, getAnnouncementsController);
+authRouter.post("/announcements", requireAuth, createAnnouncementController);
 authRouter.patch("/events/:eventId", requireAuth, updateEventController);
+authRouter.delete("/events/:eventId", requireAuth, deleteEventController);
 authRouter.delete("/organizations/:organizationId/events", requireAuth, clearEventsController);
 
 authRouter.get("/org-requests", organizationRequestsController);

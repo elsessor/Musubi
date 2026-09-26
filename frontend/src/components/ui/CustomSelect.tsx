@@ -10,6 +10,9 @@ export type CustomSelectOption = {
   sublabel?: string;
   initials?: string;
   color?: string;
+  indicatorClass?: string;
+  labelClass?: string;
+  selectedClass?: string;
 };
 
 export type CustomSelectProps = {
@@ -52,6 +55,7 @@ export function CustomSelect({
         className={cn(
           "flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-50 focus:bg-white focus:border-blue-500 focus:outline-none shadow-2xs select-none cursor-pointer",
           buttonClassName,
+          selectedOption?.selectedClass,
           isOpen && "border-blue-500 bg-white ring-2 ring-blue-100"
         )}
       >
@@ -67,8 +71,9 @@ export function CustomSelect({
             </span>
           )}
           <span className="truncate">
-            {selectedOption ? (
-              <span>
+          {selectedOption ? (
+              <span className={cn(selectedOption.labelClass)}>
+                {selectedOption.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", selectedOption.selectedClass ? "bg-white" : selectedOption.indicatorClass)} />}
                 {selectedOption.label}
                 {selectedOption.sublabel ? (
                   <span className="text-slate-400 font-normal"> — {selectedOption.sublabel}</span>
@@ -113,7 +118,7 @@ export function CustomSelect({
                   className={cn(
                     "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-left transition select-none cursor-pointer",
                     isSelected
-                      ? "bg-blue-50 text-blue-700 font-bold"
+                      ? opt.selectedClass || "bg-blue-50 text-blue-700 font-bold"
                       : "text-slate-700 hover:bg-slate-100/80 hover:text-slate-900"
                   )}
                 >
@@ -129,7 +134,8 @@ export function CustomSelect({
                       </span>
                     )}
                     <div className="truncate">
-                      <span>{opt.label}</span>
+                      {opt.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", isSelected && opt.selectedClass ? "bg-white" : opt.indicatorClass)} />}
+                      <span className={cn(opt.labelClass)}>{opt.label}</span>
                       {opt.sublabel && (
                         <span className="text-slate-400 font-normal ml-1"> — {opt.sublabel}</span>
                       )}

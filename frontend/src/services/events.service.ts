@@ -177,7 +177,20 @@ export async function updateEventFirestore(
   });
 }
 
-export async function deleteEventFirestore(eventId: string): Promise<void> {
+export async function deleteEventFirestore(user: User | null, eventId: string): Promise<void> {
+  const token = await getValidToken(user);
+  if (token) {
+    const res = await fetch(`${API_BASE_URL}/auth/events/${eventId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(typeof err.message === "string" ? err.message : "Failed to delete event.");
+    }
+    return;
+  }
+
   const db = getFirebaseDb();
   const docRef = doc(db, "events", eventId);
   await deleteDoc(docRef);

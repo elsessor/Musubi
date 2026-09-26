@@ -12,6 +12,7 @@ type MiniCalendarPickerProps = {
   buttonClassName?: string;
   format?: "medium" | "iso"; // "medium" => "Sep 23, 2026", "iso" => "2026-09-23"
   includeTime?: boolean; // If true, adds time selector (e.g., 09:00 AM)
+  minDate?: Date;
 };
 
 const MONTH_NAMES = [
@@ -28,7 +29,8 @@ export function MiniCalendarPicker({
   className = "",
   buttonClassName = "",
   format = "medium",
-  includeTime = false
+  includeTime = false,
+  minDate
 }: MiniCalendarPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -37,6 +39,8 @@ export function MiniCalendarPicker({
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
 
   const now = new Date();
+  const earliestDate = minDate ? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()) : null;
+  const isBeforeMinDate = (date: Date) => !!earliestDate && date < earliestDate;
 
   // Helper to parse string into Date & Time components
   const parseDate = (val: string): { date: Date; hour: number; minute: number; ampm: "AM" | "PM" } => {
@@ -182,6 +186,8 @@ export function MiniCalendarPicker({
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
 
   function prevMonth() {
+    const previousMonth = new Date(viewYear, viewMonth - 1, 1);
+    if (earliestDate && previousMonth < new Date(earliestDate.getFullYear(), earliestDate.getMonth(), 1)) return;
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -223,6 +229,7 @@ export function MiniCalendarPicker({
   }
 
   function handleSelectDay(day: number) {
+    if (isBeforeMinDate(new Date(viewYear, viewMonth, day))) return;
     setSelectedDay(day);
     formatAndEmit(day);
     if (!includeTime) {
@@ -327,17 +334,21 @@ export function MiniCalendarPicker({
                   cell.day === now.getDate() &&
                   viewMonth === now.getMonth() &&
                   viewYear === now.getFullYear();
+                const isDisabled = isBeforeMinDate(new Date(viewYear, viewMonth, cell.day));
 
                 return (
                   <button
                     key={`day-${cell.day}`}
                     type="button"
+                    disabled={isDisabled}
                     onClick={() => handleSelectDay(cell.day)}
                     className={`flex h-7 w-7 items-center justify-center rounded-xl text-xs font-semibold transition ${
                       isSelected
                         ? "bg-blue-600 font-bold text-white shadow-xs"
                         : isToday
                         ? "bg-blue-50 text-blue-600 font-bold border border-blue-200"
+                        : isDisabled
+                        ? "cursor-not-allowed text-slate-300"
                         : "text-slate-700 hover:bg-slate-100"
                     }`}
                   >

@@ -7,6 +7,7 @@ import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import type { CustomStatusConfig } from "./statusUtils";
 import type { OrganizationMember } from "@/services/auth.service";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
+import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 
 export type OrgMemberItem = {
   id: string;
@@ -85,7 +86,7 @@ export function AddTaskModal({
   const [status, setStatus] = useState<TaskStatus>("To Do");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
   const [assigneeId, setAssigneeId] = useState(activeRoster[0]?.id || "m1");
-  const [committee, setCommittee] = useState("General");
+  const [committee, setCommittee] = useState(committees[0]?.name || "");
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
@@ -96,12 +97,14 @@ export function AddTaskModal({
     ...customStatuses.map((cs) => cs.name as TaskStatus)
   ];
 
-  const defaultCommittees = ["General", "Executive", "Logistics", "Marketing", "Finance", "Technical"];
-  const committeeOptions = Array.from(
-    new Set([...defaultCommittees, ...committees.map((c) => c.name)])
-  );
+  const committeeOptions = committees.map((c) => c.name);
   const statusOptions: CustomSelectOption[] = allStatuses.map((value) => ({ value, label: value }));
-  const priorityOptions: CustomSelectOption[] = ["Low", "Medium", "High", "Critical"].map((value) => ({ value, label: value }));
+  const priorityOptions: CustomSelectOption[] = ALL_PRIORITIES.map((value) => ({
+    value,
+    label: value,
+    indicatorClass: PRIORITY_CONFIG[value].dot,
+    labelClass: PRIORITY_CONFIG[value].classes
+  }));
   const assigneeOptions: CustomSelectOption[] = activeRoster.map((member) => ({
     value: member.id,
     label: member.name,
@@ -224,8 +227,10 @@ export function AddTaskModal({
               <select
                 value={committee}
                 onChange={(e) => setCommittee(e.target.value)}
+                disabled={committeeOptions.length === 0}
                 className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
               >
+                {committeeOptions.length === 0 && <option value="">No committees available</option>}
                 {committeeOptions.map((comm) => (
                   <option key={comm} value={comm}>
                     {comm} Committee
@@ -244,6 +249,7 @@ export function AddTaskModal({
               <MiniCalendarPicker
                 value={startDate}
                 onChange={setStartDate}
+                minDate={new Date()}
                 placeholder="Select start date & time"
                 includeTime={true}
               />
@@ -255,6 +261,7 @@ export function AddTaskModal({
               <MiniCalendarPicker
                 value={dueDate}
                 onChange={setDueDate}
+                minDate={new Date()}
                 placeholder="Select due date & time"
                 includeTime={true}
               />

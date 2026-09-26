@@ -11,7 +11,7 @@ import type { Event, Task } from "./types";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
-import { createEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
+import { createEventFirestore, deleteEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
 import { getOrganizationCommittees, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 
 type Tab = "events" | "atomizer";
@@ -34,7 +34,7 @@ export function EventsTasksView() {
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [committee, setCommittee] = useState("Executive");
+  const [committee, setCommittee] = useState("");
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -80,7 +80,9 @@ export function EventsTasksView() {
       void getOrganizationCommittees(firebaseUser, effectiveOrgId)
         .then((realCommittees) => {
           if (Array.isArray(realCommittees)) {
-            setCommittees(realCommittees.map((c) => ({ id: c.id, name: c.name })));
+            const organizationCommittees = realCommittees.map((c) => ({ id: c.id, name: c.name }));
+            setCommittees(organizationCommittees);
+            setCommittee((current) => current || organizationCommittees[0]?.name || "");
           }
         })
         .catch(() => {});
@@ -95,6 +97,13 @@ export function EventsTasksView() {
   }
 
   function handleBack() {
+    setSelectedEvent(null);
+  }
+
+  async function handleDeleteSelectedEvent() {
+    if (!selectedEvent) return;
+    await deleteEventFirestore(firebaseUser, selectedEvent.id);
+    setEvents((current) => current.filter((event) => event.id !== selectedEvent.id));
     setSelectedEvent(null);
   }
 
@@ -116,7 +125,7 @@ export function EventsTasksView() {
           title: newEventDetails?.title || "New Event",
           description: newEventDetails?.description || "",
           status: "Planning",
-          committee: "General",
+          committee: committees[0]?.name || "",
           startDate: startFormatted,
           endDate: endFormatted,
           memberCount: 1,
@@ -168,7 +177,7 @@ export function EventsTasksView() {
         title: title.trim(),
         description: description.trim(),
         status: "Active",
-        committee: committee.trim() || "General",
+        committee: committee.trim(),
         startDate: startFormatted,
         endDate: endFormatted,
         memberCount: 1,
@@ -217,6 +226,7 @@ export function EventsTasksView() {
             event={selectedEvent}
             onBack={handleBack}
             onUpdateEvent={handleUpdateEvent}
+            onDeleteEvent={handleDeleteSelectedEvent}
             members={members}
             committees={committees}
           />
@@ -284,6 +294,19 @@ export function EventsTasksView() {
                 />
               </div>
 
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">COMMITTEE</label>
+                <select
+                  value={committee}
+                  onChange={(e) => setCommittee(e.target.value)}
+                  disabled={committees.length === 0}
+                  className="w-full rounded-xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-xs text-slate-800 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {committees.length === 0 && <option value="">No committees available</option>}
+                  {committees.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                </select>
+              </div>
+
               {/* START DATE & END DATE WITH TIME */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -293,6 +316,7 @@ export function EventsTasksView() {
                   <MiniCalendarPicker
                     value={startDate}
                     onChange={setStartDate}
+                    minDate={new Date()}
                     placeholder="Select start date & time"
                     includeTime={true}
                   />
@@ -304,6 +328,7 @@ export function EventsTasksView() {
                   <MiniCalendarPicker
                     value={endDate}
                     onChange={setEndDate}
+                    minDate={new Date()}
                     placeholder="Select end date & time"
                     includeTime={true}
                   />
@@ -322,10 +347,10 @@ export function EventsTasksView() {
                 <button
                   type="submit"
                   disabled={creating || !title.trim()}
-                  className={`w-full rounded-xl py-2.5 text-xs font-semibold transition-all ${
+                  className={`w-full rounded-xl py-2.5 text-xs font-bold transition-all shadow-xs ${
                     title.trim() && !creating
-                      ? "bg-[#9CB0C9] text-white hover:bg-slate-500 active:scale-[0.98]"
-                      : "bg-[#CBD5E1] text-white cursor-not-allowed opacity-70"
+                      ? "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98]"
+                      : "bg-slate-300 text-slate-500 cursor-not-allowed opacity-70"
                   }`}
                 >
                   {creating ? "Creating..." : "Create Event"}

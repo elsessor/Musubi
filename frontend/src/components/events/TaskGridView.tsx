@@ -154,8 +154,8 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                               onUpdateStatus(task.id, st);
                               setOpenDropdownId(null);
                             }}
-                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs font-medium text-left transition-colors hover:bg-slate-50 ${
-                              task.status === st ? "font-bold text-blue-600" : "text-slate-700"
+                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-left transition-colors hover:bg-slate-50 ${
+                              task.status === st ? `${stTheme.active} font-bold ring-1 ring-inset` : "text-slate-700"
                             }`}
                           >
                             <span className={`h-1.5 w-1.5 rounded-full ${stTheme.dot}`} />
@@ -201,39 +201,60 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
             </div>
 
             {/* Card Footer */}
-            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
-                  title={task.assignedMemberName || task.assignee?.name || task.assignee?.initials || "Assignee"}
-                >
-                  {task.assignee?.initials || "ME"}
-                </span>
-                <span className="text-xs font-medium text-slate-600 truncate max-w-[90px]">
-                  {task.assignedMemberName || task.assignee?.name || "Unassigned"}
-                </span>
-              </div>
+            {(() => {
+              const displayAssigneeName =
+                task.assignedMemberName ||
+                task.assignee?.name ||
+                (task as any).assigneeName ||
+                "Unassigned";
+              const displayInitials =
+                task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
+                  ? task.assignee.initials
+                  : displayAssigneeName !== "Unassigned"
+                  ? displayAssigneeName
+                      .split(" ")
+                      .map((n: string) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : "UA";
 
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="flex items-center gap-1">
-                  <Calendar size={12} />
-                  {task.dueDate}
-                </span>
-                {task.status !== "Completed" && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUpdateStatus(task.id, "Completed");
-                    }}
-                    title="Mark Completed"
-                    className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                  >
-                    <CheckCircle2 size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
+              return (
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
+                      title={displayAssigneeName}
+                    >
+                      {displayInitials}
+                    </span>
+                    <span className="text-xs font-medium text-slate-600 truncate max-w-[100px]">
+                      {displayAssigneeName}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <Calendar size={12} />
+                      {task.dueDate}
+                    </span>
+                    {task.status !== "Completed" && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUpdateStatus(task.id, "Completed");
+                        }}
+                        title="Mark Completed"
+                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                      >
+                        <CheckCircle2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })}

@@ -39,13 +39,10 @@ import {
   findBestMemberForSubtask
 } from "@/utils/heuristicDelegation";
 import { cn } from "@/components/ui/utils";
+import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
+import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
-const PRIORITY_BADGES: Record<TaskPriority, { bg: string; text: string }> = {
-  Low: { bg: "bg-[#f1f5f9]", text: "text-[#475569]" },
-  Medium: { bg: "bg-[#dbeafe]", text: "text-[#1d4ed8]" },
-  High: { bg: "bg-[#ffedd5]", text: "text-[#c2410c]" },
-  Critical: { bg: "bg-[#ffe4e6]", text: "text-[#e11d48]" }
-};
+const PRIORITY_BADGES = PRIORITY_CONFIG;
 
 type SubtaskReviewScreenProps = {
   goalDraft: GoalDraft;
@@ -65,6 +62,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [pendingDeleteSubtask, setPendingDeleteSubtask] = useState<Subtask | null>(null);
 
   function handleSaveEventName() {
     const trimmed = eventNameInput.trim();
@@ -449,7 +447,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack 
               isRegenerating={!!regeneratingIds[st.id]}
               onConfirm={() => handleConfirmTask(st.id)}
               onEdit={() => setEditingSubtask(st)}
-              onDelete={() => handleDeleteSubtask(st.id)}
+              onDelete={() => setPendingDeleteSubtask(st)}
               onRegenerate={() => void handleRegenerateSubtask(st.id)}
               onToggleLeaderOnly={() => handleToggleLeaderOnly(st.id)}
             />
@@ -484,6 +482,17 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack 
           isPublishing={publishing}
           onConfirm={() => void handleConfirmPublish()}
           onClose={() => setShowPublishModal(false)}
+        />
+      )}
+      {pendingDeleteSubtask && (
+        <ConfirmDeleteModal
+          itemType="subtask"
+          itemName={pendingDeleteSubtask.title}
+          onCancel={() => setPendingDeleteSubtask(null)}
+          onConfirm={() => {
+            handleDeleteSubtask(pendingDeleteSubtask.id);
+            setPendingDeleteSubtask(null);
+          }}
         />
       )}
     </div>
@@ -575,7 +584,8 @@ function OldTaskCard({
           ) : null}
         </div>
 
-        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ${priorityBadge.bg} ${priorityBadge.text}`}>
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ring-1 ring-inset ${priorityBadge.classes}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${priorityBadge.dot}`} />
           {subtask.priority}
         </span>
       </div>
@@ -922,12 +932,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
               <CustomSelect
                 value={priority}
                 onChange={(val) => setPriority(val as TaskPriority)}
-                options={[
-                  { value: "Low", label: "Low" },
-                  { value: "Medium", label: "Medium" },
-                  { value: "High", label: "High" },
-                  { value: "Critical", label: "Critical" }
-                ]}
+                options={ALL_PRIORITIES.map((value) => ({ value, label: value, indicatorClass: PRIORITY_CONFIG[value].dot, labelClass: PRIORITY_CONFIG[value].classes }))}
                 buttonClassName="py-2.5 text-xs font-semibold"
               />
             </div>
@@ -1135,12 +1140,7 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
               <CustomSelect
                 value={priority}
                 onChange={(val) => setPriority(val as TaskPriority)}
-                options={[
-                  { value: "Low", label: "Low" },
-                  { value: "Medium", label: "Medium" },
-                  { value: "High", label: "High" },
-                  { value: "Critical", label: "Critical" }
-                ]}
+                options={ALL_PRIORITIES.map((value) => ({ value, label: value, indicatorClass: PRIORITY_CONFIG[value].dot, labelClass: PRIORITY_CONFIG[value].classes }))}
                 buttonClassName="py-2 text-xs font-semibold"
               />
             </div>

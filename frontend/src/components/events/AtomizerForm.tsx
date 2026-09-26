@@ -317,22 +317,32 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           const targetId = isCreateFromDescription
             ? "CREATE_NEW"
             : selectedEventId || events[0]?.id || "culture-week";
-          const publishedTasks: Task[] = publishedGoal.subtasks.map((st) => ({
-            id: st.id,
-            title: st.title,
-            description: st.description,
-            status: st.status || "To Do",
-            priority: st.priority,
-            dueDate: "Aug 30",
-            assignee: {
-              initials: st.assigneeName && st.assigneeName !== "Unassigned" ? st.assigneeName.split(" ").map((n) => n[0]).join("") : "UA",
-              color: "bg-[#1e3a5f]",
-              name: st.assigneeName || "Unassigned"
-            },
-            requiredSkills: st.requiredSkills,
-            isLeaderOnly: st.isLeaderOnly,
-            isAiGenerated: st.isAiGenerated
-          }));
+          const publishedTasks: Task[] = publishedGoal.subtasks.map((st) => {
+            const memberName = st.assigneeName && st.assigneeName !== "Unassigned" ? st.assigneeName : "Unassigned";
+            const memberInitials = memberName !== "Unassigned"
+              ? memberName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+              : "UA";
+            const dueDate = new Date();
+            dueDate.setDate(dueDate.getDate() + Math.max(1, st.estimatedDays || 1));
+
+            return {
+              id: st.id,
+              title: st.title,
+              description: st.description,
+              status: st.status || "To Do",
+              priority: st.priority,
+              dueDate: dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+              assignee: {
+                initials: memberInitials,
+                color: "bg-[#1e3a5f]",
+                name: memberName
+              },
+              assignedMemberName: memberName,
+              requiredSkills: st.requiredSkills,
+              isLeaderOnly: st.isLeaderOnly,
+              isAiGenerated: st.isAiGenerated
+            } as Task;
+          });
 
           if (onPublishGoalTasks) {
             onPublishGoalTasks(

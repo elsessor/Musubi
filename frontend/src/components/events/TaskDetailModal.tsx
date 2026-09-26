@@ -8,6 +8,7 @@ import {
   Lock,
   Shield,
   Sparkles,
+  Trash2,
   X,
   Zap
 } from "lucide-react";
@@ -16,14 +17,17 @@ import type { Task, TaskPriority, TaskStatus } from "./types";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { MOCK_ROSTER, type OrgMemberItem } from "./AddTaskModal";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
+import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
+import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
+import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
 const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
-const ALL_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Critical"];
 
 type TaskDetailModalProps = {
   task: Task;
   onClose: () => void;
   onUpdateTask: (updatedTask: Task) => void;
+  onDeleteTask?: (taskId: string) => void;
   customStatuses?: CustomStatusConfig[];
   committees?: { id: string; name: string }[];
   roster?: OrgMemberItem[];
@@ -33,6 +37,7 @@ export function TaskDetailModal({
   task,
   onClose,
   onUpdateTask,
+  onDeleteTask,
   customStatuses = [],
   committees = [],
   roster = MOCK_ROSTER
@@ -43,10 +48,11 @@ export function TaskDetailModal({
   const [description, setDescription] = useState(task.description || "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [priority, setPriority] = useState<TaskPriority>(task.priority || "Medium");
-  const [committee, setCommittee] = useState<string>(task.committee || "General");
+  const [committee, setCommittee] = useState<string>(task.committee || committees[0]?.name || "");
   const [startDate, setStartDate] = useState<string>(task.startDate || "");
   const [dueDate, setDueDate] = useState<string>(task.dueDate || "");
   const [isLeaderOnly, setIsLeaderOnly] = useState<boolean>(Boolean(task.isLeaderOnly));
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Assignee selection
   const currentMemberMatch = activeRoster.find(
@@ -61,10 +67,26 @@ export function TaskDetailModal({
     ...customStatuses.map((cs) => cs.name as TaskStatus)
   ];
 
-  const defaultCommittees = ["General", "Executive", "Logistics", "Marketing", "Finance", "Technical"];
   const committeeOptions = Array.from(
-    new Set([...defaultCommittees, ...committees.map((c) => c.name), ...(task.committee ? [task.committee] : [])])
+    new Set([...committees.map((c) => c.name), ...(task.committee ? [task.committee] : [])])
   );
+  const assigneeOptions: CustomSelectOption[] = activeRoster.map((member) => ({
+    value: member.id,
+    label: member.name,
+    sublabel: member.position,
+    initials: member.initials,
+    color: member.color
+  }));
+  const priorityOptions: CustomSelectOption[] = ALL_PRIORITIES.map((value) => ({
+    value,
+    label: value,
+    indicatorClass: PRIORITY_CONFIG[value].dot,
+    labelClass: PRIORITY_CONFIG[value].classes
+  }));
+  const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
+    const theme = getStatusTheme(value, customStatuses);
+    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.active };
+  });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -149,32 +171,22 @@ export function TaskDetailModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Status</label>
-              <select
+              <CustomSelect
                 value={status}
-                onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
-              >
-                {allStatuses.map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setStatus(value as TaskStatus)}
+                options={statusOptions}
+                buttonClassName="py-2 text-xs"
+              />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Priority</label>
-              <select
+              <CustomSelect
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
-              >
-                {ALL_PRIORITIES.map((pr) => (
-                  <option key={pr} value={pr}>
-                    {pr}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setPriority(value as TaskPriority)}
+                options={priorityOptions}
+                buttonClassName="py-2 text-xs"
+              />
             </div>
           </div>
 
@@ -182,17 +194,13 @@ export function TaskDetailModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
-              <select
+              <CustomSelect
                 value={selectedMemberId}
-                onChange={(e) => setSelectedMemberId(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
-              >
-                {activeRoster.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.position})
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedMemberId}
+                options={assigneeOptions}
+                placeholder="Select a member"
+                buttonClassName="py-2 text-xs"
+              />
             </div>
 
             <div>
@@ -220,6 +228,7 @@ export function TaskDetailModal({
               <MiniCalendarPicker
                 value={startDate}
                 onChange={setStartDate}
+                minDate={new Date()}
                 placeholder="Select start date & time"
                 includeTime={true}
               />
@@ -231,6 +240,7 @@ export function TaskDetailModal({
               <MiniCalendarPicker
                 value={dueDate}
                 onChange={setDueDate}
+                minDate={new Date()}
                 placeholder="Select due date & time"
                 includeTime={true}
               />
@@ -276,7 +286,7 @@ export function TaskDetailModal({
           )}
 
           {/* ACTION BUTTONS */}
-          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+          <div className={`grid gap-3 border-t border-slate-100 pt-3 ${onDeleteTask ? "grid-cols-3" : "grid-cols-2"}`}>
             <button
               type="button"
               onClick={onClose}
@@ -284,6 +294,17 @@ export function TaskDetailModal({
             >
               Cancel
             </button>
+            {onDeleteTask && (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                aria-label="Delete subtask"
+                title="Delete subtask"
+                className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 py-2.5 text-rose-700 hover:bg-rose-100 transition"
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
             <button
               type="submit"
               className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md"
@@ -293,6 +314,18 @@ export function TaskDetailModal({
           </div>
         </form>
       </div>
+      {confirmDelete && onDeleteTask && (
+        <ConfirmDeleteModal
+          itemType="subtask"
+          itemName={task.title || task.description || "Untitled subtask"}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => {
+            onDeleteTask(task.id);
+            setConfirmDelete(false);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }

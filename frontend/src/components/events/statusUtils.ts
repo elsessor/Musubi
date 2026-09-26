@@ -24,6 +24,7 @@ export const THEME_MAP: Record<
     text: string;
     bg: string;
     badge: string;
+    active: string;
     border: string;
     headerTone: string;
   }
@@ -33,6 +34,7 @@ export const THEME_MAP: Record<
     text: "text-blue-600",
     bg: "bg-blue-50",
     badge: "bg-blue-50 text-blue-600 ring-blue-200 border-blue-200",
+    active: "bg-blue-600 text-white ring-blue-700 border-blue-700",
     border: "border-l-blue-500",
     headerTone: "bg-blue-50 text-blue-700"
   },
@@ -41,6 +43,7 @@ export const THEME_MAP: Record<
     text: "text-purple-600",
     bg: "bg-purple-50",
     badge: "bg-purple-50 text-purple-600 ring-purple-200 border-purple-200",
+    active: "bg-purple-600 text-white ring-purple-700 border-purple-700",
     border: "border-l-purple-500",
     headerTone: "bg-purple-50 text-purple-700"
   },
@@ -49,6 +52,7 @@ export const THEME_MAP: Record<
     text: "text-emerald-600",
     bg: "bg-emerald-50",
     badge: "bg-emerald-50 text-emerald-600 ring-emerald-200 border-emerald-200",
+    active: "bg-emerald-600 text-white ring-emerald-700 border-emerald-700",
     border: "border-l-emerald-500",
     headerTone: "bg-emerald-50 text-emerald-700"
   },
@@ -57,6 +61,7 @@ export const THEME_MAP: Record<
     text: "text-amber-600",
     bg: "bg-amber-50",
     badge: "bg-amber-50 text-amber-700 ring-amber-200 border-amber-200",
+    active: "bg-amber-500 text-white ring-amber-600 border-amber-600",
     border: "border-l-amber-400",
     headerTone: "bg-amber-50 text-amber-700"
   },
@@ -65,6 +70,7 @@ export const THEME_MAP: Record<
     text: "text-rose-600",
     bg: "bg-rose-50",
     badge: "bg-rose-50 text-rose-600 ring-rose-200 border-rose-200",
+    active: "bg-rose-600 text-white ring-rose-700 border-rose-700",
     border: "border-l-rose-500",
     headerTone: "bg-rose-50 text-rose-700"
   },
@@ -73,6 +79,7 @@ export const THEME_MAP: Record<
     text: "text-cyan-600",
     bg: "bg-cyan-50",
     badge: "bg-cyan-50 text-cyan-600 ring-cyan-200 border-cyan-200",
+    active: "bg-cyan-600 text-white ring-cyan-700 border-cyan-700",
     border: "border-l-cyan-500",
     headerTone: "bg-cyan-50 text-cyan-700"
   },
@@ -81,6 +88,7 @@ export const THEME_MAP: Record<
     text: "text-indigo-600",
     bg: "bg-indigo-50",
     badge: "bg-indigo-50 text-indigo-600 ring-indigo-200 border-indigo-200",
+    active: "bg-indigo-600 text-white ring-indigo-700 border-indigo-700",
     border: "border-l-indigo-500",
     headerTone: "bg-indigo-50 text-indigo-700"
   },
@@ -89,6 +97,7 @@ export const THEME_MAP: Record<
     text: "text-violet-600",
     bg: "bg-violet-50",
     badge: "bg-violet-50 text-violet-600 ring-violet-200 border-violet-200",
+    active: "bg-violet-600 text-white ring-violet-700 border-violet-700",
     border: "border-l-violet-500",
     headerTone: "bg-violet-50 text-violet-700"
   },
@@ -97,6 +106,7 @@ export const THEME_MAP: Record<
     text: "text-slate-600",
     bg: "bg-slate-100",
     badge: "bg-slate-100 text-slate-600 ring-slate-200 border-slate-200",
+    active: "bg-slate-600 text-white ring-slate-700 border-slate-700",
     border: "border-l-slate-400",
     headerTone: "bg-slate-100 text-slate-700"
   }
@@ -107,6 +117,7 @@ export function getStatusTheme(status: string, customStatuses?: CustomStatusConf
   text: string;
   bg: string;
   badge: string;
+  active: string;
   border: string;
   headerTone: string;
 } {

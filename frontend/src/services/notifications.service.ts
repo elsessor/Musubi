@@ -2,6 +2,8 @@ import type { User } from "firebase/auth";
 import { collection, doc, onSnapshot, query, updateDoc, arrayUnion, limit } from "firebase/firestore";
 import { getFirebaseDb } from "../firebase/config";
 import { subscribeEventsFirestore } from "./events.service";
+import { subscribeAnnouncementsFirestore } from "./announcements.service";
+import { useAuthStore } from "@/store/authStore";
 
 export type NotificationRecord = {
   id: string;
@@ -9,10 +11,16 @@ export type NotificationRecord = {
   orgId?: string | null;
   title: string;
   description: string;
-  type: "task" | "ai" | "organization" | "event" | "system";
+  type: "announcement" | "nudge" | "task" | "ai" | "organization" | "event" | "system";
   unread: boolean;
   time: string;
   createdAt?: string | null;
+  isPinned?: boolean;
+  authorName?: string;
+  nudgeCategory?: "deadline" | "followup" | "system";
+  dueDate?: string;
+  targetAudience?: string;
+  content?: string;
 };
 
 const READ_NOTIFS_STORAGE_KEY = "musubi_read_notifications";
@@ -88,6 +96,7 @@ export function subscribeNotificationsFirestore(
   const currentUid = user?.uid;
   const targetOrgId = orgId && orgId.trim() ? orgId.trim() : null;
 
+  let announcementNotifs: NotificationRecord[] = [];
   let directNotifs: NotificationRecord[] = [];
   let auditNotifs: NotificationRecord[] = [];
   let eventNotifs: NotificationRecord[] = [];
@@ -96,13 +105,19 @@ export function subscribeNotificationsFirestore(
     const readStorage = getReadNotifIdsFromStorage();
     const map = new Map<string, NotificationRecord>();
 
-    // 1. Direct Notifications
+    // 1. Real-time Announcements
+    announcementNotifs.forEach((item) => {
+      const isRead = readStorage.includes(item.id);
+      map.set(item.id, { ...item, unread: !isRead });
+    });
+
+    // 2. Direct Notifications
     directNotifs.forEach((item) => {
       const isRead = !item.unread || readStorage.includes(item.id);
       map.set(item.id, { ...item, unread: !isRead });
     });
 
-    // 2. Event Nudges & Subtasks
+    // 3. Event Nudges & Subtasks
     eventNotifs.forEach((item) => {
       if (!map.has(item.id)) {
         const isRead = !item.unread || readStorage.includes(item.id);
@@ -110,7 +125,7 @@ export function subscribeNotificationsFirestore(
       }
     });
 
-    // 3. Audit Logs
+    // 4. Audit Logs
     auditNotifs.forEach((item) => {
       if (!map.has(item.id)) {
         const isRead = !item.unread || readStorage.includes(item.id);
@@ -119,19 +134,58 @@ export function subscribeNotificationsFirestore(
     });
 
     const merged = Array.from(map.values());
-    merged.sort((a, b) => {
+
+    // Deduplicate merged array by type + title + description to eliminate duplicate notifications
+    const dedupMap = new Map<string, NotificationRecord>();
+    merged.forEach((item) => {
+      const key = `${item.type}_${(item.title || "").trim().toLowerCase()}_${(item.description || "").trim().toLowerCase()}`;
+      if (!dedupMap.has(key)) {
+        dedupMap.set(key, item);
+      } else {
+        const existing = dedupMap.get(key)!;
+        if (item.isPinned && !existing.isPinned) {
+          dedupMap.set(key, item);
+        }
+      }
+    });
+
+    const finalMerged = Array.from(dedupMap.values());
+
+    // Pinned announcements MUST appear FIRST, then by time DESC
+    finalMerged.sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
     });
 
-    onData(merged);
+    onData(finalMerged);
   }
 
   // Initial immediate emit
   emitMerged();
 
-  // Subscribe to real-time events & tasks for Nudges / Deadline Alerts
+  // 1. Subscribe to real-time announcements from Firestore
+  const userRole = useAuthStore.getState().profile?.role;
+  const unsubAnnouncements = subscribeAnnouncementsFirestore(targetOrgId, userRole, (announcements) => {
+    announcementNotifs = announcements.map((ann) => ({
+      id: `announcement_${ann.id}`,
+      orgId: targetOrgId,
+      title: ann.title,
+      content: ann.content,
+      description: `From ${ann.authorName} · ${ann.createdAt || "Recent"}`,
+      type: "announcement" as const,
+      unread: true,
+      time: ann.createdAt || "Recent",
+      createdAt: ann.createdAt || new Date().toISOString(),
+      isPinned: Boolean(ann.isPinned),
+      authorName: ann.authorName,
+      targetAudience: ann.targetAudience
+    }));
+    emitMerged();
+  });
+
+  // 2. Subscribe to real-time events & tasks for Nudges / Deadline Alerts
   const unsubEvents = subscribeEventsFirestore(user, targetOrgId, (events) => {
     eventNotifs = [];
     events.forEach((event) => {
@@ -141,18 +195,7 @@ export function subscribeNotificationsFirestore(
           const dueDateStr = task.dueDate || task.deadline;
           const taskTitle = task.title || task.description || "Subtask";
 
-          if (isCompleted) {
-            eventNotifs.push({
-              id: `event_task_done_${event.id}_${task.id}`,
-              orgId: targetOrgId,
-              title: `Completed Subtask: "${taskTitle}"`,
-              description: `@ ${event.title}`,
-              type: "task",
-              unread: false,
-              time: "Completed",
-              createdAt: new Date().toISOString()
-            });
-          } else {
+          if (!isCompleted) {
             const parsedDate = dueDateStr ? new Date(dueDateStr) : null;
             const now = new Date();
             const diffDays = parsedDate && !isNaN(parsedDate.getTime()) ? Math.ceil((parsedDate.getTime() - now.getTime()) / (1000 * 3600 * 24)) : 99;
@@ -161,22 +204,26 @@ export function subscribeNotificationsFirestore(
               eventNotifs.push({
                 id: `event_task_alert_${event.id}_${task.id}`,
                 orgId: targetOrgId,
-                title: `Deadline Alert: ${taskTitle}`,
-                description: `@ ${event.title}${dueDateStr ? ` • Due ${dueDateStr}` : ""}`,
-                type: "task",
+                title: taskTitle,
+                description: `@ ${event.title}`,
+                type: "nudge",
+                nudgeCategory: "deadline",
                 unread: true,
-                time: dueDateStr || "Upcoming",
+                dueDate: dueDateStr || "Aug 30",
+                time: dueDateStr || "Aug 30",
                 createdAt: new Date().toISOString()
               });
             } else {
               eventNotifs.push({
                 id: `event_task_followup_${event.id}_${task.id}`,
                 orgId: targetOrgId,
-                title: `Follow-up: ${taskTitle}`,
-                description: `@ ${event.title}${dueDateStr ? ` • Due ${dueDateStr}` : ""}`,
-                type: "task",
+                title: taskTitle,
+                description: `@ ${event.title}`,
+                type: "nudge",
+                nudgeCategory: "followup",
                 unread: true,
-                time: dueDateStr || "Upcoming",
+                dueDate: dueDateStr || "Aug 30",
+                time: dueDateStr || "Aug 30",
                 createdAt: new Date().toISOString()
               });
             }
@@ -187,7 +234,7 @@ export function subscribeNotificationsFirestore(
     emitMerged();
   });
 
-  // Subscribe to direct notifications
+  // 3. Subscribe to direct notifications
   const notifQuery = query(collection(db, "notifications"), limit(50));
   const unsubNotifs = onSnapshot(
     notifQuery,
@@ -212,7 +259,7 @@ export function subscribeNotificationsFirestore(
             orgId: itemOrgId,
             title: typeof data.title === "string" ? data.title : "Notification",
             description: typeof data.description === "string" ? data.description : "",
-            type: (["task", "ai", "organization", "event", "system"].includes(data.type) ? data.type : "system") as any,
+            type: (["announcement", "nudge", "task", "ai", "organization", "event", "system"].includes(data.type) ? data.type : "system") as any,
             unread: !isRead,
             time: formatRelativeTime(data.createdAt),
             createdAt: data.createdAt ? (typeof data.createdAt.toDate === "function" ? data.createdAt.toDate().toISOString() : String(data.createdAt)) : null
@@ -227,7 +274,7 @@ export function subscribeNotificationsFirestore(
     }
   );
 
-  // Subscribe to audit logs
+  // 4. Subscribe to audit logs
   const auditQuery = query(collection(db, "audit_logs"), limit(40));
   const unsubAudit = onSnapshot(
     auditQuery,
@@ -291,6 +338,7 @@ export function subscribeNotificationsFirestore(
   );
 
   return () => {
+    unsubAnnouncements();
     unsubEvents();
     unsubNotifs();
     unsubAudit();
@@ -299,7 +347,7 @@ export function subscribeNotificationsFirestore(
 
 export async function markNotificationAsRead(user: User | null, notificationId: string): Promise<void> {
   addReadNotifIdToStorage(notificationId);
-  if (!user || !notificationId || notificationId.startsWith("audit_") || notificationId.startsWith("event_")) return;
+  if (!user || !notificationId || notificationId.startsWith("audit_") || notificationId.startsWith("event_") || notificationId.startsWith("announcement_")) return;
 
   try {
     const db = getFirebaseDb();
@@ -315,7 +363,7 @@ export async function markNotificationAsRead(user: User | null, notificationId: 
 
 export async function markAllNotificationsAsRead(user: User | null, notificationIds: string[]): Promise<void> {
   addMultipleReadNotifIdsToStorage(notificationIds);
-  const directIds = notificationIds.filter((id) => !id.startsWith("audit_") && !id.startsWith("event_"));
+  const directIds = notificationIds.filter((id) => !id.startsWith("audit_") && !id.startsWith("event_") && !id.startsWith("announcement_"));
   if (user && directIds.length > 0) {
     await Promise.all(directIds.map((id) => markNotificationAsRead(user, id)));
   }

@@ -1062,6 +1062,35 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
   return { success: true };
 }
 
+export async function deleteEventForUser(uid: string, eventId: string) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Student Leader" && user.role !== "Admin") {
+    throw new AppError("Only leaders can delete events.", 403);
+  }
+
+  const docRef = firestore.collection("events").doc(eventId);
+  const snap = await docRef.get();
+  if (!snap.exists) throw new AppError("Event not found.", 404);
+
+  const data = snap.data() ?? {};
+  if (user.organizationId && data.orgId && data.orgId !== user.organizationId) {
+    throw new AppError("Event not found.", 404);
+  }
+
+  await docRef.delete();
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "Event deleted",
+    actionCategory: "Events & Tasks",
+    targetType: "Event",
+    targetName: typeof data.title === "string" ? data.title : "Event",
+    orgId: typeof data.orgId === "string" ? data.orgId : user.organizationId ?? null
+  });
+  return { success: true };
+}
+
 export async function clearEventsForOrg(uid: string, organizationId: string) {
   const user = await getCurrentUser(uid);
   const targetOrgId = organizationId || user.organizationId || "default-org";
@@ -1109,4 +1138,116 @@ export async function getEventsForUser(uid: string, orgId?: string) {
     };
   });
 }
+
+export async function createAnnouncementService(
+  uid: string,
+  data: {
+    orgId?: string;
+    title: string;
+    content: string;
+    targetAudience?: string;
+    isPinned?: boolean;
+    authorName?: string;
+    authorRole?: string;
+  }
+) {
+  const user = await getCurrentUser(uid);
+  const targetOrgId = data.orgId || user.organizationId || "default-org";
+
+  const formattedDate = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+
+  const payload = {
+    organizationId: targetOrgId,
+    orgId: targetOrgId,
+    title: (data.title || "").trim(),
+    content: (data.content || "").trim(),
+    targetAudience: data.targetAudience || "All Members",
+    isPinned: Boolean(data.isPinned),
+    authorName: data.authorName || user.fullName || "Student Leader",
+    authorUid: uid,
+    authorRole: data.authorRole || user.position || user.role || "Student Leader",
+    createdAt: formattedDate,
+    timestamp: Date.now(),
+    createdAtServer: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  };
+
+  const topRef = await firestore.collection("announcements").add(payload);
+
+  try {
+    await firestore.collection("organizations").doc(targetOrgId).collection("announcements").doc(topRef.id).set(payload);
+  } catch (err) {
+    console.warn("[createAnnouncementService] Subcollection write warning:", err);
+  }
+
+  writeAuditLog({
+    actorUID: uid,
+    actorName: user.fullName,
+    actorRole: user.role,
+    orgId: targetOrgId,
+    action: `Posted announcement: "${payload.title}"`,
+    actionCategory: "Organization",
+    targetType: "Announcement",
+    targetName: payload.title
+  });
+
+  return {
+    id: topRef.id,
+    ...payload,
+    createdAtServer: undefined
+  };
+}
+
+export async function getAnnouncementsService(uid: string, orgId?: string) {
+  const user = await getCurrentUser(uid);
+  const targetOrgId = orgId || user.organizationId || "default-org";
+
+  const snapshot = await firestore.collection("announcements").get();
+  const list: any[] = [];
+
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    const itemOrgId = data.organizationId || data.orgId || "default-org";
+    const targetAudience = data.targetAudience || "All Members";
+
+    if (user.role === "Organization Member" && targetAudience === "Leaders Only") {
+      return;
+    }
+
+    const isAllMembers = targetAudience === "All Members";
+    const isOrgMatch =
+      !targetOrgId ||
+      targetOrgId === "default-org" ||
+      itemOrgId === "default-org" ||
+      itemOrgId === targetOrgId;
+
+    if (isAllMembers || isOrgMatch) {
+      list.push({
+        id: docSnap.id,
+        organizationId: itemOrgId,
+        title: typeof data.title === "string" ? data.title : "Untitled Announcement",
+        content: typeof data.content === "string" ? data.content : "",
+        targetAudience,
+        isPinned: Boolean(data.isPinned),
+        authorName: typeof data.authorName === "string" ? data.authorName : "Student Leader",
+        authorUid: typeof data.authorUid === "string" ? data.authorUid : "",
+        authorRole: typeof data.authorRole === "string" ? data.authorRole : "Student Leader",
+        createdAt: typeof data.createdAt === "string" ? data.createdAt : "Recent",
+        timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now()
+      });
+    }
+  });
+
+  list.sort((a, b) => {
+    if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+    return (b.timestamp || 0) - (a.timestamp || 0);
+  });
+
+  return list;
+}
+
+
 

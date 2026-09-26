@@ -54,6 +54,23 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
         const currentStatusIndex = allStatuses.indexOf(task.status);
         const isPriorityOpen = openPriorityDropdownId === task.id;
 
+        const displayAssigneeName =
+          task.assignedMemberName ||
+          task.assignee?.name ||
+          (task as any).assigneeName ||
+          "Unassigned";
+        const displayInitials =
+          task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
+            ? task.assignee.initials
+            : displayAssigneeName !== "Unassigned"
+            ? displayAssigneeName
+                .split(" ")
+                .map((n: string) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase()
+            : "UA";
+
         return (
           <div
             key={task.id}
@@ -147,7 +164,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span className="flex items-center gap-1">
                       <User size={12} className="text-slate-400" />
-                      {task.assignedMemberName || task.assignee?.name || task.assignee?.initials || "Unassigned"}
+                      {displayAssigneeName}
                     </span>
                     <span className="flex items-center gap-1">
                       <Calendar size={12} className="text-slate-400" />
@@ -164,19 +181,20 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                   {allStatuses.map((st, idx) => {
                     const isActive = task.status === st;
                     const isPassed = idx <= currentStatusIndex;
+                    const stTheme = getStatusTheme(st, customStatuses);
                     return (
                       <button
                         key={st}
                         type="button"
                         onClick={() => onUpdateStatus(task.id, st)}
                         className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${isActive
-                          ? "bg-slate-900 text-white shadow-2xs"
+                          ? `${stTheme.active} ring-1 ring-inset shadow-2xs`
                           : isPassed
                             ? "text-slate-700 hover:bg-slate-200/60"
                             : "text-slate-400 hover:bg-slate-200/40"
                           }`}
                       >
-                        {st}
+                        <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${isActive ? "bg-white" : stTheme.dot}`} />{st}
                       </button>
                     );
                   })}
@@ -221,11 +239,11 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                   <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
                     <span className="text-[11px] font-semibold text-slate-400">Assignee</span>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}>
-                        {task.assignee?.initials || "ME"}
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`} title={displayAssigneeName}>
+                        {displayInitials}
                       </span>
                       <span className="text-xs font-bold text-slate-800 truncate">
-                        {task.assignedMemberName || task.assignee?.name || "Unassigned"}
+                        {displayAssigneeName}
                       </span>
                     </div>
                   </div>

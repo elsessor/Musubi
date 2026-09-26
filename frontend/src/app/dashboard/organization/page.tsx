@@ -42,6 +42,12 @@ import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
+import { AnnouncementsView, PostAnnouncementModal } from "@/components/dashboard/AnnouncementsView";
+import {
+  createAnnouncementFirestore,
+  subscribeAnnouncementsFirestore,
+  type Announcement
+} from "@/services/announcements.service";
 
 type OrganizationTab = "overview" | "members" | "committees" | "announcements";
 
@@ -56,6 +62,77 @@ function formatDate(value: string | null) {
   if (!value) return "Aug 12, 2024";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Aug 12, 2024" : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+function computeMemberStats(
+  memberName: string,
+  memberId: string,
+  events: Event[],
+  explicitStatus?: string
+) {
+  const nameTrimmed = memberName.trim().toLowerCase();
+  const parts = nameTrimmed.split(/\s+/).filter(Boolean);
+  const firstName = parts[0] || "";
+  const lastName = parts[parts.length - 1] || "";
+  const initials = parts.slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+
+  const allTasks = events.flatMap((e) => (e.tasks || []).map((t) => ({ ...t, eventTitle: e.title })));
+
+  const memberTasks = allTasks.filter((t) => {
+    const assigneeUID = t.assignedMemberUID || "";
+    if (memberId && assigneeUID === memberId) return true;
+
+    const assigneeName = (t.assignee?.name || t.assignedMemberName || "").trim().toLowerCase();
+    const assigneeInitials = (t.assignee?.initials || "").trim().toUpperCase();
+
+    if (!assigneeName && !assigneeInitials) return false;
+
+    if (assigneeName === nameTrimmed || assigneeName.includes(nameTrimmed) || nameTrimmed.includes(assigneeName)) {
+      return true;
+    }
+    if (firstName && firstName.length > 2 && assigneeName.includes(firstName)) {
+      return true;
+    }
+    if (lastName && lastName.length > 2 && assigneeName.includes(lastName)) {
+      return true;
+    }
+    if (assigneeInitials && (assigneeInitials === initials || initials.includes(assigneeInitials))) {
+      return true;
+    }
+    return false;
+  });
+
+  const activeTasks = memberTasks.filter(
+    (t) => t.status === "In Progress" || t.status === "To Do" || t.status === "In Review" || t.status === "Pending"
+  );
+  const completedTasks = memberTasks.filter(
+    (t) => t.status === "Completed" || t.status === "Done"
+  );
+
+  const workload = Math.min(100, activeTasks.length * 25);
+
+  let reliability = "95%";
+  if (memberTasks.length > 0) {
+    const relScore = Math.round((completedTasks.length / memberTasks.length) * 100);
+    reliability = `${relScore}%`;
+  } else if (completedTasks.length > 0) {
+    reliability = "100%";
+  }
+
+  const availability =
+    explicitStatus && (explicitStatus === "Available" || explicitStatus === "Busy" || explicitStatus === "On Leave")
+      ? explicitStatus
+      : activeTasks.length >= 4
+      ? "Busy"
+      : "Available";
+
+  return {
+    memberTasks,
+    activeTasks,
+    workload,
+    reliability,
+    availability
+  };
 }
 
 export default function OrganizationPage() {
@@ -79,6 +156,44 @@ export default function OrganizationPage() {
   const [committeeModalOpen, setCommitteeModalOpen] = useState(false);
   const [profileMember, setProfileMember] = useState<MemberRow | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [isPostAnnouncementOpen, setIsPostAnnouncementOpen] = useState(false);
+
+  useEffect(() => {
+    const orgId = profile?.organizationId || "default-org";
+    const unsubscribe = subscribeAnnouncementsFirestore(orgId, profile?.role, (data) => {
+      setAnnouncements(data);
+    });
+    return () => unsubscribe();
+  }, [profile?.organizationId, profile?.role]);
+
+  async function handlePostAnnouncement(data: {
+    title: string;
+    content: string;
+    targetAudience: string;
+    isPinned: boolean;
+  }) {
+    const orgId = profile?.organizationId || "default-org";
+    try {
+      const newAnn = await createAnnouncementFirestore(orgId, {
+        ...data,
+        authorName: profile?.fullName || "Student Leader",
+        authorUid: profile?.uid,
+        authorRole: profile?.position || profile?.role || "Student Leader"
+      });
+
+      setAnnouncements((prev) => {
+        if (prev.some((a) => a.id === newAnn.id)) return prev;
+        const updated = [newAnn, ...prev];
+        return updated.sort((a, b) => {
+          if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+          return (b.timestamp || 0) - (a.timestamp || 0);
+        });
+      });
+    } catch (err) {
+      console.warn("[OrganizationPage] Error creating announcement:", err);
+    }
+  }
 
   useEffect(() => {
     if (!authLoading && !profile) router.replace("/sign-in");
@@ -154,7 +269,40 @@ export default function OrganizationPage() {
     setCommitteeModalOpen(false);
   }
 
-  const memberRows = useMemo<MemberRow[]>(() => members.map((member) => ({ id: member.id, initials: member.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?", name: member.name, role: member.position || member.role, committee: member.committeeName || committees.find((committee) => committee.id === member.committeeId)?.name || (member.committeeId ? "Assigned committee" : "Not assigned"), skills: member.skills, workload: 0, reliability: "-", availability: "Available" })), [committees, members]);
+  const memberRows = useMemo<MemberRow[]>(
+    () =>
+      members.map((member) => {
+        const stats = computeMemberStats(
+          member.name,
+          member.id,
+          events,
+          (member as any).availability || (member as any).status
+        );
+        return {
+          id: member.id,
+          initials:
+            member.name
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part[0])
+              .join("")
+              .toUpperCase() || "?",
+          name: member.name,
+          role: member.position || member.role,
+          committee:
+            member.committeeName ||
+            committees.find((committee) => committee.id === member.committeeId)?.name ||
+            (member.committeeId ? "Assigned committee" : "Not assigned"),
+          skills: member.skills,
+          workload: stats.workload,
+          reliability: stats.reliability,
+          availability: stats.availability,
+          assignedTasks: stats.activeTasks
+        } as any;
+      }),
+    [committees, members, events]
+  );
 
   const filteredMembers = useMemo(() => {
     const query = memberSearch.trim().toLowerCase();
@@ -187,11 +335,84 @@ export default function OrganizationPage() {
           <TabButton active={activeTab === "announcements"} icon={Bell} label="Announcements" onClick={() => setActiveTab("announcements")} />
         </div>
 
-        {loading ? <LoadCard message="Loading organization profile..." /> : error ? <ErrorCard message={error} /> : !organization ? myJoinRequest ? <PendingJoinCard organizationName={myJoinRequest.organizationName} /> : <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." /> : activeTab === "overview" ? <Overview organization={organization} members={members} memberCount={members.length} events={events} firebaseUser={firebaseUser} onUpdate={setOrganization} onNavigateMembers={() => setActiveTab("members")} /> : activeTab === "members" ? <Members search={memberSearch} members={filteredMembers} onSearch={setMemberSearch} joinRequests={joinRequests} isLeader={profile.role === "Student Leader"} reviewingRequestId={reviewingRequestId} onReview={reviewJoinRequest} onViewProfile={setProfileMember} currentUserId={profile.uid} currentUserName={profile.fullName} /> : activeTab === "committees" ? <Committees committees={committees} members={members} canCreate={profile.role === "Student Leader"} onCreate={() => setCommitteeModalOpen(true)} currentUserId={profile.uid} currentUserName={profile.fullName} /> : <EmptyPanel tab={activeTab} />}
+        {loading ? (
+          <LoadCard message="Loading organization profile..." />
+        ) : error ? (
+          <ErrorCard message={error} />
+        ) : !organization ? (
+          myJoinRequest ? (
+            <PendingJoinCard organizationName={myJoinRequest.organizationName} />
+          ) : (
+            <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." />
+          )
+        ) : activeTab === "overview" ? (
+          <Overview
+            organization={organization}
+            members={members}
+            memberCount={members.length}
+            events={events}
+            firebaseUser={firebaseUser}
+            onUpdate={setOrganization}
+            onNavigateMembers={() => setActiveTab("members")}
+          />
+        ) : activeTab === "members" ? (
+          <Members
+            search={memberSearch}
+            members={filteredMembers}
+            onSearch={setMemberSearch}
+            joinRequests={joinRequests}
+            isLeader={profile.role === "Student Leader"}
+            reviewingRequestId={reviewingRequestId}
+            onReview={reviewJoinRequest}
+            onViewProfile={setProfileMember}
+            currentUserId={profile.uid}
+            currentUserName={profile.fullName}
+          />
+        ) : activeTab === "committees" ? (
+          <Committees
+            committees={committees}
+            members={members}
+            canCreate={profile.role === "Student Leader"}
+            onCreate={() => setCommitteeModalOpen(true)}
+            currentUserId={profile.uid}
+            currentUserName={profile.fullName}
+          />
+        ) : activeTab === "announcements" ? (
+          <AnnouncementsView
+            announcements={announcements}
+            isLeader={profile.role === "Student Leader" || profile.role === "Admin"}
+            onPostAnnouncement={() => setIsPostAnnouncementOpen(true)}
+          />
+        ) : (
+          <EmptyPanel tab={activeTab} />
+        )}
       </section>
-      {accessModalOpen && firebaseUser && profile.role !== "Admin" ? <OrganizationAccessModal role={profile.role} user={firebaseUser} onClose={() => setAccessModalOpen(false)} onComplete={(updatedProfile) => { setProfile({ ...profile, ...updatedProfile }); setOrganization(null); setMembers([]); setLoading(true); }} /> : null}
-      {committeeModalOpen ? <CreateCommitteeModal members={members} onClose={() => setCommitteeModalOpen(false)} onCreate={createCommittee} /> : null}
+      {accessModalOpen && firebaseUser && profile.role !== "Admin" ? (
+        <OrganizationAccessModal
+          role={profile.role}
+          user={firebaseUser}
+          onClose={() => setAccessModalOpen(false)}
+          onComplete={(updatedProfile) => {
+            setProfile({ ...profile, ...updatedProfile });
+            setOrganization(null);
+            setMembers([]);
+            setLoading(true);
+          }}
+        />
+      ) : null}
+      {committeeModalOpen ? (
+        <CreateCommitteeModal
+          members={members}
+          onClose={() => setCommitteeModalOpen(false)}
+          onCreate={createCommittee}
+        />
+      ) : null}
       {profileMember ? <MemberProfileModal member={profileMember} onClose={() => setProfileMember(null)} /> : null}
+      <PostAnnouncementModal
+        isOpen={isPostAnnouncementOpen}
+        onClose={() => setIsPostAnnouncementOpen(false)}
+        onSubmit={handlePostAnnouncement}
+      />
     </DashboardLayout>
   );
 }

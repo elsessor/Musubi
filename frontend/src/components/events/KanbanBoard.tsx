@@ -15,6 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   Table,
+  Trash2,
   Users,
   XCircle
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { TaskGridView } from "./TaskGridView";
 import { TaskTableView } from "./TaskTableView";
 import { TaskExpandedView } from "./TaskExpandedView";
 import { TaskCalendarView } from "./TaskCalendarView";
+import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
 import { useAuthStore } from "@/store/authStore";
 import { updateEventFirestore } from "@/services/events.service";
@@ -53,6 +55,7 @@ type KanbanBoardProps = {
   members?: OrganizationMember[];
   onBack: () => void;
   onUpdateEvent?: (updatedEvent: Event) => void;
+  onDeleteEvent?: () => void | Promise<void>;
   committees?: { id: string; name: string }[];
   isLeader?: boolean;
 };
@@ -61,6 +64,7 @@ export function KanbanBoard({
   event,
   onBack,
   onUpdateEvent,
+  onDeleteEvent,
   committees = [],
   members = [],
   isLeader = true
@@ -81,6 +85,8 @@ export function KanbanBoard({
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [statusModalTarget, setStatusModalTarget] = useState<"Completed" | "Cancelled" | null>(null);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
+  const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false);
+  const [isDeletingEvent, setIsDeletingEvent] = useState(false);
 
   // Custom task statuses state & localStorage (scoped per event)
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
@@ -306,6 +312,15 @@ export function KanbanBoard({
     setSelectedDetailTask(null);
   }
 
+  function handleDeleteTask(taskId: string) {
+    const updatedTasks = tasks.filter((task) => task.id !== taskId);
+    const updatedProgress = updatedTasks.length
+      ? Math.round((updatedTasks.filter((task) => task.status === "Completed").length / updatedTasks.length) * 100)
+      : 0;
+    syncEvent(updatedTasks, undefined, updatedProgress);
+    setSelectedDetailTask(null);
+  }
+
   function handleDrop(targetStatus: TaskStatus) {
     if (!draggedId) return;
     handleUpdateTaskStatus(draggedId, targetStatus);
@@ -361,6 +376,15 @@ export function KanbanBoard({
 
         {/* Event Lifecycle Header Buttons */}
         <div className="flex items-center gap-2">
+          {isLeader && onDeleteEvent && (
+            <button
+              type="button"
+              onClick={() => setConfirmDeleteEvent(true)}
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
+            >
+              <Trash2 size={14} /> Delete Event
+            </button>
+          )}
           {currentEvent.status !== "Completed" && (
             <button
               type="button"
@@ -521,7 +545,7 @@ export function KanbanBoard({
                   title={isPillDraggable ? "Drag to rearrange status order" : undefined}
                   className={`group flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
                     isActive
-                      ? "bg-slate-900 text-white shadow"
+                      ? key === "All" ? "bg-slate-900 text-white shadow" : `${theme.active} shadow-sm`
                       : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
                   } ${isPillDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
                     isDraggingThis ? "opacity-30 scale-95 border-dashed border-blue-400" : ""
@@ -531,10 +555,10 @@ export function KanbanBoard({
                     <GripVertical size={11} className="-ml-1 text-slate-300 transition-opacity group-hover:text-slate-500" />
                   )}
                   {key !== "All" && (
-                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white/70" : theme.dot}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white" : theme.dot}`} />
                   )}
                   {label}
-                  <span className={`${isActive ? "text-white/70" : "text-slate-400"}`}>{count}</span>
+                  <span className={`${isActive ? "text-white/80" : "text-slate-400"}`}>{count}</span>
                 </button>
               );
             })}
@@ -698,6 +722,7 @@ export function KanbanBoard({
           task={selectedDetailTask}
           onClose={() => setSelectedDetailTask(null)}
           onUpdateTask={handleUpdateTask}
+          onDeleteTask={handleDeleteTask}
           customStatuses={customStatuses}
           committees={committees}
           roster={realRoster}
@@ -750,6 +775,26 @@ export function KanbanBoard({
         onReorderStatusOrder={handleReorderStatusOrder}
         onDeleteStatus={handleDeleteCustomStatus}
       />
+
+      {confirmDeleteEvent && onDeleteEvent && (
+        <ConfirmDeleteModal
+          itemType="event"
+          itemName={currentEvent.title}
+          isDeleting={isDeletingEvent}
+          onCancel={() => setConfirmDeleteEvent(false)}
+          onConfirm={async () => {
+            setIsDeletingEvent(true);
+            try {
+              await onDeleteEvent();
+              setConfirmDeleteEvent(false);
+            } catch (error) {
+              console.error("Failed to delete event:", error);
+            } finally {
+              setIsDeletingEvent(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
