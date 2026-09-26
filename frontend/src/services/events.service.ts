@@ -139,7 +139,7 @@ export async function createEventFirestore(
     endDate: event.endDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     memberCount: event.memberCount || 1,
     progress: event.progress || 0,
-    committee: event.committee || "General",
+    committee: event.committee ?? "",
     tasks: event.tasks || [],
     orgId: targetOrgId,
     createdAt: serverTimestamp()

@@ -1002,7 +1002,7 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     endDate: input.endDate || new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     memberCount: typeof input.memberCount === "number" ? input.memberCount : 1,
     progress: typeof input.progress === "number" ? input.progress : 0,
-    committee: input.committee || "General",
+    committee: input.committee ?? "",
     tasks: Array.isArray(input.tasks) ? input.tasks : [],
     orgId: targetOrgId,
     createdBy: uid,

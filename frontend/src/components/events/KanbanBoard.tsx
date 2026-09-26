@@ -8,10 +8,12 @@ import {
   Columns3,
   Filter,
   GripVertical,
+  Edit3,
   LayoutGrid,
   Plus,
   RotateCcw,
   Rows,
+  Save,
   Search,
   SlidersHorizontal,
   Table,
@@ -87,6 +89,11 @@ export function KanbanBoard({
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
+  const [isEditingEventDetails, setIsEditingEventDetails] = useState(false);
+  const [eventTitleDraft, setEventTitleDraft] = useState(event.title);
+  const [eventDescriptionDraft, setEventDescriptionDraft] = useState(event.description);
+  const [isSavingEventDetails, setIsSavingEventDetails] = useState(false);
+  const [eventDetailsError, setEventDetailsError] = useState("");
 
   // Custom task statuses state & localStorage (scoped per event)
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
@@ -321,6 +328,32 @@ export function KanbanBoard({
     setSelectedDetailTask(null);
   }
 
+  async function handleSaveEventDetails() {
+    const title = eventTitleDraft.trim();
+    if (!title) {
+      setEventDetailsError("Event title is required.");
+      return;
+    }
+
+    setIsSavingEventDetails(true);
+    setEventDetailsError("");
+    const updatedEvent = { ...currentEvent, title, description: eventDescriptionDraft.trim() };
+    try {
+      await updateEventFirestore(firebaseUser, currentEvent.id, {
+        title: updatedEvent.title,
+        description: updatedEvent.description
+      });
+      setCurrentEvent(updatedEvent);
+      onUpdateEvent?.(updatedEvent);
+      setIsEditingEventDetails(false);
+    } catch (error) {
+      console.error("Failed to update event details:", error);
+      setEventDetailsError("Could not save event details. Please try again.");
+    } finally {
+      setIsSavingEventDetails(false);
+    }
+  }
+
   function handleDrop(targetStatus: TaskStatus) {
     if (!draggedId) return;
     handleUpdateTaskStatus(draggedId, targetStatus);
@@ -425,7 +458,44 @@ export function KanbanBoard({
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">{currentEvent.title}</h1>
+              {isEditingEventDetails ? (
+                <input
+                  autoFocus
+                  value={eventTitleDraft}
+                  onChange={(e) => setEventTitleDraft(e.target.value)}
+                  aria-label="Event title"
+                  className="w-full max-w-xl rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-lg font-extrabold text-slate-900 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                />
+              ) : (
+                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">{currentEvent.title}</h1>
+              )}
+              {isLeader && !isEditingEventDetails && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEventTitleDraft(currentEvent.title);
+                    setEventDescriptionDraft(currentEvent.description);
+                    setEventDetailsError("");
+                    setIsEditingEventDetails(true);
+                  }}
+                  aria-label="Edit event title and description"
+                  title="Edit event details"
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-blue-50 hover:text-blue-600"
+                >
+                  <Edit3 size={15} />
+                  Edit
+                </button>
+              )}
+              {isEditingEventDetails && (
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => void handleSaveEventDetails()} disabled={isSavingEventDetails} aria-label="Save event details" title="Save" className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50">
+                    <Save size={15} />
+                  </button>
+                  <button type="button" onClick={() => { setIsEditingEventDetails(false); setEventDetailsError(""); }} disabled={isSavingEventDetails} aria-label="Cancel editing event details" title="Cancel" className="rounded-lg bg-rose-50 p-1.5 text-rose-500 hover:bg-rose-100 disabled:opacity-50">
+                    <XCircle size={15} />
+                  </button>
+                </div>
+              )}
               <span
                 className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-extrabold ${
                   currentEvent.status === "Completed"
@@ -444,7 +514,19 @@ export function KanbanBoard({
               )}
             </div>
 
-            <p className="mt-1 text-xs text-slate-600 font-medium max-w-2xl">{currentEvent.description}</p>
+            {isEditingEventDetails ? (
+              <textarea
+                value={eventDescriptionDraft}
+                onChange={(e) => setEventDescriptionDraft(e.target.value)}
+                aria-label="Event description"
+                rows={3}
+                placeholder="Add an event description"
+                className="mt-2 w-full max-w-2xl resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              />
+            ) : (
+              <p className="mt-1 text-xs text-slate-600 font-medium max-w-2xl">{currentEvent.description}</p>
+            )}
+            {eventDetailsError && <p role="alert" className="mt-1 text-xs font-semibold text-rose-600">{eventDetailsError}</p>}
 
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-500">
               <span className="flex items-center gap-1.5">

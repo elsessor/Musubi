@@ -82,7 +82,6 @@ export function EventsTasksView() {
           if (Array.isArray(realCommittees)) {
             const organizationCommittees = realCommittees.map((c) => ({ id: c.id, name: c.name }));
             setCommittees(organizationCommittees);
-            setCommittee((current) => current || organizationCommittees[0]?.name || "");
           }
         })
         .catch(() => {});
@@ -125,7 +124,7 @@ export function EventsTasksView() {
           title: newEventDetails?.title || "New Event",
           description: newEventDetails?.description || "",
           status: "Planning",
-          committee: committees[0]?.name || "",
+          committee: "",
           startDate: startFormatted,
           endDate: endFormatted,
           memberCount: 1,
@@ -156,6 +155,7 @@ export function EventsTasksView() {
   }
 
   function handleNewEvent() {
+    setCommittee("");
     setIsModalOpen(true);
   }
 
@@ -189,6 +189,7 @@ export function EventsTasksView() {
       setDescription("");
       setStartDate("");
       setEndDate("");
+      setCommittee("");
     } catch (err) {
       console.error("Failed to create event:", err);
     } finally {
@@ -295,14 +296,13 @@ export function EventsTasksView() {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">COMMITTEE</label>
+                <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">COORDINATING COMMITTEE <span className="font-medium normal-case tracking-normal">(optional)</span></label>
                 <select
                   value={committee}
                   onChange={(e) => setCommittee(e.target.value)}
-                  disabled={committees.length === 0}
-                  className="w-full rounded-xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-xs text-slate-800 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-xs text-slate-800 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
                 >
-                  {committees.length === 0 && <option value="">No committees available</option>}
+                  <option value="">No lead committee (cross-committee)</option>
                   {committees.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
                 </select>
               </div>
