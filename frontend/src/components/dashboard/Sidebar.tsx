@@ -22,6 +22,7 @@ import { cn } from "@/utils/cn";
 
 type SidebarProps = {
   userName: string;
+  profilePicture?: string | null;
   role: "Admin" | "Student Leader" | "Organization Member";
   roleLabel: string;
   mobileOpen: boolean;
@@ -46,7 +47,7 @@ const navIconMap = {
   "audit-logs": ShieldCheck
 } as const;
 
-function AvatarFallback({ name, role }: { name: string; role: SidebarProps["role"] }) {
+function AvatarFallback({ name, role, profilePicture }: { name: string; role: SidebarProps["role"]; profilePicture?: string | null }) {
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -59,13 +60,14 @@ function AvatarFallback({ name, role }: { name: string; role: SidebarProps["role
       "flex size-12 shrink-0 items-center justify-center rounded-full text-base font-extrabold text-white",
       role === "Admin" ? "bg-[#ef2360]" : "bg-[#385779]"
     )}>
-      {initials}
+      {profilePicture ? <img src={profilePicture} alt="" className="size-full rounded-full object-cover" /> : initials}
     </div>
   );
 }
 
 export function Sidebar({
   userName,
+  profilePicture,
   role,
   roleLabel,
   mobileOpen,
@@ -131,15 +133,21 @@ export function Sidebar({
         "flex min-h-[104px] items-center border-b border-white/10 py-5 md:min-h-[115px]",
         collapsed ? "justify-center px-2" : "px-5"
       )}>
-        <div className="flex items-center gap-4 min-w-0">
-          <AvatarFallback name={userName} role={role} />
+        <a
+          href="/dashboard/profile"
+          onClick={onNavigate}
+          aria-label={`View and edit profile for ${userName}`}
+          className="flex min-w-0 items-center gap-4 rounded-xl outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-white/70"
+          title={collapsed ? `${userName} · View profile` : undefined}
+        >
+          <AvatarFallback name={userName} role={role} profilePicture={profilePicture} />
           {!collapsed ? (
             <div className="min-w-0">
               <p className="truncate text-base font-extrabold leading-tight">{userName}</p>
               <p className="mt-1 truncate text-sm font-semibold leading-tight text-[#aebdd0]">{roleLabel}</p>
             </div>
           ) : null}
-        </div>
+        </a>
       </div>
 
       {/* Navigation List */}

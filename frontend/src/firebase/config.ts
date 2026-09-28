@@ -1,6 +1,7 @@
 import { getApp, getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const requiredFirebaseEnvKeys = [
   "NEXT_PUBLIC_FIREBASE_API_KEY",
@@ -30,6 +31,7 @@ type FirebaseConfigStatus = {
 let cachedApp: FirebaseApp | null = null;
 let cachedAuth: Auth | null = null;
 let cachedDb: Firestore | null = null;
+let cachedStorage: FirebaseStorage | null = null;
 
 function readEnvValue(key: FirebaseEnvKey): string | undefined {
   const value = process.env[key]?.trim() ?? fallbackFirebaseConfig[key];
@@ -94,4 +96,10 @@ export function getFirebaseDb(): Firestore {
 
   cachedDb = getFirestore(getFirebaseApp());
   return cachedDb;
+}
+
+export function getFirebaseStorage(): FirebaseStorage {
+  if (cachedStorage) return cachedStorage;
+  cachedStorage = getStorage(getFirebaseApp());
+  return cachedStorage;
 }

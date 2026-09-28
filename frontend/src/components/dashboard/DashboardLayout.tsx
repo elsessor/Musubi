@@ -17,6 +17,7 @@ import type {
   DashboardUser
 } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
+import { useAuthStore } from "@/store/authStore";
 
 type DashboardLayoutProps = {
   user: DashboardUser;
@@ -52,6 +53,7 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const profilePicture = useAuthStore((state) => state.profile?.profilePicture ?? null);
 
   return (
     <div className="h-screen overflow-hidden bg-[#eef1f5] text-slate-900">
@@ -67,6 +69,7 @@ export function DashboardLayout({
         role={user.role}
         roleLabel={user.roleLabel}
         userName={user.name}
+        profilePicture={profilePicture}
       />
 
       <div className={cn("flex h-full min-w-0 flex-col overflow-hidden transition-all duration-300", sidebarCollapsed ? "md:ml-20" : "md:ml-[354px]")}>

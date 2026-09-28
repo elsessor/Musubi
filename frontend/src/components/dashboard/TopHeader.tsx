@@ -22,7 +22,7 @@ type TopHeaderProps = {
   onMenuToggle: () => void;
 };
 
-function Avatar({ name, role, availability }: { name: string; role: UserRole; availability?: string }) {
+function Avatar({ name, role, availability, profilePicture }: { name: string; role: UserRole; availability?: string; profilePicture?: string | null }) {
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -43,7 +43,7 @@ function Avatar({ name, role, availability }: { name: string; role: UserRole; av
         role === "Admin" ? "bg-[#ef2360]" : "bg-[#213f68]"
       }`}
     >
-      {initials}
+      {profilePicture ? <img src={profilePicture} alt="" className="size-full rounded-full object-cover" /> : initials}
       {role !== "Admin" ? (
         <span
           className={`absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-[#f1f4f8] ${statusDotColor} transition-colors duration-200`}
@@ -74,6 +74,7 @@ export function TopHeader({
     name,
     role,
     position: profile?.position || "",
+    profilePicture: profile?.profilePicture || firebaseUser?.photoURL || null,
     organizationId: profile?.organizationId || (null as string | null),
     email: profile?.email || firebaseUser?.email || "",
     availability: profile?.availability || profile?.status || "Available",
@@ -149,6 +150,7 @@ export function TopHeader({
           name: liveName,
           role: liveRole,
           position: typeof data.position === "string" ? data.position : "",
+          profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
           organizationId: liveOrgId,
           email: liveEmail,
           availability: liveAvailability,
@@ -176,6 +178,9 @@ export function TopHeader({
     }
     if (profile?.email) {
       setLiveUser((prev) => ({ ...prev, email: profile.email }));
+    }
+    if (profile?.profilePicture) {
+      setLiveUser((prev) => ({ ...prev, profilePicture: profile.profilePicture }));
     }
     if (profile?.availability || profile?.status) {
       const avail = profile.availability || profile.status || "Available";
@@ -330,7 +335,7 @@ export function TopHeader({
             onClick={() => setMenuOpen((current) => !current)}
             type="button"
           >
-            <Avatar availability={currentAvailability} name={liveUser.name} role={liveUser.role} />
+            <Avatar availability={currentAvailability} name={liveUser.name} role={liveUser.role} profilePicture={liveUser.profilePicture} />
           </button>
 
           {menuOpen ? (
@@ -479,4 +484,4 @@ export function TopHeader({
       </div>
     </header>
   );
-}
+}

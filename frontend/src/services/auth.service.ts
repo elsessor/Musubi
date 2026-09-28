@@ -171,6 +171,9 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
       position: typeof backendUser.position === "string" ? backendUser.position : null,
       organizationId: backendUser.organizationId,
       organizationName: typeof backendUser.organizationName === "string" ? backendUser.organizationName : null,
+      yearLevel: typeof backendUser.yearLevel === "string" ? backendUser.yearLevel : null,
+      program: typeof backendUser.program === "string" ? backendUser.program : null,
+      birthdate: typeof backendUser.birthdate === "string" ? backendUser.birthdate : null,
       profilePicture: backendUser.profilePicture,
       skills,
       onboardingCompleted
@@ -225,6 +228,32 @@ async function organizationRequest<T>(user: User, path: string, init?: RequestIn
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function getMyProfile(user: User): Promise<AuthUserProfile> {
+  const response = await organizationRequest<{ user?: unknown }>(user, "/auth/me");
+  if (!isRecord(response.user) || typeof response.user.uid !== "string" || !isUserRole(response.user.role)) {
+    throw new Error("The profile service returned invalid user data.");
+  }
+
+  const record = response.user;
+  return {
+    uid: record.uid,
+    fullName: typeof record.fullName === "string" ? record.fullName : "",
+    email: typeof record.email === "string" ? record.email : "",
+    role: record.role,
+    position: typeof record.position === "string" ? record.position : null,
+    organizationId: typeof record.organizationId === "string" ? record.organizationId : null,
+    organizationName: typeof record.organizationName === "string" ? record.organizationName : null,
+    yearLevel: typeof record.yearLevel === "string" ? record.yearLevel : null,
+    program: typeof record.program === "string" ? record.program : null,
+    birthdate: typeof record.birthdate === "string" ? record.birthdate : null,
+    profilePicture: typeof record.profilePicture === "string" ? record.profilePicture : null,
+    skills: normalizeStringArray(record.skills),
+    availability: typeof record.availability === "string" ? record.availability : null,
+    status: typeof record.status === "string" ? record.status : null,
+    onboardingCompleted: record.onboardingCompleted === true
+  };
 }
 
 // ── Organization directory ────────────────────────────────────────────────────

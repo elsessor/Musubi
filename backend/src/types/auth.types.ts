@@ -10,6 +10,9 @@ export type FirestoreUser = {
   position: string | null;
   organizationId: string | null;
   organizationName: string | null;
+  yearLevel: string | null;
+  program: string | null;
+  birthdate: string | null;
   profilePicture: string | null;
   skills: string[];
   onboardingCompleted: boolean;

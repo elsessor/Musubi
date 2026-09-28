@@ -1,26 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { doc, updateDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import {
-  Calendar,
-  Check,
-  CheckCircle2,
+  Camera,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Edit2,
   Loader2,
-  Plus,
-  Sparkles,
   User,
   X
 } from "lucide-react";
-import { getFirebaseDb } from "@/firebase/config";
+import { getFirebaseDb, getFirebaseStorage } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { useLogout } from "@/hooks/useLogout";
+import { getMyProfile } from "@/services/auth.service";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event, Task } from "@/components/events/types";
+import { getDashboardNavItems } from "@/utils/routes";
 
 type UserProfileData = {
   fullName: string;
@@ -31,6 +31,7 @@ type UserProfileData = {
   yearLevel: string;
   program: string;
   birthdate: string;
+  profilePicture: string | null;
   skills: string[];
   status: string;
 };
@@ -39,27 +40,32 @@ export default function DashboardProfilePage() {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const profile = useAuthStore((state) => state.profile);
   const setProfile = useAuthStore((state) => state.setProfile);
+  const logout = useLogout();
 
   const [userData, setUserData] = useState<UserProfileData>({
-    fullName: profile?.fullName || "Beatrice Lim",
-    email: profile?.email || firebaseUser?.email || "beatrice@university.edu.ph",
-    role: profile?.role || "Organization Member",
-    position: profile?.position || "Media Officer",
-    organizationName: profile?.organizationName || "University Student Council",
-    yearLevel: "3rd Year",
-    program: "Bachelor of Fine Arts",
-    birthdate: "September 5, 2003",
-    skills:
-      profile?.skills && profile.skills.length > 0
-        ? profile.skills
-        : ["Design", "Photography", "Video Editing", "Social Media", "Illustration"],
-    status: "Available"
+    fullName: profile?.fullName || firebaseUser?.displayName || "",
+    email: profile?.email || firebaseUser?.email || "",
+    role: profile?.role || "",
+    position: profile?.position || "",
+    organizationName: profile?.organizationName || "",
+    yearLevel: profile?.yearLevel || "",
+    program: profile?.program || "",
+    birthdate: profile?.birthdate || "",
+    profilePicture: profile?.profilePicture || firebaseUser?.photoURL || null,
+    skills: profile?.skills || [],
+    status: profile?.availability || profile?.status || ""
   });
 
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState("");
+  const [profileSaveError, setProfileSaveError] = useState("");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [profilePictureFile, setProfilePictureFile] = useState<File | null>(null);
+  const [profilePicturePreview, setProfilePicturePreview] = useState("");
+  const [profilePictureError, setProfilePictureError] = useState("");
+  const profilePictureInputRef = useRef<HTMLInputElement>(null);
 
   // Edit form state
   const [editName, setEditName] = useState("");
@@ -70,43 +76,56 @@ export default function DashboardProfilePage() {
   const [editSkills, setEditSkills] = useState<string[]>([]);
   const [newSkillInput, setNewSkillInput] = useState("");
 
-  // 1. Subscribe to Firestore User Document for Realtime User Profile Data
+  useEffect(() => {
+    if (!profilePictureFile) {
+      setProfilePicturePreview("");
+      return;
+    }
+    const previewUrl = URL.createObjectURL(profilePictureFile);
+    setProfilePicturePreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [profilePictureFile]);
+
+  // Load the signed-in user's saved profile from the authenticated profile endpoint.
   useEffect(() => {
     if (!firebaseUser?.uid) {
       setLoading(false);
       return;
     }
 
-    const userDocRef = doc(getFirebaseDb(), "users", firebaseUser.uid);
-    const unsubUser = onSnapshot(
-      userDocRef,
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          setUserData((prev) => ({
-            ...prev,
-            fullName: data.fullName || profile?.fullName || prev.fullName,
-            email: data.email || firebaseUser.email || prev.email,
-            role: data.role || profile?.role || prev.role,
-            position: data.position || profile?.position || prev.position,
-            organizationName: data.organizationName || profile?.organizationName || prev.organizationName,
-            yearLevel: data.yearLevel || data.year || prev.yearLevel,
-            program: data.program || prev.program,
-            birthdate: data.birthdate || prev.birthdate,
-            skills: Array.isArray(data.skills) && data.skills.length > 0 ? data.skills : prev.skills,
-            status: data.availability || data.status || "Available"
-          }));
-        }
-        setLoading(false);
-      },
-      (err) => {
-        console.warn("[ProfilePage] User doc subscription error:", err);
-        setLoading(false);
-      }
-    );
+    let cancelled = false;
+    setLoading(true);
+    void getMyProfile(firebaseUser)
+      .then((user) => {
+        if (cancelled) return;
+        setProfileError("");
+        setUserData({
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          position: user.position || "",
+          organizationName: user.organizationName || "",
+          yearLevel: user.yearLevel || "",
+          program: user.program || "",
+          birthdate: user.birthdate || "",
+          profilePicture: user.profilePicture,
+          skills: user.skills,
+          status: user.availability || user.status || ""
+        });
+        setProfile(user);
+      })
+      .catch((error) => {
+        console.error("[ProfilePage] Unable to fetch the signed-in user's profile:", error);
+        if (!cancelled) setProfileError("We couldn’t load your saved profile. Please refresh and try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-    return () => unsubUser();
-  }, [firebaseUser?.email, firebaseUser?.uid, profile]);
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, setProfile]);
 
   // 2. Subscribe to Realtime Firestore Events & Tasks
   useEffect(() => {
@@ -118,117 +137,33 @@ export default function DashboardProfilePage() {
   }, [firebaseUser, profile?.organizationId]);
 
   // Compute Subtasks for Current Logged-in User
-  const { userSubtasks, doneCount, activeCount, pendingCount, avgMatch, workloadScore, reliabilityScore, weeklyCompletions } = useMemo(() => {
+  const { userSubtasks, doneCount, activeCount, pendingCount } = useMemo(() => {
     const userNameLower = (userData.fullName || "").toLowerCase().trim();
-    const userFirstName = userNameLower.split(" ")[0] || "";
-
-    const userInitials = (userData.fullName || "BL")
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
-
     // Flatten all tasks from all events
     const allOrgTasks: (Task & { eventTitle: string })[] = events.flatMap((ev) =>
       (ev.tasks || []).map((t) => ({ ...t, eventTitle: ev.title }))
     );
 
     // Filter tasks assigned to this user
-    let assigned = allOrgTasks.filter((t) => {
+    const assigned = allOrgTasks.filter((t) => {
       const assigneeName = (t.assignee?.name || t.assignedMemberName || "").toLowerCase().trim();
-      const initials = (t.assignee?.initials || "").toUpperCase().trim();
       return (
-        assigneeName === userNameLower ||
-        (userNameLower && assigneeName.includes(userNameLower)) ||
-        (userNameLower && userNameLower.includes(assigneeName) && assigneeName.length > 2) ||
-        (userFirstName && assigneeName.includes(userFirstName) && userFirstName.length > 2) ||
-        initials === userInitials
+        (!!firebaseUser?.uid && t.assignedMemberUID === firebaseUser.uid) ||
+        (!!userNameLower && assigneeName === userNameLower)
       );
     });
-
-    // Fallback: If no tasks directly match by name, display top org tasks with simulated/matched relevance
-    if (assigned.length === 0 && allOrgTasks.length > 0) {
-      assigned = allOrgTasks.slice(0, 5);
-    } else if (assigned.length === 0) {
-      // Demo default list matching Image 2 layout
-      assigned = [
-        {
-          id: "demo-1",
-          title: "Design all promotional materials and social media assets for the Culture Week event including posters, banners, and digital content.",
-          eventTitle: "Launch Annual University Culture Week",
-          status: "Completed",
-          priority: "High",
-          dueDate: "Aug 30",
-          assignee: { initials: userInitials, color: "bg-[#2563eb]", name: userData.fullName },
-          matchPercentage: 96
-        },
-        {
-          id: "demo-2",
-          title: "Capture and edit event-day photography for official documentation and post-event social media coverage.",
-          eventTitle: "Launch Annual University Culture Week",
-          status: "In Progress",
-          priority: "Medium",
-          dueDate: "Sep 5",
-          assignee: { initials: userInitials, color: "bg-[#2563eb]", name: userData.fullName },
-          matchPercentage: 94
-        },
-        {
-          id: "demo-3",
-          title: "Produce large-format tarpaulin layouts and digital graphics for the Sports Fest's social media coverage.",
-          eventTitle: "Coordinate Inter-Org Sports Fest Logistics",
-          status: "In Progress",
-          priority: "Medium",
-          dueDate: "Sep 12",
-          assignee: { initials: userInitials, color: "bg-[#2563eb]", name: userData.fullName },
-          matchPercentage: 89
-        },
-        {
-          id: "demo-4",
-          title: "Develop the visual identity for the fundraising campaign including logos, color palette, and printable QR codes for donation portal.",
-          eventTitle: "Set Up Fundraising Drive for Disaster Relief",
-          status: "To Do",
-          priority: "High",
-          dueDate: "Sep 18",
-          assignee: { initials: userInitials, color: "bg-[#2563eb]", name: userData.fullName },
-          matchPercentage: 91
-        },
-        {
-          id: "demo-5",
-          title: "Design layout, cover page, and consistent visual theme for the end-of-year organization newsletter.",
-          eventTitle: "Produce End-of-Year Publication Newsletter",
-          status: "To Do",
-          priority: "Low",
-          dueDate: "Sep 25",
-          assignee: { initials: userInitials, color: "bg-[#2563eb]", name: userData.fullName },
-          matchPercentage: 88
-        }
-      ] as any;
-    }
 
     const done = assigned.filter((t) => t.status === "Completed" || t.status === "Done").length;
     const active = assigned.filter((t) => t.status === "In Progress" || t.status === "In Review").length;
     const pending = assigned.filter((t) => t.status === "To Do" || t.status === "Pending").length;
 
-    // Scores
-    const matchScores = assigned.map((t) => t.matchPercentage || (t as any).aiMetadata?.confidenceScore || 92);
-    const avgM = Math.round(matchScores.reduce((a, b) => a + b, 0) / Math.max(1, matchScores.length));
-    const wScore = Math.min(100, Math.max(25, Math.round(((active + pending) / Math.max(1, assigned.length + 3)) * 100))) || 38;
-    const rScore = done > 0 ? Math.round((done / Math.max(1, assigned.length)) * 100) : 91;
-
-    // Weekly completion distribution for current month chart
-    const completions = [1, 3, 1, 4]; // Matching Image 2 chart values: Week 1: 1, Week 2: 3, Week 3: 1, Week 4: 4
-
     return {
       userSubtasks: assigned,
       doneCount: done,
       activeCount: active,
-      pendingCount: pending,
-      avgMatch: avgM,
-      workloadScore: wScore,
-      reliabilityScore: rScore,
-      weeklyCompletions: completions
+      pendingCount: pending
     };
-  }, [events, userData.fullName]);
+  }, [events, userData.fullName, firebaseUser?.uid]);
 
   // Pagination & Filter States
   const [currentPage, setCurrentPage] = useState(1);
@@ -265,6 +200,9 @@ export default function DashboardProfilePage() {
     setEditBirthdate(userData.birthdate);
     setEditSkills([...userData.skills]);
     setNewSkillInput("");
+    setProfilePictureFile(null);
+    setProfilePictureError("");
+    setProfileSaveError("");
     setIsEditModalOpen(true);
   };
 
@@ -273,33 +211,48 @@ export default function DashboardProfilePage() {
     e.preventDefault();
     if (!firebaseUser?.uid) return;
     setIsSaving(true);
+    setProfileSaveError("");
 
     try {
       const userRef = doc(getFirebaseDb(), "users", firebaseUser.uid);
+      let profilePicture = userData.profilePicture;
+      if (profilePictureFile) {
+        const imageRef = storageRef(getFirebaseStorage(), `profilePictures/${firebaseUser.uid}/profile-picture`);
+        const uploadResult = await uploadBytes(imageRef, profilePictureFile, {
+          contentType: profilePictureFile.type
+        });
+        profilePicture = await getDownloadURL(uploadResult.ref);
+      }
       const updatedData = {
         fullName: editName.trim() || userData.fullName,
         position: editPosition.trim() || userData.position,
         yearLevel: editYearLevel.trim() || userData.yearLevel,
         program: editProgram.trim() || userData.program,
         birthdate: editBirthdate.trim() || userData.birthdate,
-        skills: editSkills
+        skills: editSkills,
+        profilePicture
       };
 
       await updateDoc(userRef, updatedData);
 
       if (firebaseUser) {
         try {
-          await updateProfile(firebaseUser, { displayName: updatedData.fullName });
+          await updateProfile(firebaseUser, { displayName: updatedData.fullName, photoURL: updatedData.profilePicture });
         } catch {}
       }
 
       setUserData((prev) => ({ ...prev, ...updatedData }));
+      setProfilePictureFile(null);
 
       if (profile) {
         setProfile({
           ...profile,
           fullName: updatedData.fullName,
           position: updatedData.position,
+          yearLevel: updatedData.yearLevel,
+          program: updatedData.program,
+          birthdate: updatedData.birthdate,
+          profilePicture: updatedData.profilePicture,
           skills: updatedData.skills
         });
       }
@@ -307,6 +260,7 @@ export default function DashboardProfilePage() {
       setIsEditModalOpen(false);
     } catch (err) {
       console.error("[ProfilePage] Error saving profile:", err);
+      setProfileSaveError("Unable to save your profile. Check your connection and try again.");
     } finally {
       setIsSaving(false);
     }
@@ -338,15 +292,35 @@ export default function DashboardProfilePage() {
     day: "numeric"
   });
 
+  const dashboardUser = {
+    id: firebaseUser?.uid ?? profile?.uid ?? null,
+    name: userData.fullName || "",
+    role: profile?.role ?? "Organization Member" as const,
+    roleLabel: userData.position || userData.role,
+    organizationName: userData.organizationName,
+    academicYear: `AY ${new Date().getFullYear()}–${new Date().getFullYear() + 1}`,
+    greetingDate: formattedDate
+  };
+
   return (
-    <main className="min-h-screen bg-[#f1f5f9] p-4 text-slate-900 sm:p-6 lg:p-8">
+    <DashboardLayout
+      user={dashboardUser}
+      navItems={getDashboardNavItems(dashboardUser.role)}
+      kpis={[]}
+      goals={[]}
+      activities={[]}
+      activeNavId="profile"
+      notificationCount={0}
+      onLogout={logout}
+    >
+    <main className="bg-[#f1f5f9] p-4 text-slate-900 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">My Profile</h1>
             <p className="text-xs font-semibold text-slate-500 mt-0.5">
-              {userData.organizationName || "University Student Council"} · {formattedDate}
+              {userData.organizationName || "No organization"} · {formattedDate}
             </p>
           </div>
 
@@ -360,6 +334,9 @@ export default function DashboardProfilePage() {
           </button>
         </div>
 
+        {loading ? <p className="text-xs font-medium text-slate-500">Loading your saved profile…</p> : null}
+        {profileError ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{profileError}</p> : null}
+
         {/* Hero Banner Card (Dark Navy) */}
         <div className="relative overflow-hidden rounded-3xl bg-[#1e3a5f] p-6 sm:p-8 text-white shadow-xl">
           {/* Subtle Glow Overlay */}
@@ -368,17 +345,19 @@ export default function DashboardProfilePage() {
           <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
             {/* Initials Avatar Box */}
             <div className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-[#2563eb] text-2xl font-bold font-mono text-white shadow-md">
-              {initials || "BL"}
+              {userData.profilePicture ? (
+                <img src={userData.profilePicture} alt={`${userData.fullName || "User"} profile`} className="size-full rounded-2xl object-cover" />
+              ) : initials || "?"}
             </div>
 
             {/* Profile Information */}
             <div className="flex-1 space-y-1">
-              <h2 className="text-2xl font-bold tracking-tight text-white">{userData.fullName}</h2>
+              <h2 className="text-2xl font-bold tracking-tight text-white">{userData.fullName || "Your profile"}</h2>
               <p className="text-sm font-medium text-slate-300">
-                {userData.organizationName || "University Student Council"} — {userData.position || userData.role || "Media Officer"}
+                {[userData.position || userData.role, userData.organizationName].filter(Boolean).join(" · ") || "Add your role and organization"}
               </p>
               <p className="text-xs text-slate-400">
-                {userData.program || "Bachelor of Fine Arts"} · {userData.yearLevel || "3rd Year"}
+                {[userData.program, userData.yearLevel].filter(Boolean).join(" · ") || "Add your program and year level"}
               </p>
 
               {/* Status & Birthdate Badges */}
@@ -401,12 +380,12 @@ export default function DashboardProfilePage() {
                         : "bg-emerald-400"
                     }`}
                   />
-                  {userData.status || "Available"}
+                  {userData.status || "Status not set"}
                 </span>
 
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-300 border border-slate-700/60">
                   <span>🎂</span>
-                  {userData.birthdate || "September 5, 2003"}
+                  {userData.birthdate || "Birthdate not provided"}
                 </span>
               </div>
             </div>
@@ -414,34 +393,18 @@ export default function DashboardProfilePage() {
         </div>
 
         {/* Metric Stats Cards Row (4 Columns) */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 text-center shadow-xs">
-            <p className="text-3xl font-extrabold text-[#10b981]">{workloadScore}%</p>
-            <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Workload Score
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 text-center shadow-xs">
-            <p className="text-3xl font-extrabold text-[#2563eb]">{reliabilityScore}%</p>
-            <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Reliability Score
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 text-center shadow-xs">
-            <p className="text-3xl font-extrabold text-[#2563eb]">{avgMatch}%</p>
-            <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Avg Match %
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 text-center shadow-xs">
-            <p className="text-3xl font-extrabold text-slate-900">{doneCount}</p>
-            <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Tasks Done
-            </p>
-          </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[
+            { label: "Assigned Tasks", value: userSubtasks.length, color: "text-slate-900" },
+            { label: "Completed", value: doneCount, color: "text-emerald-600" },
+            { label: "In Progress", value: activeCount, color: "text-blue-600" },
+            { label: "Pending", value: pendingCount, color: "text-amber-600" }
+          ].map((metric) => (
+            <div key={metric.label} className="rounded-2xl border border-slate-200/80 bg-white p-5 text-center shadow-xs">
+              <p className={`text-3xl font-extrabold ${metric.color}`}>{metric.value}</p>
+              <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">{metric.label}</p>
+            </div>
+          ))}
         </div>
 
         {/* Main Content Grid (3 Columns) */}
@@ -474,7 +437,7 @@ export default function DashboardProfilePage() {
                     YEAR LEVEL
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
-                    {userData.yearLevel}
+                    {userData.yearLevel || "Not provided"}
                   </span>
                 </div>
 
@@ -483,7 +446,16 @@ export default function DashboardProfilePage() {
                     PROGRAM
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
-                    {userData.program}
+                    {userData.program || "Not provided"}
+                  </span>
+                </div>
+
+                <div className="py-3">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    BIRTHDATE
+                  </span>
+                  <span className="mt-0.5 block font-medium text-slate-700">
+                    {userData.birthdate || "Not provided"}
                   </span>
                 </div>
 
@@ -501,18 +473,10 @@ export default function DashboardProfilePage() {
                     ORGANIZATION
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
-                    {userData.organizationName} — {userData.position || userData.role}
+                    {[userData.organizationName, userData.position || userData.role].filter(Boolean).join(" — ") || "Not provided"}
                   </span>
                 </div>
 
-                <div className="pt-3">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    BIRTHDATE
-                  </span>
-                  <span className="mt-0.5 block font-medium text-slate-700">
-                    {userData.birthdate}
-                  </span>
-                </div>
               </div>
             </div>
 
@@ -522,59 +486,20 @@ export default function DashboardProfilePage() {
                 SKILL KEYWORDS
               </h3>
               <div className="flex flex-wrap gap-2">
-                {userData.skills.map((skill) => (
+                {userData.skills.length ? userData.skills.map((skill) => (
                   <span
                     key={skill}
                     className="inline-flex items-center rounded-full bg-[#f0f4f8] px-3.5 py-1 text-xs font-semibold text-slate-700"
                   >
                     {skill}
                   </span>
-                ))}
+                )) : <p className="text-sm text-slate-500">No skills added yet. Edit your profile to add skills.</p>}
               </div>
             </div>
           </div>
 
           {/* Right Column (Monthly Completion Bar Chart & Subtasks List) */}
           <div className="space-y-6 lg:col-span-2">
-            {/* SUB-TASK COMPLETION — THIS MONTH */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
-              <h3 className="mb-6 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                SUB-TASK COMPLETION — THIS MONTH
-              </h3>
-
-              {/* Bar Chart Visualization matching Image 2 */}
-              <div className="flex items-end justify-between gap-4 h-44 pt-4 px-4 border-b border-slate-100">
-                {/* Y-Axis scale labels */}
-                <div className="flex flex-col justify-between h-full text-[11px] font-bold text-slate-400 pb-2">
-                  <span>4</span>
-                  <span>3</span>
-                  <span>2</span>
-                  <span>1</span>
-                  <span>0</span>
-                </div>
-
-                {/* Bars Area */}
-                <div className="flex flex-1 items-end justify-around h-full">
-                  {weeklyCompletions.map((count, idx) => {
-                    const heightPct = Math.max(15, (count / 4) * 100);
-                    return (
-                      <div key={`week-${idx}`} className="flex flex-col items-center gap-2 group">
-                        <div className="relative w-12 bg-slate-100 rounded-t-lg h-36 flex items-end justify-center">
-                          <div
-                            style={{ height: `${heightPct}%` }}
-                            className="w-full bg-[#2563eb] rounded-t-lg transition-all duration-300 group-hover:bg-blue-700"
-                          />
-                        </div>
-                        <span className="text-xs font-semibold text-slate-500">
-                          Week {idx + 1}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
             {/* ALL SUB-TASKS Card */}
             <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
               <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
@@ -654,8 +579,7 @@ export default function DashboardProfilePage() {
                     const isDone = status === "Completed" || status === "Done";
                     const isInProgress = status === "In Progress" || status === "In Review";
 
-                    const matchScore =
-                      task.matchPercentage || (task as any).aiMetadata?.confidenceScore || 92;
+                    const matchScore = typeof task.matchPercentage === "number" ? task.matchPercentage : null;
 
                     return (
                       <div
@@ -667,12 +591,8 @@ export default function DashboardProfilePage() {
                             {task.title}
                           </h4>
                           <div className="flex items-center gap-2 flex-wrap text-[11px]">
-                            <span className="text-slate-400 font-medium">
-                              • {task.eventTitle || "Campus Event"}
-                            </span>
-                            <span className="font-bold text-blue-600">
-                              {matchScore}% match
-                            </span>
+                            {task.eventTitle ? <span className="text-slate-400 font-medium">• {task.eventTitle}</span> : null}
+                            {matchScore !== null ? <span className="font-bold text-blue-600">{matchScore}% match</span> : null}
                           </div>
                         </div>
 
@@ -770,6 +690,50 @@ export default function DashboardProfilePage() {
             </div>
 
             <form onSubmit={handleSaveProfile} className="mt-5 space-y-4">
+              <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#244775] text-lg font-bold text-white">
+                  {(profilePicturePreview || userData.profilePicture) ? (
+                    <img src={profilePicturePreview || userData.profilePicture || ""} alt="Profile preview" className="size-full object-cover" />
+                  ) : initials || <User size={22} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-800">Profile picture</p>
+                  <p className="mt-0.5 text-xs text-slate-500">JPG, PNG, or WebP up to 5 MB</p>
+                  <input
+                    ref={profilePictureInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      if (!file.type.startsWith("image/")) {
+                        setProfilePictureError("Choose an image file.");
+                        event.target.value = "";
+                        return;
+                      }
+                      if (file.size > 5 * 1024 * 1024) {
+                        setProfilePictureError("The image must be 5 MB or smaller.");
+                        event.target.value = "";
+                        return;
+                      }
+                      setProfilePictureError("");
+                      setProfilePictureFile(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => profilePictureInputRef.current?.click()}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                  >
+                    <Camera size={14} />
+                    Choose image
+                  </button>
+                  {profilePictureError ? <p className="mt-2 text-xs text-rose-600" role="alert">{profilePictureError}</p> : null}
+                </div>
+              </div>
+              {profileSaveError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{profileSaveError}</p> : null}
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                   Full Name
@@ -828,8 +792,8 @@ export default function DashboardProfilePage() {
                 <input
                   type="text"
                   value={editBirthdate}
-                  onChange={(e) => setEditBirthdate(e.target.value)}
-                  placeholder="e.g., September 5, 2003"
+                  onChange={(event) => setEditBirthdate(event.target.value)}
+                  placeholder="Enter your birthdate"
                   className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
                 />
               </div>
@@ -909,5 +873,6 @@ export default function DashboardProfilePage() {
         </div>
       )}
     </main>
+    </DashboardLayout>
   );
 }
