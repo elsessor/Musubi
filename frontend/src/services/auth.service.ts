@@ -215,7 +215,7 @@ async function organizationRequest<T>(user: User, path: string, init?: RequestIn
       if (errJson && typeof errJson.message === "string") {
         serverMessage = errJson.message;
       }
-    } catch {}
+    } catch { }
 
     throw new Error(serverMessage || "Unable to load organization data.");
   }
@@ -289,18 +289,18 @@ export async function getOrganizations(user: User): Promise<OrganizationDirector
   const data = await organizationRequest<{ organizations?: unknown[] }>(user, "/auth/organizations");
   return Array.isArray(data.organizations)
     ? data.organizations
-        .map((organization) => {
-          const normalized = normalizeOrganization(organization);
-          if (!normalized) return null;
+      .map((organization) => {
+        const normalized = normalizeOrganization(organization);
+        if (!normalized) return null;
 
-          const record = organization as Record<string, unknown>;
-          return {
-            ...normalized,
-            memberCount: typeof record.memberCount === "number" ? record.memberCount : 0,
-            committeeCount: typeof record.committeeCount === "number" ? record.committeeCount : 0
-          };
-        })
-        .filter((organization): organization is OrganizationDirectoryRecord => organization !== null)
+        const record = organization as Record<string, unknown>;
+        return {
+          ...normalized,
+          memberCount: typeof record.memberCount === "number" ? record.memberCount : 0,
+          committeeCount: typeof record.committeeCount === "number" ? record.committeeCount : 0
+        };
+      })
+      .filter((organization): organization is OrganizationDirectoryRecord => organization !== null)
     : [];
 }
 
@@ -343,17 +343,17 @@ export async function getOrganizationMembers(user: User, organizationId: string)
   const data = await organizationRequest<{ members?: unknown[] }>(user, `/auth/organizations/${organizationId}/members`);
   return Array.isArray(data.members)
     ? data.members.map((member) => {
-        const record = isRecord(member) ? member : {};
-        return {
-          id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
-          name: typeof record.name === "string" ? record.name : "Unnamed member",
-          role: typeof record.role === "string" ? record.role : "Organization Member",
-          position: typeof record.position === "string" ? record.position : "Organization Member",
-          skills: normalizeStringArray(record.skills),
-          committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
-          committeeName: typeof record.committeeName === "string" ? record.committeeName : null
-        };
-      })
+      const record = isRecord(member) ? member : {};
+      return {
+        id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
+        name: typeof record.name === "string" ? record.name : "Unnamed member",
+        role: typeof record.role === "string" ? record.role : "Organization Member",
+        position: typeof record.position === "string" ? record.position : "Organization Member",
+        skills: normalizeStringArray(record.skills),
+        committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
+        committeeName: typeof record.committeeName === "string" ? record.committeeName : null
+      };
+    })
     : [];
 }
 
@@ -365,7 +365,7 @@ export function subscribeOrganizationMembersFirestore(
   const targetOrgId = organizationId && organizationId.trim() ? organizationId.trim() : null;
   if (!targetOrgId) {
     onData([]);
-    return () => {};
+    return () => { };
   }
 
   let isMounted = true;
@@ -396,15 +396,15 @@ export async function getOrganizationJoinRequests(user: User, organizationId: st
   const data = await organizationRequest<{ requests?: unknown[] }>(user, `/auth/organizations/${organizationId}/join-requests`);
   return Array.isArray(data.requests)
     ? data.requests.map((request) => {
-        const record = isRecord(request) ? request : {};
-        return {
-          id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
-          name: typeof record.name === "string" ? record.name : "Unnamed member",
-          email: typeof record.email === "string" ? record.email : "",
-          position: typeof record.position === "string" ? record.position : "Organization Member",
-          skills: normalizeStringArray(record.skills)
-        };
-      })
+      const record = isRecord(request) ? request : {};
+      return {
+        id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
+        name: typeof record.name === "string" ? record.name : "Unnamed member",
+        email: typeof record.email === "string" ? record.email : "",
+        position: typeof record.position === "string" ? record.position : "Organization Member",
+        skills: normalizeStringArray(record.skills)
+      };
+    })
     : [];
 }
 
@@ -524,43 +524,43 @@ function normalizeAdminMemberDirectory(value: unknown): AdminMemberDirectory {
   const record = isRecord(value) ? value : {};
   const members = Array.isArray(record.members)
     ? record.members.map((member) => {
-        const item = isRecord(member) ? member : {};
-        const role = isUserRole(item.role) ? item.role : "Organization Member";
-        return {
-          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
-          name: typeof item.name === "string" ? item.name : "Campus Member",
-          email: typeof item.email === "string" ? item.email : "",
-          role,
-          position: typeof item.position === "string" ? item.position : role,
-          organizationId: typeof item.organizationId === "string" ? item.organizationId : null,
-          organization: typeof item.organization === "string" ? item.organization : "Unassigned",
-          committeeId: typeof item.committeeId === "string" ? item.committeeId : null,
-          committee: typeof item.committee === "string" ? item.committee : "Unassigned",
-          inviteStatus: normalizeAdminInviteStatus(item.inviteStatus),
-          joinedDate: typeof item.joinedDate === "string" ? item.joinedDate : null
-        };
-      })
+      const item = isRecord(member) ? member : {};
+      const role = isUserRole(item.role) ? item.role : "Organization Member";
+      return {
+        id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+        name: typeof item.name === "string" ? item.name : "Campus Member",
+        email: typeof item.email === "string" ? item.email : "",
+        role,
+        position: typeof item.position === "string" ? item.position : role,
+        organizationId: typeof item.organizationId === "string" ? item.organizationId : null,
+        organization: typeof item.organization === "string" ? item.organization : "Unassigned",
+        committeeId: typeof item.committeeId === "string" ? item.committeeId : null,
+        committee: typeof item.committee === "string" ? item.committee : "Unassigned",
+        inviteStatus: normalizeAdminInviteStatus(item.inviteStatus),
+        joinedDate: typeof item.joinedDate === "string" ? item.joinedDate : null
+      };
+    })
     : [];
 
   const organizations = Array.isArray(record.organizations)
     ? record.organizations.map((organization) => {
-        const item = isRecord(organization) ? organization : {};
-        return {
-          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
-          name: typeof item.name === "string" ? item.name : "Untitled organization"
-        };
-      })
+      const item = isRecord(organization) ? organization : {};
+      return {
+        id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+        name: typeof item.name === "string" ? item.name : "Untitled organization"
+      };
+    })
     : [];
 
   const committees = Array.isArray(record.committees)
     ? record.committees.map((committee) => {
-        const item = isRecord(committee) ? committee : {};
-        return {
-          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
-          name: typeof item.name === "string" ? item.name : "Untitled committee",
-          organizationId: typeof item.organizationId === "string" ? item.organizationId : null
-        };
-      })
+      const item = isRecord(committee) ? committee : {};
+      return {
+        id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+        name: typeof item.name === "string" ? item.name : "Untitled committee",
+        organizationId: typeof item.organizationId === "string" ? item.organizationId : null
+      };
+    })
     : [];
 
   return { members, organizations, committees };
