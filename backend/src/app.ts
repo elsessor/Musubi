@@ -9,7 +9,7 @@ export const app = express();
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       if (!origin) return callback(null, true);
       const allowedOrigins = [
         env.frontendUrl,
@@ -27,7 +27,7 @@ app.use(
 );
 app.use(express.json());
 
-app.get("/health", (_request, response) => {
+app.get("/health", (_request: express.Request, response: express.Response) => {
   response.status(200).json({ status: "ok" });
 });
 
