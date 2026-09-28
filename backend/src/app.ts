@@ -9,7 +9,19 @@ export const app = express();
 
 app.use(
   cors({
-    origin: env.frontendUrl,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const allowedOrigins = [
+        env.frontendUrl,
+        "https://musubi-1bf94.web.app",
+        "https://musubi-1bf94.firebaseapp.com",
+        "http://localhost:3000"
+      ];
+      if (allowedOrigins.includes(origin) || allowedOrigins.some((item) => item && origin.startsWith(item))) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true
   })
 );

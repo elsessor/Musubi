@@ -1,7 +1,7 @@
 services:
   - type: web
     name: musubi-backend
-    env: node
+    runtime: node
     region: singapore
     plan: free
     rootDir: backend
