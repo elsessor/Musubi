@@ -27,6 +27,10 @@ app.use(
 );
 app.use(express.json());
 
+app.get("/", (_request: express.Request, response: express.Response) => {
+  response.status(200).json({ name: "Musubi API Backend", status: "online", health: "/health" });
+});
+
 app.get("/health", (_request: express.Request, response: express.Response) => {
   response.status(200).json({ status: "ok" });
 });
