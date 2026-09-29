@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -15,6 +15,22 @@ export function OrganizationDetailClient() {
   const profile = useAuthStore((state) => state.profile);
   const authLoading = useAuthStore((state) => state.loading);
   const logout = useLogout();
+
+  const [activeOrgId, setActiveOrgId] = useState<string>("");
+
+  useEffect(() => {
+    let orgId = params?.organizationId;
+    if (!orgId || orgId === "index" || orgId === "detail" || orgId === "org-1") {
+      if (typeof window !== "undefined") {
+        const parts = window.location.pathname.split("/").filter(Boolean);
+        const orgIdx = parts.indexOf("organizations");
+        if (orgIdx !== -1 && parts[orgIdx + 1] && parts[orgIdx + 1] !== "index" && parts[orgIdx + 1] !== "detail") {
+          orgId = parts[orgIdx + 1];
+        }
+      }
+    }
+    setActiveOrgId(orgId || "org-1");
+  }, [params]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -59,7 +75,7 @@ export function OrganizationDetailClient() {
       onLogout={logout}
       user={user}
     >
-      <AdminOrganizationDetailView organizationId={params.organizationId || "org-1"} />
+      <AdminOrganizationDetailView organizationId={activeOrgId} />
     </DashboardLayout>
   );
 }

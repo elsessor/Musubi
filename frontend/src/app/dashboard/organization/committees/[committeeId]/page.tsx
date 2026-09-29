@@ -1,7 +1,7 @@
 import { CommitteeClient } from "./CommitteeClient";
 
 export function generateStaticParams() {
-  return [{ committeeId: "index" }];
+  return [{ committeeId: "detail" }];
 }
 
 export default function CommitteePage() {
