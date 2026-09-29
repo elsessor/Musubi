@@ -159,8 +159,8 @@ export function TopHeader({
           setLiveOrganizationName(liveOrgName);
         }
       },
-      (error) => {
-        console.warn("[TopHeader] Error reading user snapshot:", error);
+      () => {
+        // Silent fallback when client Firestore rules restrict direct SDK subscription
       }
     );
 
