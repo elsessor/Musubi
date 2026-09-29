@@ -45,15 +45,24 @@ function formatDate(isoString: string | null | undefined): string {
 
 type AdminOrganizationDetailViewProps = {
   organizationId: string;
+  onBack?: () => void;
 };
 
-export function AdminOrganizationDetailView({ organizationId }: AdminOrganizationDetailViewProps) {
+export function AdminOrganizationDetailView({ organizationId, onBack }: AdminOrganizationDetailViewProps) {
   const router = useRouter();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
 
   const [detail, setDetail] = useState<OrganizationManagementDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      router.push("/admin/organizations");
+    }
+  };
 
   useEffect(() => {
     if (!firebaseUser || !organizationId) {
@@ -94,7 +103,7 @@ export function AdminOrganizationDetailView({ organizationId }: AdminOrganizatio
       <div className="mx-auto w-full max-w-7xl space-y-6">
         <div>
           <button
-            onClick={() => router.push("/admin/organizations")}
+            onClick={handleBack}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
           >
             <ChevronLeft className="size-4" />
@@ -132,7 +141,7 @@ export function AdminOrganizationDetailView({ organizationId }: AdminOrganizatio
       {/* Back Link */}
       <div>
         <button
-          onClick={() => router.push("/admin/organizations")}
+          onClick={handleBack}
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
         >
           <ChevronLeft className="size-4" />

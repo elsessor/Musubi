@@ -10,14 +10,27 @@ import {
   getOrganizations,
   type OrganizationDirectoryRecord
 } from "@/services/auth.service";
+import { AdminOrganizationDetailView } from "./AdminOrganizationDetailView";
 
 export function AdminOrganizationsView() {
   const router = useRouter();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
 
   const [organizations, setOrganizations] = useState<OrganizationDirectoryRecord[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Check URL query parameters for initial orgId selection
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const initialOrgId = params.get("orgId");
+      if (initialOrgId) {
+        setSelectedOrgId(initialOrgId);
+      }
+    }
+  }, []);
 
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -90,6 +103,20 @@ export function AdminOrganizationsView() {
     }
   };
 
+  if (selectedOrgId) {
+    return (
+      <AdminOrganizationDetailView
+        organizationId={selectedOrgId}
+        onBack={() => {
+          setSelectedOrgId(null);
+          if (typeof window !== "undefined") {
+            window.history.pushState(null, "", "/admin/organizations");
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       {/* Top Header Row */}
@@ -130,7 +157,12 @@ export function AdminOrganizationsView() {
           {displayOrganizations.map((org) => (
             <div
               key={org.id}
-              onClick={() => router.push(`/admin/organizations/${org.id}`)}
+              onClick={() => {
+                setSelectedOrgId(org.id);
+                if (typeof window !== "undefined") {
+                  window.history.pushState(null, "", `/admin/organizations?orgId=${org.id}`);
+                }
+              }}
               className="group flex flex-col justify-between rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/80 hover:shadow-md transition-all cursor-pointer"
             >
               <div>
