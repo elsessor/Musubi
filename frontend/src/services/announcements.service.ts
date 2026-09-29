@@ -198,7 +198,6 @@ export function subscribeAnnouncementsFirestore(
       emitMerged();
     },
     (err) => {
-      console.warn("[subscribeAnnouncementsFirestore] Top collection snapshot error:", err);
       emitMerged();
     }
   );
