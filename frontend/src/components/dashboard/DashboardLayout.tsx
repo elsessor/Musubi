@@ -1,7 +1,7 @@
 "use client";
 
 import { Award, Briefcase, CheckCircle, Clock3, Target, UserCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { KPICard } from "@/components/dashboard/KPICard";
@@ -53,7 +53,23 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const profilePicture = useAuthStore((state) => state.profile?.profilePicture ?? null);
+
+  useEffect(() => {
+    if (!logoutConfirmOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLogoutConfirmOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [logoutConfirmOpen]);
+
+  const requestLogoutConfirmation = () => setLogoutConfirmOpen(true);
+  const confirmLogout = () => {
+    setLogoutConfirmOpen(false);
+    void onLogout();
+  };
 
   return (
     <div className="h-screen overflow-hidden bg-[#eef1f5] text-slate-900">
@@ -62,7 +78,7 @@ export function DashboardLayout({
         activeNavId={activeNavId}
         mobileOpen={mobileSidebarOpen}
         collapsed={sidebarCollapsed}
-        onLogout={onLogout}
+        onLogout={requestLogoutConfirmation}
         onNavigate={() => setMobileSidebarOpen(false)}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         navItems={navItems}
@@ -81,7 +97,7 @@ export function DashboardLayout({
           organizationName={user.organizationName}
           role={user.role}
           userId={user.id}
-          onLogout={onLogout}
+          onLogout={requestLogoutConfirmation}
           onMenuToggle={() => setMobileSidebarOpen(true)}
         />
 
@@ -117,6 +133,45 @@ export function DashboardLayout({
           </>}
         </main>
       </div>
+
+      {logoutConfirmOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setLogoutConfirmOpen(false);
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="logout-dialog-title"
+            aria-describedby="logout-dialog-description"
+            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+          >
+            <h2 id="logout-dialog-title" className="text-lg font-bold text-slate-900">Log out?</h2>
+            <p id="logout-dialog-description" className="mt-2 text-sm leading-relaxed text-slate-600">
+              Are you sure you want to log out of your account?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setLogoutConfirmOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmLogout}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700"
+              >
+                Log out
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

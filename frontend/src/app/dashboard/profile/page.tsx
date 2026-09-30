@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { doc, updateDoc } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
 import { updateProfile } from "firebase/auth";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import {
-  Camera,
   ChevronLeft,
   ChevronRight,
   Edit2,
@@ -13,14 +10,15 @@ import {
   User,
   X
 } from "lucide-react";
-import { getFirebaseDb, getFirebaseStorage } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useLogout } from "@/hooks/useLogout";
-import { getMyProfile } from "@/services/auth.service";
+import { getMyProfile, updateMyProfile } from "@/services/auth.service";
+import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event, Task } from "@/components/events/types";
 import { getDashboardNavItems } from "@/utils/routes";
+import { PROGRAM_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
 
 type UserProfileData = {
   fullName: string;
@@ -62,10 +60,6 @@ export default function DashboardProfilePage() {
   const [profileSaveError, setProfileSaveError] = useState("");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [profilePictureFile, setProfilePictureFile] = useState<File | null>(null);
-  const [profilePicturePreview, setProfilePicturePreview] = useState("");
-  const [profilePictureError, setProfilePictureError] = useState("");
-  const profilePictureInputRef = useRef<HTMLInputElement>(null);
 
   // Edit form state
   const [editName, setEditName] = useState("");
@@ -75,16 +69,6 @@ export default function DashboardProfilePage() {
   const [editBirthdate, setEditBirthdate] = useState("");
   const [editSkills, setEditSkills] = useState<string[]>([]);
   const [newSkillInput, setNewSkillInput] = useState("");
-
-  useEffect(() => {
-    if (!profilePictureFile) {
-      setProfilePicturePreview("");
-      return;
-    }
-    const previewUrl = URL.createObjectURL(profilePictureFile);
-    setProfilePicturePreview(previewUrl);
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [profilePictureFile]);
 
   // Load the signed-in user's saved profile from the authenticated profile endpoint.
   useEffect(() => {
@@ -200,8 +184,6 @@ export default function DashboardProfilePage() {
     setEditBirthdate(userData.birthdate);
     setEditSkills([...userData.skills]);
     setNewSkillInput("");
-    setProfilePictureFile(null);
-    setProfilePictureError("");
     setProfileSaveError("");
     setIsEditModalOpen(true);
   };
@@ -214,53 +196,38 @@ export default function DashboardProfilePage() {
     setProfileSaveError("");
 
     try {
-      const userRef = doc(getFirebaseDb(), "users", firebaseUser.uid);
-      let profilePicture = userData.profilePicture;
-      if (profilePictureFile) {
-        const imageRef = storageRef(getFirebaseStorage(), `profilePictures/${firebaseUser.uid}/profile-picture`);
-        const uploadResult = await uploadBytes(imageRef, profilePictureFile, {
-          contentType: profilePictureFile.type
-        });
-        profilePicture = await getDownloadURL(uploadResult.ref);
-      }
       const updatedData = {
         fullName: editName.trim() || userData.fullName,
         position: editPosition.trim() || userData.position,
         yearLevel: editYearLevel.trim() || userData.yearLevel,
         program: editProgram.trim() || userData.program,
         birthdate: editBirthdate.trim() || userData.birthdate,
-        skills: editSkills,
-        profilePicture
+        skills: editSkills
       };
 
-      await updateDoc(userRef, updatedData);
+      const updatedProfile = await updateMyProfile(firebaseUser, updatedData);
 
       if (firebaseUser) {
         try {
-          await updateProfile(firebaseUser, { displayName: updatedData.fullName, photoURL: updatedData.profilePicture });
+          await updateProfile(firebaseUser, { displayName: updatedData.fullName });
         } catch {}
       }
 
       setUserData((prev) => ({ ...prev, ...updatedData }));
-      setProfilePictureFile(null);
 
-      if (profile) {
-        setProfile({
-          ...profile,
-          fullName: updatedData.fullName,
-          position: updatedData.position,
-          yearLevel: updatedData.yearLevel,
-          program: updatedData.program,
-          birthdate: updatedData.birthdate,
-          profilePicture: updatedData.profilePicture,
-          skills: updatedData.skills
-        });
-      }
+      setProfile(updatedProfile);
 
       setIsEditModalOpen(false);
     } catch (err) {
       console.error("[ProfilePage] Error saving profile:", err);
-      setProfileSaveError("Unable to save your profile. Check your connection and try again.");
+      const errorCode = typeof err === "object" && err !== null && "code" in err ? String(err.code) : "";
+      setProfileSaveError(
+        errorCode === "permission-denied"
+          ? "You don’t have permission to update this profile. Please contact your administrator."
+          : err instanceof Error
+          ? err.message
+          : "Unable to save your profile. Check your connection and try again."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -278,12 +245,7 @@ export default function DashboardProfilePage() {
     setEditSkills(editSkills.filter((s) => s !== skillToRemove));
   };
 
-  const initials = userData.fullName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = userData.fullName.trim().charAt(0).toUpperCase();
 
   const formattedDate = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -344,10 +306,16 @@ export default function DashboardProfilePage() {
 
           <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
             {/* Initials Avatar Box */}
-            <div className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-[#2563eb] text-2xl font-bold font-mono text-white shadow-md">
+            <div className="relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#2563eb] text-2xl font-bold font-mono text-white shadow-md">
+              {initials || "?"}
               {userData.profilePicture ? (
-                <img src={userData.profilePicture} alt={`${userData.fullName || "User"} profile`} className="size-full rounded-2xl object-cover" />
-              ) : initials || "?"}
+                <img
+                  src={userData.profilePicture}
+                  alt=""
+                  onError={(event) => event.currentTarget.remove()}
+                  className="absolute inset-0 size-full rounded-2xl object-cover"
+                />
+              ) : null}
             </div>
 
             {/* Profile Information */}
@@ -690,48 +658,6 @@ export default function DashboardProfilePage() {
             </div>
 
             <form onSubmit={handleSaveProfile} className="mt-5 space-y-4">
-              <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#244775] text-lg font-bold text-white">
-                  {(profilePicturePreview || userData.profilePicture) ? (
-                    <img src={profilePicturePreview || userData.profilePicture || ""} alt="Profile preview" className="size-full object-cover" />
-                  ) : initials || <User size={22} />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-800">Profile picture</p>
-                  <p className="mt-0.5 text-xs text-slate-500">JPG, PNG, or WebP up to 5 MB</p>
-                  <input
-                    ref={profilePictureInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="sr-only"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      if (!file.type.startsWith("image/")) {
-                        setProfilePictureError("Choose an image file.");
-                        event.target.value = "";
-                        return;
-                      }
-                      if (file.size > 5 * 1024 * 1024) {
-                        setProfilePictureError("The image must be 5 MB or smaller.");
-                        event.target.value = "";
-                        return;
-                      }
-                      setProfilePictureError("");
-                      setProfilePictureFile(file);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => profilePictureInputRef.current?.click()}
-                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                  >
-                    <Camera size={14} />
-                    Choose image
-                  </button>
-                  {profilePictureError ? <p className="mt-2 text-xs text-rose-600" role="alert">{profilePictureError}</p> : null}
-                </div>
-              </div>
               {profileSaveError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{profileSaveError}</p> : null}
 
               <div>
@@ -764,12 +690,19 @@ export default function DashboardProfilePage() {
                   <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                     Year Level
                   </label>
-                  <input
-                    type="text"
-                    value={editYearLevel}
-                    onChange={(e) => setEditYearLevel(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
+                      <button
+                        key={yearLevel}
+                        type="button"
+                        aria-pressed={editYearLevel === yearLevel}
+                        onClick={() => setEditYearLevel(yearLevel)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${editYearLevel === yearLevel ? "border-[#244775] bg-[#244775] text-white" : "border-slate-200 bg-white text-slate-600 hover:border-blue-300"}`}
+                      >
+                        {yearLevel}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -777,11 +710,12 @@ export default function DashboardProfilePage() {
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                   Program
                 </label>
-                <input
-                  type="text"
+                <SearchableCombobox
                   value={editProgram}
-                  onChange={(e) => setEditProgram(e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+                  onChange={setEditProgram}
+                  options={PROGRAM_OPTIONS}
+                  placeholder="Choose or type your program"
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
                 />
               </div>
 

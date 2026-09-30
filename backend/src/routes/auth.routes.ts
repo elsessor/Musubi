@@ -36,6 +36,7 @@ import {
   reviewOrganizationRequestController,
   updateAdminMemberController,
   updateEventController,
+  updateMeController,
   updateMemberRoleController,
   updateOrganizationController
 } from "../controllers/auth.controller.js";
@@ -46,6 +47,7 @@ export const authRouter = Router();
 authRouter.post("/login", loginController);
 authRouter.post("/onboarding", onboardingController);
 authRouter.get("/me", requireAuth, meController);
+authRouter.patch("/me", requireAuth, updateMeController);
 
 authRouter.post("/atomize", atomizeGoalController);
 authRouter.get("/events", requireAuth, getEventsController);

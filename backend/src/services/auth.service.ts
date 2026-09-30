@@ -210,6 +210,32 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
   };
 }
 
+export async function updateCurrentUserProfile(uid: string, input: {
+  fullName: string;
+  position: string;
+  yearLevel: string;
+  program: string;
+  birthdate: string;
+  skills: string[];
+}): Promise<LoginResponse["user"]> {
+  const fullName = input.fullName.trim();
+  const position = input.position.trim();
+  const yearLevel = input.yearLevel.trim();
+  const program = input.program.trim();
+  const birthdate = input.birthdate.trim();
+  const skills = input.skills.map((skill) => skill.trim()).filter(Boolean);
+
+  if (!fullName || fullName.length > 120) throw new AppError("Enter a valid full name.", 400);
+  if (!position || position.length > 100) throw new AppError("Enter a valid position.", 400);
+  if (!yearLevel || yearLevel.length > 40) throw new AppError("Choose a valid year level.", 400);
+  if (!program || program.length > 200) throw new AppError("Enter a valid program.", 400);
+  if (birthdate.length > 80) throw new AppError("Enter a valid birthdate.", 400);
+  if (skills.length > 50 || skills.some((skill) => skill.length > 100)) throw new AppError("Review the skills and try again.", 400);
+
+  await firestore.collection("users").doc(uid).update({ fullName, position, yearLevel, program, birthdate, skills });
+  return getCurrentUser(uid);
+}
+
 export async function getOrganizationRequests(uid: string) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Admin") throw new AppError("Administrator access is required.", 403);

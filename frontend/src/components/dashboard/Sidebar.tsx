@@ -48,19 +48,15 @@ const navIconMap = {
 } as const;
 
 function AvatarFallback({ name, role, profilePicture }: { name: string; role: SidebarProps["role"]; profilePicture?: string | null }) {
-  const initials = name
-    .split(" ")
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("");
+  const initial = name.trim().charAt(0).toUpperCase();
 
   return (
     <div className={cn(
-      "flex size-12 shrink-0 items-center justify-center rounded-full text-base font-extrabold text-white",
+      "relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full text-base font-extrabold text-white",
       role === "Admin" ? "bg-[#ef2360]" : "bg-[#385779]"
     )}>
-      {profilePicture ? <img src={profilePicture} alt="" className="size-full rounded-full object-cover" /> : initials}
+      {initial || "?"}
+      {profilePicture ? <img src={profilePicture} alt="" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 size-full rounded-full object-cover" /> : null}
     </div>
   );
 }

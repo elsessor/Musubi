@@ -35,6 +35,7 @@ import {
   updateEventForUser,
   updateMemberForAdmin,
   updateMemberRoleForAdmin,
+  updateCurrentUserProfile,
   updateOrganizationForAdmin,
   watchAdminMemberDirectory,
   watchAuditLogs
@@ -126,6 +127,35 @@ export async function meController(request: AuthenticatedRequest, response: Resp
   try {
     if (!request.authUser) throw new AppError("Authentication is required.", 401);
     const user = await getCurrentUser(request.authUser.uid);
+    response.status(200).json({ user });
+  } catch (error) { next(error); }
+}
+
+export async function updateMeController(request: AuthenticatedRequest, response: Response, next: NextFunction) {
+  try {
+    if (!request.authUser) throw new AppError("Authentication is required.", 401);
+    const body = request.body as Record<string, unknown>;
+    const skills = Array.isArray(body.skills)
+      ? body.skills.filter((skill): skill is string => typeof skill === "string")
+      : null;
+    if (
+      typeof body.fullName !== "string" ||
+      typeof body.position !== "string" ||
+      typeof body.yearLevel !== "string" ||
+      typeof body.program !== "string" ||
+      typeof body.birthdate !== "string" ||
+      !skills || !Array.isArray(body.skills) || skills.length !== body.skills.length
+    ) {
+      throw new AppError("Invalid profile details.", 400);
+    }
+    const user = await updateCurrentUserProfile(request.authUser.uid, {
+      fullName: body.fullName,
+      position: body.position,
+      yearLevel: body.yearLevel,
+      program: body.program,
+      birthdate: body.birthdate,
+      skills
+    });
     response.status(200).json({ user });
   } catch (error) { next(error); }
 }

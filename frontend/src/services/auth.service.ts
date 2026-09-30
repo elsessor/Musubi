@@ -230,18 +230,21 @@ async function organizationRequest<T>(user: User, path: string, init?: RequestIn
   return response.json() as Promise<T>;
 }
 
-export async function getMyProfile(user: User): Promise<AuthUserProfile> {
-  const response = await organizationRequest<{ user?: unknown }>(user, "/auth/me");
-  if (!isRecord(response.user) || typeof response.user.uid !== "string" || !isUserRole(response.user.role)) {
+function normalizeMyProfile(value: unknown): AuthUserProfile {
+  if (!isRecord(value)) {
     throw new Error("The profile service returned invalid user data.");
   }
 
-  const record = response.user;
+  const record = value;
+  const uid = typeof record.uid === "string" ? record.uid : null;
+  const role = isUserRole(record.role) ? record.role : null;
+  if (!uid || !role) throw new Error("The profile service returned invalid user data.");
+
   return {
-    uid: record.uid,
+    uid,
     fullName: typeof record.fullName === "string" ? record.fullName : "",
     email: typeof record.email === "string" ? record.email : "",
-    role: record.role,
+    role,
     position: typeof record.position === "string" ? record.position : null,
     organizationId: typeof record.organizationId === "string" ? record.organizationId : null,
     organizationName: typeof record.organizationName === "string" ? record.organizationName : null,
@@ -254,6 +257,26 @@ export async function getMyProfile(user: User): Promise<AuthUserProfile> {
     status: typeof record.status === "string" ? record.status : null,
     onboardingCompleted: record.onboardingCompleted === true
   };
+}
+
+export async function getMyProfile(user: User): Promise<AuthUserProfile> {
+  const response = await organizationRequest<{ user?: unknown }>(user, "/auth/me");
+  return normalizeMyProfile(response.user);
+}
+
+export async function updateMyProfile(user: User, input: {
+  fullName: string;
+  position: string;
+  yearLevel: string;
+  program: string;
+  birthdate: string;
+  skills: string[];
+}): Promise<AuthUserProfile> {
+  const response = await organizationRequest<{ user?: unknown }>(user, "/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+  return normalizeMyProfile(response.user);
 }
 
 // ── Organization directory ────────────────────────────────────────────────────
