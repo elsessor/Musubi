@@ -56,6 +56,9 @@ export type OrganizationMember = {
   skills: string[];
   committeeId?: string | null;
   committeeName?: string | null;
+  activeTasksCount?: number;
+  completedOnTime?: number;
+  completedTotal?: number;
 };
 
 export type OrganizationJoinRequest = {

@@ -3,10 +3,20 @@ import type { Subtask } from "@/components/events/types";
 
 export type DelegationMatch = {
   member: OrganizationMember;
-  score: number;
+  score: number; // Display confidence percentage (50 - 98)
+  compositeScore: number; // CS_m raw score
+  skillMatchScore: number; // S_m (Jaccard Similarity)
+  workloadScore: number; // W_m (A_m / A_max)
+  reliabilityScore: number; // R_m (C_ontime / C_total)
   matchedSkills: string[];
   explanation: string;
 };
+
+// Model Weights & Safeguard Parameters
+const W1_SKILL = 0.50;
+const W2_WORKLOAD = 0.30;
+const W3_RELIABILITY = 0.20;
+const A_MAX_THRESHOLD = 5; // Default max active uncompleted subtasks threshold
 
 // Map of common onboarding skill names to keywords and synonyms for smart matching
 const SKILL_KEYWORDS: Record<string, string[]> = {
@@ -37,8 +47,8 @@ const SKILL_KEYWORDS: Record<string, string[]> = {
 };
 
 /**
-  * Infer onboarding-compatible required skills from task title and description
-  */
+ * Infer onboarding-compatible required skills from task title and description
+ */
 export function inferSkillsFromTask(title: string, description: string = ""): string[] {
   const text = `${title} ${description}`.toLowerCase();
   const detected: string[] = [];
@@ -52,10 +62,59 @@ export function inferSkillsFromTask(title: string, description: string = ""): st
   return detected.length > 0 ? Array.from(new Set(detected)).slice(0, 3) : ["Event Planning", "Communication"];
 }
 
+/**
+ * 1. Skill Match Score (S_m): Jaccard Similarity S_m = |K_T ∩ K_m| / |K_T ∪ K_m|
+ */
+export function calculateJaccardSkillSimilarity(
+  taskSkills: string[],
+  memberSkills: string[],
+  fullTaskText: string = ""
+): { similarity: number; matchedSkills: string[] } {
+  if (!taskSkills || taskSkills.length === 0) {
+    return { similarity: 0, matchedSkills: [] };
+  }
+
+  const kT = new Set(taskSkills.map((s) => s.toLowerCase().trim()));
+  const km = new Set((memberSkills || []).map((s) => s.toLowerCase().trim()));
+  const matchedSkills: string[] = [];
+
+  (memberSkills || []).forEach((skill) => {
+    const sLower = skill.toLowerCase().trim();
+    let isMatch = false;
+
+    if (kT.has(sLower) || Array.from(kT).some((req) => req.includes(sLower) || sLower.includes(req))) {
+      isMatch = true;
+    } else {
+      const keywords = SKILL_KEYWORDS[skill] || [sLower];
+      if (keywords.some((kw) => fullTaskText.includes(kw))) {
+        isMatch = true;
+      }
+    }
+
+    if (isMatch && !matchedSkills.includes(skill)) {
+      matchedSkills.push(skill);
+      km.add(sLower);
+    }
+  });
+
+  const intersectionSize = matchedSkills.length;
+  const unionSet = new Set([...Array.from(kT), ...Array.from(km)]);
+  const unionSize = unionSet.size || 1;
+
+  const similarity = Math.min(1.0, Math.max(0.0, intersectionSize / unionSize));
+  return { similarity, matchedSkills };
+}
+
+/**
+ * Deterministic Heuristic Model:
+ * Computes Composite Match Score CS_m = (w1 * S_m) - (w2 * W_m) + (w3 * R_m)
+ * Enforces Burnout Safeguards (W_m <= 1.0) & Tie-Breaker rules.
+ */
 export function findBestMemberForSubtask(
   subtask: { title: string; description?: string; requiredSkills?: string[]; assigneeName?: string },
   members: OrganizationMember[],
-  assignedCounts?: Record<string, number>
+  assignedCounts?: Record<string, number>,
+  maxThreshold: number = A_MAX_THRESHOLD
 ): DelegationMatch | null {
   if (!members || members.length === 0) return null;
 
@@ -65,122 +124,106 @@ export function findBestMemberForSubtask(
   const currentAssigneeLower = (subtask.assigneeName || "").toLowerCase().trim();
   const fullTaskText = `${titleLower} ${descLower} ${reqSkills.join(" ")} ${currentAssigneeLower}`;
 
-  type ScoredMatch = DelegationMatch & {
-    workload: number;
-    effectiveScore: number;
+  type ScoredCandidate = DelegationMatch & {
+    rawAm: number;
   };
 
-  const matches: ScoredMatch[] = members.map((member) => {
-    let score = 50;
-    const matchedSkills: string[] = [];
+  const candidateScores: ScoredCandidate[] = members.map((member) => {
+    // 1. Skill Match Score (S_m) via Jaccard Similarity
+    const { similarity: jaccardSm, matchedSkills } = calculateJaccardSkillSimilarity(
+      reqSkills.length > 0 ? reqSkills : inferSkillsFromTask(subtask.title, subtask.description),
+      member.skills || [],
+      fullTaskText
+    );
 
-    const memberSkills = member.skills || [];
-    const memberPosition = (member.position || "").toLowerCase();
+    let Sm = jaccardSm;
     const memberNameLower = (member.name || "").toLowerCase().trim();
+    const memberPositionLower = (member.position || "").toLowerCase().trim();
 
-    // 0. Direct Name / Current Assignee Match
-    let nameMatched = false;
-    if (currentAssigneeLower && memberNameLower) {
-      if (
-        memberNameLower === currentAssigneeLower ||
-        currentAssigneeLower.includes(memberNameLower) ||
-        memberNameLower.includes(currentAssigneeLower)
-      ) {
-        nameMatched = true;
-        score += 35;
-      }
+    if (currentAssigneeLower && memberNameLower && (memberNameLower === currentAssigneeLower || currentAssigneeLower.includes(memberNameLower))) {
+      Sm = Math.max(Sm, 0.95);
+    } else if (memberPositionLower && titleLower.includes(memberPositionLower)) {
+      Sm = Math.max(Sm, 0.75);
     }
 
-    // 1. Match against member's onboarding skills
-    memberSkills.forEach((skill) => {
-      const skillLower = skill.toLowerCase().trim();
-      let matched = false;
+    // 2. Workload Score (W_m = A_m / A_max)
+    const Am = (assignedCounts ? assignedCounts[member.name] || 0 : 0) + (member.activeTasksCount || 0);
+    const Wm = Am / maxThreshold;
 
-      // Direct match with requiredSkills or task text
-      if (reqSkills.some((req) => req === skillLower || skillLower.includes(req) || req.includes(skillLower))) {
-        matched = true;
-      } else {
-        // Synonym & keyword check
-        const keywords = SKILL_KEYWORDS[skill] || [skillLower];
-        if (keywords.some((kw) => fullTaskText.includes(kw))) {
-          matched = true;
-        }
-      }
-
-      if (matched && !matchedSkills.includes(skill)) {
-        matchedSkills.push(skill);
-        score += 20;
-      }
-    });
-
-    // 2. Position & Role Relevance (+15 if position matches keywords in task)
-    let positionMatched = false;
-    if (memberPosition) {
-      const positionKeywords = memberPosition
-        .split(/\s+/)
-        .filter((kw) => kw.length > 2 && kw !== "member" && kw !== "organization");
-      positionMatched = positionKeywords.some((kw) => titleLower.includes(kw) || descLower.includes(kw));
-      if (positionMatched) {
-        score += 15;
-      }
+    // 3. Reliability Indicator (R_m = C_ontime / C_total, default 1.0)
+    let Rm = 1.0;
+    if (typeof member.completedTotal === "number" && member.completedTotal > 0) {
+      const onTime = typeof member.completedOnTime === "number" ? member.completedOnTime : member.completedTotal;
+      Rm = Math.min(1.0, Math.max(0.0, onTime / member.completedTotal));
     }
 
-    // Dynamic Base Score Ranges based on match strength
-    let baseConfidenceScore = 50;
-    if (nameMatched) {
-      baseConfidenceScore = Math.min(98, Math.max(88, score));
-    } else if (matchedSkills.length > 0) {
-      // Direct Onboarding Skill match -> 75% to 98%
-      baseConfidenceScore = Math.min(98, Math.max(75, score));
-    } else if (positionMatched) {
-      // Role match -> 65% to 80%
-      baseConfidenceScore = Math.min(80, Math.max(65, score));
+    // 4. Composite Match Score Formula: CS_m = (w1 * S_m) - (w2 * W_m) + (w3 * R_m)
+    const CSm = (W1_SKILL * Sm) - (W2_WORKLOAD * Wm) + (W3_RELIABILITY * Rm);
+
+    // Human-readable AI confidence match score (50% - 98%)
+    let displayScore = Math.round(((CSm + 0.30) / 1.0) * 100);
+    if (matchedSkills.length > 0 || Sm >= 0.7) {
+      displayScore = Math.min(98, Math.max(75, displayScore));
     } else {
-      // Capacity fallback -> 50% to 64%
-      baseConfidenceScore = Math.min(64, Math.max(50, score));
+      displayScore = Math.min(65, Math.max(50, displayScore));
     }
-
-    // Workload calculation
-    const workload = assignedCounts ? assignedCounts[member.name] || 0 : 0;
-    // Effective score for ranking subtracts workload penalty
-    const effectiveScore = baseConfidenceScore - workload * 8;
 
     let explanation = "";
-    if (nameMatched) {
-      explanation = `Matched assigned member: ${member.name}`;
-    } else if (matchedSkills.length > 0) {
-      explanation = `Matched onboarding skill(s): ${matchedSkills.join(", ")}`;
-    } else if (positionMatched) {
-      explanation = `Matched role: ${member.position || member.role}`;
-    } else if (member.skills && member.skills.length > 0) {
-      explanation = `Assigned by availability (Member skills: ${member.skills.slice(0, 2).join(", ")})`;
+    if (matchedSkills.length > 0) {
+      explanation = `Jaccard Skill Similarity S_m = ${Sm.toFixed(2)} (${matchedSkills.join(", ")})`;
+    } else if (Sm >= 0.7) {
+      explanation = `Matched role/name: ${member.name} (${member.position || member.role})`;
     } else {
-      explanation = "Assigned based on team availability";
+      explanation = `Assigned by capacity: W_m = ${Wm.toFixed(2)} (${Am}/${maxThreshold} tasks), R_m = ${Rm.toFixed(2)}`;
     }
 
     return {
       member,
-      score: baseConfidenceScore,
-      effectiveScore,
-      workload,
+      score: displayScore,
+      compositeScore: CSm,
+      skillMatchScore: Sm,
+      workloadScore: Wm,
+      reliabilityScore: Rm,
+      rawAm: Am,
       matchedSkills,
       explanation
     };
   });
 
-  // Sort descending by effectiveScore, then by workload ascending (fewer assigned tasks first!)
-  matches.sort((a, b) => {
-    if (b.effectiveScore !== a.effectiveScore) {
-      return b.effectiveScore - a.effectiveScore;
+  // Decision Criteria 1: Burnout Safeguard (W_m <= 1.0)
+  let eligiblePool = candidateScores.filter((c) => c.workloadScore <= 1.0);
+  // Fallback if ALL members exceed max workload: select from full pool to prevent unassigned tasks
+  if (eligiblePool.length === 0) {
+    eligiblePool = candidateScores;
+  }
+
+  // Decision Criteria 2 & 3: Select highest positive CS_m, tie-broken by lowest absolute Workload Score (W_m)
+  eligiblePool.sort((a, b) => {
+    const diff = b.compositeScore - a.compositeScore;
+    if (Math.abs(diff) > 0.0001) {
+      return diff;
     }
-    return a.workload - b.workload;
+    // Tie-breaker: candidate with lower absolute Workload Score (W_m)
+    return a.workloadScore - b.workloadScore;
   });
 
-  return matches[0] || null;
+  const winner = eligiblePool[0];
+  if (!winner) return null;
+
+  return {
+    member: winner.member,
+    score: winner.score,
+    compositeScore: winner.compositeScore,
+    skillMatchScore: winner.skillMatchScore,
+    workloadScore: winner.workloadScore,
+    reliabilityScore: winner.reliabilityScore,
+    matchedSkills: winner.matchedSkills,
+    explanation: winner.explanation
+  };
 }
 
 /**
- * Heuristically delegates a set of subtasks across organization members using onboarding skills.
+ * Heuristically delegates a set of subtasks across organization members using onboarding skills & Jaccard model.
  */
 export function delegateSubtasksHeuristically(
   subtasks: Subtask[],
@@ -191,7 +234,6 @@ export function delegateSubtasksHeuristically(
   const assignedCounts: Record<string, number> = {};
 
   return subtasks.map((st) => {
-    // If subtask has no required skills, infer them dynamically
     const effectiveSkills =
       st.requiredSkills && st.requiredSkills.length > 0
         ? st.requiredSkills
