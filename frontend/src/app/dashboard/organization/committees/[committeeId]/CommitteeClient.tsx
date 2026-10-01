@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ClipboardList, Search } from "lucide-react";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -26,7 +26,8 @@ function dateLabel() {
 }
 
 export function CommitteeClient() {
-  const params = useParams<{ committeeId: string }>();
+  const searchParams = useSearchParams();
+  const committeeId = searchParams.get("committeeId");
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
@@ -47,7 +48,7 @@ export function CommitteeClient() {
   }, [authLoading, profile, router]);
 
   useEffect(() => {
-    if (!firebaseUser || !profile?.organizationId || !params.committeeId) return;
+    if (!firebaseUser || !profile?.organizationId || !committeeId) return;
     setLoading(true);
     void Promise.all([
       getOrganization(firebaseUser, profile.organizationId),
@@ -57,11 +58,11 @@ export function CommitteeClient() {
       .then(([org, organizationMembers, committees]) => {
         setOrganization(org);
         setMembers(organizationMembers);
-        setCommittee(committees.find((item) => item.id === params.committeeId) ?? null);
+        setCommittee(committees.find((item) => item.id === committeeId) ?? null);
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load committee."))
       .finally(() => setLoading(false));
-  }, [firebaseUser, params.committeeId, profile?.organizationId]);
+  }, [firebaseUser, committeeId, profile?.organizationId]);
 
   const committeeMembers = useMemo(() => {
     return members

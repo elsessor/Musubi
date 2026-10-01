@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { ToastViewport } from "@/components/ui/Toast";
 import { useAuthListener } from "@/hooks/useAuthListener";
+import { NavigationLoadingProvider } from "@/app/navigationLoading";
 
 type ProvidersProps = {
   children: ReactNode;
@@ -14,7 +15,7 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <>
-      {children}
+      <NavigationLoadingProvider>{children}</NavigationLoadingProvider>
       <ToastViewport />
     </>
   );

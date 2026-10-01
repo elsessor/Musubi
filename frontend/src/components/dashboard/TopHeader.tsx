@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+/*
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -340,22 +340,18 @@ export function TopHeader({
               className="absolute right-0 z-30 mt-3 w-72 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xl animate-in fade-in zoom-in-95 duration-150"
               role="menu"
             >
-              {/* User Header Info */}
               <div className="px-1 pb-3">
                 <p className="text-sm font-bold text-slate-900 leading-snug">{liveUser.name}</p>
                 <p className="mt-0.5 truncate text-xs font-medium text-slate-400">{displayEmail}</p>
               </div>
 
-              {/* Section Header */}
               <div className="px-1 pb-2 pt-1">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   MY AVAILABILITY
                 </p>
               </div>
 
-              {/* Availability Options */}
               <div className="space-y-1.5">
-                {/* Available Option */}
                 <button
                   className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
                     currentAvailability === "Available"
@@ -381,7 +377,6 @@ export function TopHeader({
                   ) : null}
                 </button>
 
-                {/* Busy Option */}
                 <button
                   className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
                     currentAvailability === "Busy"
@@ -407,7 +402,6 @@ export function TopHeader({
                   ) : null}
                 </button>
 
-                {/* On Leave Option */}
                 <button
                   className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
                     currentAvailability === "On Leave"
@@ -434,10 +428,8 @@ export function TopHeader({
                 </button>
               </div>
 
-              {/* Divider */}
               <div className="my-2.5 h-px bg-slate-100" />
 
-              {/* Navigation Menu */}
               <div className="space-y-0.5">
                 <button
                   className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
@@ -482,7 +474,7 @@ export function TopHeader({
     </header>
   );
 }
-=======
+*/
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -965,4 +957,3 @@ export function TopHeader({
     </header>
   );
 }
->>>>>>> cce3f316da681442902354778c5cf21d4e7e616c

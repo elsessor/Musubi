@@ -16,9 +16,11 @@ import {
   Users,
   Zap
 } from "lucide-react";
+import Link from "next/link";
 
 import type { DashboardNavItem } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
+import { useNavigationLoading } from "@/app/navigationLoading";
 
 type SidebarProps = {
   userName: string;
@@ -74,6 +76,7 @@ export function Sidebar({
   onNavigate,
   onToggleCollapse
 }: SidebarProps) {
+  const { startNavigation } = useNavigationLoading();
   const uniqueNavItems = navItems.filter(
     (item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index
   );
@@ -129,7 +132,7 @@ export function Sidebar({
         "flex min-h-[104px] items-center border-b border-white/10 py-5 md:min-h-[115px]",
         collapsed ? "justify-center px-2" : "px-5"
       )}>
-        <a
+        <Link
           href="/dashboard/profile"
           onClick={onNavigate}
           aria-label={`View and edit profile for ${userName}`}
@@ -143,7 +146,7 @@ export function Sidebar({
               <p className="mt-1 truncate text-sm font-semibold leading-tight text-[#aebdd0]">{roleLabel}</p>
             </div>
           ) : null}
-        </a>
+        </Link>
       </div>
 
       {/* Navigation List */}
@@ -155,7 +158,7 @@ export function Sidebar({
 
             return (
               <li key={item.id}>
-                <a
+                <Link
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "group relative flex h-12 items-center gap-4 rounded-xl text-[17px] font-bold transition md:h-[60px] md:rounded-[17px] md:text-[18px]",
@@ -165,7 +168,10 @@ export function Sidebar({
                     collapsed ? "justify-center px-0" : "px-4 md:px-5"
                   )}
                   href={item.href}
-                  onClick={onNavigate}
+                  onClick={() => {
+                    if (!active) startNavigation();
+                    onNavigate();
+                  }}
                   title={collapsed ? item.label : undefined}
                 >
                   <Icon className={cn("size-6 shrink-0 md:size-[26px]", active ? "text-white" : "text-[#afbed0]")} strokeWidth={1.8} />
@@ -181,7 +187,7 @@ export function Sidebar({
                       {item.badge}
                     </span>
                   ) : null}
-                </a>
+                </Link>
               </li>
             );
           })}

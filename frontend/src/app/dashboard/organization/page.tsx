@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -882,7 +883,7 @@ function CommitteeCard({ committee, members, currentUserId, currentUserName }: {
   return (
     <article className="rounded-2xl border border-[#dce3ed] bg-white p-5 shadow-sm">
       <div className="min-w-0">
-        <a href={"/dashboard/organization/committees/" + committee.id} className="text-sm font-bold text-slate-900 hover:text-blue-700">{committee.name}</a>
+            <Link href={"/dashboard/organization/committees?committeeId=" + encodeURIComponent(committee.id)} className="text-sm font-bold text-slate-900 hover:text-blue-700">{committee.name}</Link>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">{committee.description || "No description provided."}</p>
       </div>
       <div className="my-3 border-t border-slate-100" />
