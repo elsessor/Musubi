@@ -52,12 +52,8 @@ export function inferSkillsFromTask(title: string, description: string = ""): st
   return detected.length > 0 ? Array.from(new Set(detected)).slice(0, 3) : ["Event Planning", "Communication"];
 }
 
-/**
- * Heuristically finds the best matching OrganizationMember for a given subtask
- * based on onboarding skills, position/role relevance, and task context.
- */
 export function findBestMemberForSubtask(
-  subtask: { title: string; description?: string; requiredSkills?: string[] },
+  subtask: { title: string; description?: string; requiredSkills?: string[]; assigneeName?: string },
   members: OrganizationMember[],
   assignedCounts?: Record<string, number>
 ): DelegationMatch | null {
@@ -66,14 +62,34 @@ export function findBestMemberForSubtask(
   const reqSkills = (subtask.requiredSkills || []).map((s) => s.toLowerCase().trim());
   const titleLower = (subtask.title || "").toLowerCase();
   const descLower = (subtask.description || "").toLowerCase();
-  const fullTaskText = `${titleLower} ${descLower} ${reqSkills.join(" ")}`;
+  const currentAssigneeLower = (subtask.assigneeName || "").toLowerCase().trim();
+  const fullTaskText = `${titleLower} ${descLower} ${reqSkills.join(" ")} ${currentAssigneeLower}`;
 
-  const matches: DelegationMatch[] = members.map((member) => {
+  type ScoredMatch = DelegationMatch & {
+    workload: number;
+    effectiveScore: number;
+  };
+
+  const matches: ScoredMatch[] = members.map((member) => {
     let score = 50;
     const matchedSkills: string[] = [];
 
     const memberSkills = member.skills || [];
     const memberPosition = (member.position || "").toLowerCase();
+    const memberNameLower = (member.name || "").toLowerCase().trim();
+
+    // 0. Direct Name / Current Assignee Match
+    let nameMatched = false;
+    if (currentAssigneeLower && memberNameLower) {
+      if (
+        memberNameLower === currentAssigneeLower ||
+        currentAssigneeLower.includes(memberNameLower) ||
+        memberNameLower.includes(currentAssigneeLower)
+      ) {
+        nameMatched = true;
+        score += 35;
+      }
+    }
 
     // 1. Match against member's onboarding skills
     memberSkills.forEach((skill) => {
@@ -109,25 +125,30 @@ export function findBestMemberForSubtask(
       }
     }
 
-    // 3. Workload Balance Heuristic (-5 for each task currently assigned)
-    if (assignedCounts && assignedCounts[member.name]) {
-      score -= Math.min(20, assignedCounts[member.name] * 5);
-    }
-
-    // Dynamic Score Ranges based on match strength
-    if (matchedSkills.length > 0) {
+    // Dynamic Base Score Ranges based on match strength
+    let baseConfidenceScore = 50;
+    if (nameMatched) {
+      baseConfidenceScore = Math.min(98, Math.max(88, score));
+    } else if (matchedSkills.length > 0) {
       // Direct Onboarding Skill match -> 75% to 98%
-      score = Math.min(98, Math.max(75, score));
+      baseConfidenceScore = Math.min(98, Math.max(75, score));
     } else if (positionMatched) {
       // Role match -> 65% to 80%
-      score = Math.min(80, Math.max(65, score));
+      baseConfidenceScore = Math.min(80, Math.max(65, score));
     } else {
       // Capacity fallback -> 50% to 64%
-      score = Math.min(64, Math.max(50, score));
+      baseConfidenceScore = Math.min(64, Math.max(50, score));
     }
 
+    // Workload calculation
+    const workload = assignedCounts ? assignedCounts[member.name] || 0 : 0;
+    // Effective score for ranking subtracts workload penalty
+    const effectiveScore = baseConfidenceScore - workload * 8;
+
     let explanation = "";
-    if (matchedSkills.length > 0) {
+    if (nameMatched) {
+      explanation = `Matched assigned member: ${member.name}`;
+    } else if (matchedSkills.length > 0) {
       explanation = `Matched onboarding skill(s): ${matchedSkills.join(", ")}`;
     } else if (positionMatched) {
       explanation = `Matched role: ${member.position || member.role}`;
@@ -139,14 +160,21 @@ export function findBestMemberForSubtask(
 
     return {
       member,
-      score,
+      score: baseConfidenceScore,
+      effectiveScore,
+      workload,
       matchedSkills,
       explanation
     };
   });
 
-  // Sort descending by score
-  matches.sort((a, b) => b.score - a.score);
+  // Sort descending by effectiveScore, then by workload ascending (fewer assigned tasks first!)
+  matches.sort((a, b) => {
+    if (b.effectiveScore !== a.effectiveScore) {
+      return b.effectiveScore - a.effectiveScore;
+    }
+    return a.workload - b.workload;
+  });
 
   return matches[0] || null;
 }
