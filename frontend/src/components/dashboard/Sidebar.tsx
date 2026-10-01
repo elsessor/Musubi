@@ -16,6 +16,7 @@ import {
   Users,
   Zap
 } from "lucide-react";
+import Link from "next/link";
 
 import type { DashboardNavItem } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
@@ -155,10 +156,10 @@ export function Sidebar({
 
             return (
               <li key={item.id}>
-                <a
+                <Link
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "group relative flex h-12 items-center gap-4 rounded-xl text-[17px] font-bold transition md:h-[60px] md:rounded-[17px] md:text-[18px]",
+                    "group relative flex h-12 items-center gap-4 rounded-xl text-[17px] font-bold md:h-[60px] md:rounded-[17px] md:text-[18px]",
                     active
                       ? "bg-[#385779] text-white"
                       : "text-[#b4c1d3] hover:bg-white/[0.07] hover:text-white",
@@ -181,7 +182,7 @@ export function Sidebar({
                       {item.badge}
                     </span>
                   ) : null}
-                </a>
+                </Link>
               </li>
             );
           })}
@@ -192,7 +193,7 @@ export function Sidebar({
       <div className="border-t border-white/10 px-3 py-4 md:py-[13px]">
         <button
           className={cn(
-            "flex h-12 w-full items-center gap-4 rounded-xl text-[17px] font-bold text-[#b4c1d3] transition hover:bg-white/[0.07] hover:text-white md:h-[60px] md:rounded-[17px] md:text-[18px]",
+            "flex h-12 w-full items-center gap-4 rounded-xl text-[17px] font-bold text-[#b4c1d3] hover:bg-white/[0.07] hover:text-white md:h-[60px] md:rounded-[17px] md:text-[18px]",
             collapsed ? "justify-center px-0" : "px-4 md:px-5"
           )}
           onClick={onLogout}

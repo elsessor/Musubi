@@ -181,14 +181,17 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
   const [dragOverStatusPill, setDragOverStatusPill] = useState<string | null>(null);
 
   const [statusOrder, setStatusOrder] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem("musubi_event_status_order");
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch {}
     return DEFAULT_EVENT_STATUSES;
   });
+
+  // Read browser-persisted preferences after hydration so the server and
+  // client render the same status pills on the first pass.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("musubi_event_status_order");
+      if (saved) setStatusOrder(JSON.parse(saved));
+    } catch {}
+  }, []);
 
   useEffect(() => {
     try {

@@ -436,13 +436,9 @@ export function DashboardPage() {
     return result;
   }, [memberSubtasks]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#eef1f5] text-slate-500 font-medium">
-        Loading dashboard...
-      </div>
-    );
-  }
+  // Do not render a role-specific shell until auth has resolved. Rendering
+  // the default leader shell first causes a visible leader/member flicker.
+  if (authLoading || !profile) return null;
 
   if (isMemberView) {
     const kpiIcons = {

@@ -118,13 +118,8 @@ export function EventsPage() {
     }
   }, [dashboardUser.role, loading, router]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#eef1f5] text-slate-500">
-        Loading…
-      </div>
-    );
-  }
+  // Keep the sidebar role stable on the first render of every dashboard tab.
+  if (authLoading || !profile) return null;
 
   return (
     <DashboardLayout
