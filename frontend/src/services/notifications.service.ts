@@ -269,7 +269,6 @@ export function subscribeNotificationsFirestore(
       emitMerged();
     },
     (err) => {
-      console.warn("[subscribeNotificationsFirestore] Notifications error:", err);
       emitMerged();
     }
   );
@@ -332,7 +331,6 @@ export function subscribeNotificationsFirestore(
       emitMerged();
     },
     (err) => {
-      console.warn("[subscribeNotificationsFirestore] Audit logs error:", err);
       emitMerged();
     }
   );

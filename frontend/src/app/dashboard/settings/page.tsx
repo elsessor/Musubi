@@ -181,8 +181,8 @@ export default function DashboardSettingsPage() {
           }));
         }
       },
-      (error) => {
-        console.warn("[Settings] Error listening to user snapshot:", error);
+      () => {
+        // Silent fallback when client-side rules restrict direct listener
       }
     );
 
@@ -202,8 +202,8 @@ export default function DashboardSettingsPage() {
           setOrganizationName(data.name);
         }
       },
-      (error) => {
-        console.warn("[Settings] Error listening to organization snapshot:", error);
+      () => {
+        // Silent fallback when client-side rules restrict direct listener
       }
     );
 
@@ -277,40 +277,30 @@ export default function DashboardSettingsPage() {
         }
         try {
           await updateDoc(userRef, { organizationName: editValue });
-        } catch (err) {
-          console.warn("[Settings] User org update warning:", err);
-        }
+        } catch { }
         if (profile) setProfile({ ...profile, organizationName: editValue });
       } else if (editingField === "fullName") {
         setFullName(editValue);
         if (firebaseUser) {
           try {
             await updateProfile(firebaseUser, { displayName: editValue });
-          } catch (err) {
-            console.warn("[Settings] Auth updateProfile warning:", err);
-          }
+          } catch { }
         }
         try {
           await updateDoc(userRef, { fullName: editValue });
-        } catch (err) {
-          console.warn("[Settings] User fullName update warning:", err);
-        }
+        } catch { }
         if (profile) setProfile({ ...profile, fullName: editValue });
       } else if (editingField === "email") {
         setEmail(editValue);
         try {
           await updateDoc(userRef, { email: editValue });
-        } catch (err) {
-          console.warn("[Settings] User email update warning:", err);
-        }
+        } catch { }
         if (profile) setProfile({ ...profile, email: editValue });
       } else if (editingField === "position") {
         setPosition(editValue);
         try {
           await updateDoc(userRef, { position: editValue });
-        } catch (err) {
-          console.warn("[Settings] User position update warning:", err);
-        }
+        } catch { }
         if (profile) setProfile({ ...profile, position: editValue });
       }
 

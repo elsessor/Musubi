@@ -744,7 +744,41 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
   const [isLeaderOnly, setIsLeaderOnly] = useState(subtask.isLeaderOnly);
   const [skills, setSkills] = useState<string[]>(subtask.requiredSkills);
   const [newSkillInput, setNewSkillInput] = useState("");
+  const [currentMonth, setCurrentMonth] = useState<number>(7); // Default August
+  const [currentYear, setCurrentYear] = useState<number>(2026);
   const [selectedDay, setSelectedDay] = useState<number>(11);
+  const [selectedMonth, setSelectedMonth] = useState<number>(7);
+  const [selectedYear, setSelectedYear] = useState<number>(2026);
+
+  const MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const MONTH_NAMES_SHORT = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  ];
+
+  function handlePrevMonth() {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear((prev) => prev - 1);
+    } else {
+      setCurrentMonth((prev) => prev - 1);
+    }
+  }
+
+  function handleNextMonth() {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear((prev) => prev + 1);
+    } else {
+      setCurrentMonth((prev) => prev + 1);
+    }
+  }
+
+  const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
   const bestMatch = findBestMemberForSubtask({ title, description, requiredSkills: skills }, members);
   const initialAssignee =
@@ -882,20 +916,32 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
             )}
           </div>
 
-          {/* Interactive Calendar Deadline Picker (Exact Screenshot 2 Style) */}
+          {/* Dynamic Calendar Deadline Picker */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Deadline</span>
-              <span className="text-xs font-bold text-blue-600">Aug {selectedDay}, 2026 · 11:59</span>
+              <span className="text-xs font-bold text-blue-600">
+                {MONTH_NAMES_SHORT[selectedMonth]} {selectedDay}, {selectedYear} · 11:59
+              </span>
             </div>
 
             <div className="rounded-2xl border border-slate-200 p-4 bg-white">
               <div className="flex items-center justify-between mb-3 px-2">
-                <button type="button" className="p-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50">
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  className="p-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
+                >
                   <ChevronLeft size={16} />
                 </button>
-                <span className="font-bold text-slate-900 text-sm">August 2026</span>
-                <button type="button" className="p-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50">
+                <span className="font-bold text-slate-900 text-sm">
+                  {MONTH_NAMES[currentMonth]} {currentYear}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  className="p-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
+                >
                   <ChevronRight size={16} />
                 </button>
               </div>
@@ -905,22 +951,34 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
               </div>
 
               <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-700">
-                <span className="py-1 opacity-30"></span><span className="py-1 opacity-30"></span><span className="py-1 opacity-30"></span><span className="py-1 opacity-30"></span><span className="py-1 opacity-30"></span><span className="py-1 opacity-30"></span>
-                <button type="button" onClick={() => setSelectedDay(1)} className={`py-1.5 rounded-xl ${selectedDay === 1 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>1</button>
-                <button type="button" onClick={() => setSelectedDay(2)} className={`py-1.5 rounded-xl ${selectedDay === 2 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>2</button>
-                <button type="button" onClick={() => setSelectedDay(3)} className={`py-1.5 rounded-xl ${selectedDay === 3 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>3</button>
-                <button type="button" onClick={() => setSelectedDay(4)} className={`py-1.5 rounded-xl ${selectedDay === 4 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>4</button>
-                <button type="button" onClick={() => setSelectedDay(5)} className={`py-1.5 rounded-xl ${selectedDay === 5 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>5</button>
-                <button type="button" onClick={() => setSelectedDay(6)} className={`py-1.5 rounded-xl ${selectedDay === 6 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>6</button>
-                <button type="button" onClick={() => setSelectedDay(7)} className={`py-1.5 rounded-xl bg-blue-100 text-blue-700 ${selectedDay === 7 ? "bg-[#1e3a5f] text-white" : ""}`}>7</button>
-                <button type="button" onClick={() => setSelectedDay(8)} className={`py-1.5 rounded-xl ${selectedDay === 8 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>8</button>
-                <button type="button" onClick={() => setSelectedDay(9)} className={`py-1.5 rounded-xl ${selectedDay === 9 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>9</button>
-                <button type="button" onClick={() => setSelectedDay(10)} className={`py-1.5 rounded-xl ${selectedDay === 10 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>10</button>
-                <button type="button" onClick={() => setSelectedDay(11)} className={`py-1.5 rounded-xl font-black ${selectedDay === 11 ? "bg-[#1e293b] text-white" : "hover:bg-slate-100"}`}>11</button>
-                <button type="button" onClick={() => setSelectedDay(12)} className={`py-1.5 rounded-xl ${selectedDay === 12 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>12</button>
-                <button type="button" onClick={() => setSelectedDay(13)} className={`py-1.5 rounded-xl ${selectedDay === 13 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>13</button>
-                <button type="button" onClick={() => setSelectedDay(14)} className={`py-1.5 rounded-xl ${selectedDay === 14 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>14</button>
-                <button type="button" onClick={() => setSelectedDay(15)} className={`py-1.5 rounded-xl ${selectedDay === 15 ? "bg-[#1e3a5f] text-white" : "hover:bg-slate-100"}`}>15</button>
+                {Array.from({ length: firstDayIndex }).map((_, idx) => (
+                  <span key={`empty-${idx}`} className="py-1 opacity-30" />
+                ))}
+                {Array.from({ length: daysInMonth }).map((_, idx) => {
+                  const day = idx + 1;
+                  const isSelected =
+                    selectedDay === day &&
+                    selectedMonth === currentMonth &&
+                    selectedYear === currentYear;
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => {
+                        setSelectedDay(day);
+                        setSelectedMonth(currentMonth);
+                        setSelectedYear(currentYear);
+                      }}
+                      className={`py-1.5 rounded-xl font-semibold transition ${
+                        isSelected
+                          ? "bg-[#1e3a5f] text-white shadow-2xs font-bold"
+                          : "hover:bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

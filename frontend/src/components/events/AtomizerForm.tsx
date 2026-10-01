@@ -261,7 +261,9 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
       const rawSubtasks: Subtask[] = data.tasks.map((item, idx) => ({
         id: `subtask-ai-${Date.now()}-${idx}`,
         title: item.title,
-        description: `Actionable subtask breakdown for ${eventName}. Priority: ${item.priority}.`,
+        description:
+          (item as unknown as { description?: string }).description ||
+          `Actionable operational subtask breakdown for "${item.title}".`,
         assigneeName: item.assigneeName || "",
         requiredSkills:
           (item as unknown as { requiredSkills?: string[] }).requiredSkills &&

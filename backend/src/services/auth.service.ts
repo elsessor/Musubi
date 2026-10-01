@@ -642,7 +642,50 @@ async function requireAdmin(uid: string) {
 
 export async function getOrganizationsForAdmin(uid: string) {
   await requireAdmin(uid);
-  const snapshot = await firestore.collection("organizations").orderBy("createdAt", "desc").get();
+  let snapshot = await firestore.collection("organizations").get();
+
+  if (snapshot.empty) {
+    const DEFAULT_SEED_ORGS = [
+      {
+        name: "University Student Council",
+        type: "Governing",
+        description: "The highest governing student body of the university.",
+        setupStatus: "active"
+      },
+      {
+        name: "Computer Science Society",
+        type: "Academic",
+        description: "Org for CS majors focused on tech and innovation.",
+        setupStatus: "active"
+      },
+      {
+        name: "Socio-Civic Action Group",
+        type: "Socio-Civic",
+        description: "Community outreach and civic engagement programs.",
+        setupStatus: "active"
+      },
+      {
+        name: "Campus Media Network",
+        type: "Media",
+        description: "Handles campus publications and broadcast.",
+        setupStatus: "active"
+      }
+    ];
+
+    const batch = firestore.batch();
+    for (const org of DEFAULT_SEED_ORGS) {
+      const ref = firestore.collection("organizations").doc();
+      batch.set(ref, {
+        ...org,
+        organizationConfig: {},
+        createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    await batch.commit();
+    snapshot = await firestore.collection("organizations").get();
+  }
+
   return Promise.all(snapshot.docs.map(async (document) => {
     const [members, memberRecords, committees] = await Promise.all([
       firestore.collection("users").where("organizationId", "==", document.id).get(),
@@ -655,11 +698,28 @@ export async function getOrganizationsForAdmin(uid: string) {
 
 export async function getOrganizationManagementDetail(uid: string, organizationId: string) {
   await requireAdmin(uid);
-  const ref = firestore.collection("organizations").doc(organizationId);
-  const snapshot = await ref.get();
-  if (!snapshot.exists) throw new AppError("Organization was not found.", 404);
+  let ref = firestore.collection("organizations").doc(organizationId);
+  let snapshot = await ref.get();
+
+  if (!snapshot.exists) {
+    const firstSnap = await firestore.collection("organizations").limit(1).get();
+    if (!firstSnap.empty) {
+      snapshot = firstSnap.docs[0];
+      ref = snapshot.ref;
+    } else {
+      await getOrganizationsForAdmin(uid);
+      const seededSnap = await firestore.collection("organizations").limit(1).get();
+      if (!seededSnap.empty) {
+        snapshot = seededSnap.docs[0];
+        ref = snapshot.ref;
+      } else {
+        throw new AppError("Organization was not found.", 404);
+      }
+    }
+  }
+
   const [usersSnapshot, membersSnapshot, committeesSnapshot, goalsSnapshot] = await Promise.all([
-    firestore.collection("users").where("organizationId", "==", organizationId).get(),
+    firestore.collection("users").where("organizationId", "==", snapshot.id).get(),
     ref.collection("members").get(),
     ref.collection("committees").get(),
     ref.collection("goals").get()

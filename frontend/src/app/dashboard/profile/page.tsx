@@ -76,7 +76,14 @@ export default function DashboardProfilePage() {
   const showToast = useToastStore((state) => state.showToast);
   const logout = useLogout();
 
+  const initialFullName = profile?.fullName || firebaseUser?.displayName || "Campus Member";
+  const initialEmail = profile?.email || firebaseUser?.email || "";
+  const initialRole = profile?.role || "Organization Member";
+  const initialPosition = profile?.position || "Member";
+  const initialOrg = profile?.organizationName || "Campus Organization";
+
   const [userData, setUserData] = useState<UserProfileData>({
+<<<<<<< HEAD
     fullName: profile?.fullName || firebaseUser?.displayName || "",
     email: profile?.email || firebaseUser?.email || "",
     role: profile?.role || "",
@@ -88,6 +95,18 @@ export default function DashboardProfilePage() {
     profilePicture: profile?.profilePicture || firebaseUser?.photoURL || null,
     skills: profile?.skills || [],
     status: profile?.availability || profile?.status || ""
+=======
+    fullName: initialFullName,
+    email: initialEmail,
+    role: initialRole,
+    position: initialPosition,
+    organizationName: initialOrg,
+    yearLevel: "",
+    program: "",
+    birthdate: "",
+    skills: profile?.skills || [],
+    status: "Available"
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
   });
 
   const [events, setEvents] = useState<Event[]>([]);
@@ -105,13 +124,33 @@ export default function DashboardProfilePage() {
   const [editBirthdate, setEditBirthdate] = useState("");
   const [editSkills, setEditSkills] = useState<string[]>([]);
 
+<<<<<<< HEAD
   // Load the signed-in user's saved profile from the authenticated profile endpoint.
+=======
+  // Sync state whenever profile store or firebaseUser loads
+  useEffect(() => {
+    if (profile || firebaseUser) {
+      setUserData((prev) => ({
+        ...prev,
+        fullName: profile?.fullName || firebaseUser?.displayName || prev.fullName,
+        email: profile?.email || firebaseUser?.email || prev.email,
+        role: profile?.role || prev.role,
+        position: profile?.position || prev.position,
+        organizationName: profile?.organizationName || prev.organizationName,
+        skills: profile?.skills && profile.skills.length > 0 ? profile.skills : prev.skills
+      }));
+    }
+  }, [firebaseUser, profile]);
+
+  // 1. Subscribe to Firestore User Document for Realtime User Profile Data
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
   useEffect(() => {
     if (!firebaseUser?.uid) {
       setLoading(false);
       return;
     }
 
+<<<<<<< HEAD
     let cancelled = false;
     setLoading(true);
     void getMyProfile(firebaseUser)
@@ -140,6 +179,35 @@ export default function DashboardProfilePage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+=======
+    const userDocRef = doc(getFirebaseDb(), "users", firebaseUser.uid);
+    const unsubUser = onSnapshot(
+      userDocRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setUserData((prev) => ({
+            ...prev,
+            fullName: data.fullName || profile?.fullName || firebaseUser.displayName || prev.fullName,
+            email: data.email || firebaseUser.email || profile?.email || prev.email,
+            role: data.role || profile?.role || prev.role,
+            position: data.position || profile?.position || prev.position,
+            organizationName: data.organizationName || profile?.organizationName || prev.organizationName,
+            yearLevel: data.yearLevel || data.year || prev.yearLevel || "",
+            program: data.program || prev.program || "",
+            birthdate: data.birthdate || prev.birthdate || "",
+            skills: Array.isArray(data.skills) ? data.skills : (profile?.skills || prev.skills),
+            status: data.availability || data.status || "Available"
+          }));
+        }
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("[ProfilePage] User doc subscription error:", err);
+        setLoading(false);
+      }
+    );
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
 
     return () => {
       cancelled = true;
@@ -314,7 +382,11 @@ export default function DashboardProfilePage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">My Profile</h1>
             <p className="text-xs font-semibold text-slate-500 mt-0.5">
+<<<<<<< HEAD
               {userData.organizationName || "No organization"} · {formattedDate}
+=======
+              {userData.organizationName || "Campus Organization"} · {formattedDate}
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
             </p>
           </div>
 
@@ -338,6 +410,7 @@ export default function DashboardProfilePage() {
 
           <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
             {/* Initials Avatar Box */}
+<<<<<<< HEAD
             <div className="relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#2563eb] text-2xl font-bold font-mono text-white shadow-md">
               {initials || "?"}
               {userData.profilePicture ? (
@@ -348,17 +421,32 @@ export default function DashboardProfilePage() {
                   className="absolute inset-0 size-full rounded-2xl object-cover"
                 />
               ) : null}
+=======
+            <div className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-[#2563eb] text-2xl font-bold font-mono text-white shadow-md">
+              {initials || "U"}
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
             </div>
 
             {/* Profile Information */}
             <div className="flex-1 space-y-1">
+<<<<<<< HEAD
               <h2 className="text-2xl font-bold tracking-tight text-white">{userData.fullName || "Your profile"}</h2>
               <p className="text-sm font-medium text-slate-300">
                 {[userData.position || userData.role, userData.organizationName].filter(Boolean).join(" · ") || "Add your role and organization"}
               </p>
               <p className="text-xs text-slate-400">
                 {[userData.program, userData.yearLevel].filter(Boolean).join(" · ") || "Add your program and year level"}
+=======
+              <h2 className="text-2xl font-bold tracking-tight text-white">{userData.fullName || "Campus Member"}</h2>
+              <p className="text-sm font-medium text-slate-300">
+                {[userData.organizationName, userData.position || userData.role].filter(Boolean).join(" — ") || "Campus Member"}
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
               </p>
+              {(userData.program || userData.yearLevel) ? (
+                <p className="text-xs text-slate-400">
+                  {[userData.program, userData.yearLevel].filter(Boolean).join(" · ")}
+                </p>
+              ) : null}
 
               {/* Status & Birthdate Badges */}
               <div className="pt-2 flex flex-wrap items-center gap-2.5">
@@ -383,10 +471,19 @@ export default function DashboardProfilePage() {
                   {userData.status || "Status not set"}
                 </span>
 
+<<<<<<< HEAD
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-300 border border-slate-700/60">
                   <span>🎂</span>
                   {userData.birthdate ? formatBirthdate(userData.birthdate) : "Birthdate not provided"}
                 </span>
+=======
+                {userData.birthdate ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-300 border border-slate-700/60">
+                    <span>🎂</span>
+                    {userData.birthdate}
+                  </span>
+                ) : null}
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
               </div>
             </div>
           </div>
@@ -437,7 +534,11 @@ export default function DashboardProfilePage() {
                     YEAR LEVEL
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
+<<<<<<< HEAD
                     {userData.yearLevel || "Not provided"}
+=======
+                    {userData.yearLevel || "Not set"}
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
                   </span>
                 </div>
 
@@ -446,6 +547,7 @@ export default function DashboardProfilePage() {
                     PROGRAM
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
+<<<<<<< HEAD
                     {userData.program || "Not provided"}
                   </span>
                 </div>
@@ -456,6 +558,9 @@ export default function DashboardProfilePage() {
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
                     {userData.birthdate ? formatBirthdate(userData.birthdate) : "Not provided"}
+=======
+                    {userData.program || "Not set"}
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
                   </span>
                 </div>
 
@@ -464,7 +569,7 @@ export default function DashboardProfilePage() {
                     ROLE
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
-                    {userData.position || userData.role}
+                    {userData.position || userData.role || "Member"}
                   </span>
                 </div>
 
@@ -473,10 +578,25 @@ export default function DashboardProfilePage() {
                     ORGANIZATION
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
+<<<<<<< HEAD
                     {[userData.organizationName, userData.position || userData.role].filter(Boolean).join(" — ") || "Not provided"}
                   </span>
                 </div>
 
+=======
+                    {userData.organizationName || "Campus Organization"} — {userData.position || userData.role || "Member"}
+                  </span>
+                </div>
+
+                <div className="pt-3">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    BIRTHDATE
+                  </span>
+                  <span className="mt-0.5 block font-medium text-slate-700">
+                    {userData.birthdate || "Not set"}
+                  </span>
+                </div>
+>>>>>>> cce3f316da681442902354778c5cf21d4e7e616c
               </div>
             </div>
 
