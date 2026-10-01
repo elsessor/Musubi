@@ -15,6 +15,7 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useLogout } from "@/hooks/useLogout";
 import { getMyProfile, updateMyProfile } from "@/services/auth.service";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
+import { SkillsPicker } from "@/components/ui/SkillsPicker";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event, Task } from "@/components/events/types";
 import { getDashboardNavItems } from "@/utils/routes";
@@ -33,6 +34,39 @@ type UserProfileData = {
   skills: string[];
   status: string;
 };
+
+function asDateInputValue(value: string): string {
+  const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = isoDate ? new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3])) : new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getLatestAllowedBirthdate(): string {
+  const latest = new Date();
+  latest.setFullYear(latest.getFullYear() - 17);
+  return asDateInputValue(`${latest.getFullYear()}-${String(latest.getMonth() + 1).padStart(2, "0")}-${String(latest.getDate()).padStart(2, "0")}`);
+}
+
+function isAtLeastSeventeen(birthdate: string): boolean {
+  const value = asDateInputValue(birthdate);
+  if (!value) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  if (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day)) age -= 1;
+  return age >= 17;
+}
+
+function formatBirthdate(value: string): string {
+  const inputValue = asDateInputValue(value);
+  if (!inputValue) return value;
+  const [year, month, day] = inputValue.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
 
 export default function DashboardProfilePage() {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
@@ -68,7 +102,6 @@ export default function DashboardProfilePage() {
   const [editProgram, setEditProgram] = useState("");
   const [editBirthdate, setEditBirthdate] = useState("");
   const [editSkills, setEditSkills] = useState<string[]>([]);
-  const [newSkillInput, setNewSkillInput] = useState("");
 
   // Load the signed-in user's saved profile from the authenticated profile endpoint.
   useEffect(() => {
@@ -181,9 +214,8 @@ export default function DashboardProfilePage() {
     setEditPosition(userData.position);
     setEditYearLevel(userData.yearLevel);
     setEditProgram(userData.program);
-    setEditBirthdate(userData.birthdate);
+    setEditBirthdate(asDateInputValue(userData.birthdate));
     setEditSkills([...userData.skills]);
-    setNewSkillInput("");
     setProfileSaveError("");
     setIsEditModalOpen(true);
   };
@@ -192,8 +224,13 @@ export default function DashboardProfilePage() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firebaseUser?.uid) return;
-    setIsSaving(true);
     setProfileSaveError("");
+    const birthdateToSave = editBirthdate || userData.birthdate;
+    if (birthdateToSave && !isAtLeastSeventeen(birthdateToSave)) {
+      setProfileSaveError("You must be at least 17 years old to save your birthdate.");
+      return;
+    }
+    setIsSaving(true);
 
     try {
       const updatedData = {
@@ -201,7 +238,7 @@ export default function DashboardProfilePage() {
         position: editPosition.trim() || userData.position,
         yearLevel: editYearLevel.trim() || userData.yearLevel,
         program: editProgram.trim() || userData.program,
-        birthdate: editBirthdate.trim() || userData.birthdate,
+        birthdate: birthdateToSave,
         skills: editSkills
       };
 
@@ -231,18 +268,6 @@ export default function DashboardProfilePage() {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const handleAddSkill = () => {
-    const trimmed = newSkillInput.trim();
-    if (trimmed && !editSkills.includes(trimmed)) {
-      setEditSkills([...editSkills, trimmed]);
-      setNewSkillInput("");
-    }
-  };
-
-  const handleRemoveSkill = (skillToRemove: string) => {
-    setEditSkills(editSkills.filter((s) => s !== skillToRemove));
   };
 
   const initials = userData.fullName.trim().charAt(0).toUpperCase();
@@ -353,7 +378,7 @@ export default function DashboardProfilePage() {
 
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-300 border border-slate-700/60">
                   <span>🎂</span>
-                  {userData.birthdate || "Birthdate not provided"}
+                  {userData.birthdate ? formatBirthdate(userData.birthdate) : "Birthdate not provided"}
                 </span>
               </div>
             </div>
@@ -423,7 +448,7 @@ export default function DashboardProfilePage() {
                     BIRTHDATE
                   </span>
                   <span className="mt-0.5 block font-medium text-slate-700">
-                    {userData.birthdate || "Not provided"}
+                    {userData.birthdate ? formatBirthdate(userData.birthdate) : "Not provided"}
                   </span>
                 </div>
 
@@ -724,60 +749,20 @@ export default function DashboardProfilePage() {
                   Birthdate
                 </label>
                 <input
-                  type="text"
+                  type="date"
                   value={editBirthdate}
-                  onChange={(event) => setEditBirthdate(event.target.value)}
-                  placeholder="Enter your birthdate"
+                  max={getLatestAllowedBirthdate()}
+                  onChange={(event) => {
+                    setEditBirthdate(event.target.value);
+                    setProfileSaveError("");
+                  }}
                   className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
                 />
+                <p className="mt-1.5 text-xs text-slate-500">You must be at least 17 years old.</p>
               </div>
 
               {/* Skill Keywords */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                  Skills & Competencies
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {editSkills.map((sk) => (
-                    <span
-                      key={sk}
-                      className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 border border-blue-200/60"
-                    >
-                      {sk}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSkill(sk)}
-                        className="hover:text-rose-600"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newSkillInput}
-                    onChange={(e) => setNewSkillInput(e.target.value)}
-                    placeholder="Add skill..."
-                    className="flex-1 rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddSkill();
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddSkill}
-                    className="rounded-2xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
+              <SkillsPicker selectedSkills={editSkills} onChange={setEditSkills} />
 
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
                 <button

@@ -9,130 +9,16 @@ import { Input } from "@/components/ui/Input";
 import { completeOnboarding, getOrganizationDirectory, joinOrganization, type OrganizationDirectoryOption } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
+import { PROGRAM_OPTIONS, SKILL_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
 
 type Role = "leader" | "member";
 type Stage = "role" | "leader-check" | "organization" | "details" | "pending";
 
-const skills = [
-  // Media, Design & Creative Writing
-  "Editing & Proofreading",
-  "Photography",
-  "Photo Editing",
-  "Video Editing",
-  "Videography",
-  "Graphic Design",
-  "UI/UX Design",
-  "Content Creation",
-  "Copywriting",
-  "Journalism & Reporting",
-  "Broadcasting",
-  "Publication & Layout Design",
-  "Scriptwriting",
-  "Illustration & Digital Art",
-  "Brand Identity Design",
-  "Social Media Management",
-
-  // Finance, Accounting & Business
-  "Finance",
-  "Financial Reporting",
-  "Budgeting",
-  "Auditing",
-  "Accounting",
-  "Bookkeeping",
-  "Sponsorship & Fundraising",
-  "Market Research",
-  "Business Planning",
-  "Risk Management",
-  "Project Management",
-  "Strategic Planning",
-  "Leadership",
-  "Team Building",
-
-  // Tech, Computing & Data
-  "Web Development",
-  "Mobile App Development",
-  "Software Engineering",
-  "Data Analysis & Visualization",
-  "Database Management",
-  "Cybersecurity & IT Support",
-  "Artificial Intelligence & ML",
-  "Systems Analysis",
-
-  // Engineering, Sciences & Math
-  "CAD & Technical Drawing",
-  "Circuit & Hardware Design",
-  "Statistical Analysis",
-  "Scientific Research",
-  "Laboratory Techniques",
-  "Environmental & Safety Management",
-
-  // Events, Operations & Hospitality
-  "Event Planning",
-  "Logistics & Supply Chain",
-  "Venue & Stage Operations",
-  "Audio/Visual Operations",
-  "Catering & Hospitality",
-  "Registration & Check-in",
-  "Protocol & Security",
-
-  // Legal, Governance, HR & Communication
-  "Parliamentary Procedure",
-  "Legal Research & Drafting",
-  "Policy Making",
-  "Conflict Resolution",
-  "HR & Membership",
-  "Communication",
-  "Public Speaking",
-  "Public Relations",
-  "Community Outreach",
-  "Documentation & Record Keeping",
-
-  // Education & Training
-  "Academic Tutoring & Mentorship",
-  "Curriculum & Module Design",
-  "Educational Technology"
-];
-const years = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
+const skills = SKILL_OPTIONS;
+const years = YEAR_LEVEL_OPTIONS;
 const leaderPositionOptions = ["President", "Vice President", "Secretary", "Treasurer", "Finance Officer", "Auditor", "Public Relations Officer", "Committee Chair", "Project Coordinator", "Team Lead"];
 const memberPositionOptions = ["Organization Member", "Committee Member", "Project Member", "Volunteer", "Staff", "Associate", "Sub-committee Member"];
-const programOptions = [
-  "Bachelor of Science in Accountancy",
-  "Bachelor of Science in Accounting Information Management",
-  "Bachelor of Science in Biology",
-  "Bachelor of Science in Banking and Finance",
-  "Bachelor of Science in Civil Engineering",
-  "Bachelor of Science in Business Management Honors Program",
-  "Bachelor of Science in Computer Engineering",
-  "Bachelor of Science in Financial Management and Accounting",
-  "Bachelor of Science in Computer Science",
-  "Bachelor of Science in Legal Management",
-  "Bachelor of Science in Development Communication",
-  "Bachelor of Science in Management",
-  "Bachelor of Science in Electronics Engineering",
-  "Bachelor of Science in Marketing Management",
-  "Bachelor of Science in Entrepreneurship",
-  "Bachelor of Science in Specialized Track on Tourism",
-  "Bachelor of Science in Information Systems",
-  "Bachelor of Science in Information Technology",
-  "Bachelor of Science in Mathematics",
-  "Bachelor of Science in Nursing",
-  "Bachelor of Science in Psychology",
-  "Bachelor of Science in Tourism Management",
-  "Bachelor of Arts in Communication",
-  "Bachelor of Arts in Economics",
-  "Bachelor of Arts in English Language Studies",
-  "Bachelor of Arts in Literature",
-  "Bachelor of Arts in Philosophy",
-  "Bachelor of Arts in Political Science",
-  "Bachelor of Early Childhood Education",
-  "Bachelor of Elementary Education",
-  "Bachelor of Library Information Science",
-  "Bachelor of Secondary Education",
-  "Bachelor of Special Needs Education",
-  "Bachelor of Engineering Technology – Computer Engineering Technology",
-  "Bachelor of Physical Education",
-  "Bachelor of Religious and Values Education"
-];
+const programOptions = PROGRAM_OPTIONS;
 
 const DEFAULT_DIRECTORY_ORGANIZATIONS: OrganizationDirectoryOption[] = [
   {

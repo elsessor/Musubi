@@ -225,10 +225,26 @@ export async function updateCurrentUserProfile(uid: string, input: {
   const birthdate = input.birthdate.trim();
   const skills = input.skills.map((skill) => skill.trim()).filter(Boolean);
 
+  const birthdateParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthdate);
+  let isAtLeastSeventeen = !birthdate;
+  if (birthdateParts) {
+    const [, yearText, monthText, dayText] = birthdateParts;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    const validCalendarDate = parsed.getUTCFullYear() === year && parsed.getUTCMonth() + 1 === month && parsed.getUTCDate() === day;
+    const today = new Date();
+    let age = today.getUTCFullYear() - year;
+    if (today.getUTCMonth() + 1 < month || (today.getUTCMonth() + 1 === month && today.getUTCDate() < day)) age -= 1;
+    isAtLeastSeventeen = validCalendarDate && age >= 17;
+  }
+
   if (!fullName || fullName.length > 120) throw new AppError("Enter a valid full name.", 400);
   if (!position || position.length > 100) throw new AppError("Enter a valid position.", 400);
   if (!yearLevel || yearLevel.length > 40) throw new AppError("Choose a valid year level.", 400);
   if (!program || program.length > 200) throw new AppError("Enter a valid program.", 400);
+  if (!isAtLeastSeventeen) throw new AppError("You must be at least 17 years old to save your birthdate.", 400);
   if (birthdate.length > 80) throw new AppError("Enter a valid birthdate.", 400);
   if (skills.length > 50 || skills.some((skill) => skill.length > 100)) throw new AppError("Review the skills and try again.", 400);
 

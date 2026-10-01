@@ -38,3 +38,26 @@ export const PROGRAM_OPTIONS = [
   "Bachelor of Physical Education",
   "Bachelor of Religious and Values Education"
 ];
+
+export const SKILL_OPTIONS = [
+  "Editing & Proofreading", "Photography", "Photo Editing", "Video Editing", "Videography",
+  "Graphic Design", "UI/UX Design", "Content Creation", "Copywriting", "Journalism & Reporting",
+  "Broadcasting", "Publication & Layout Design", "Scriptwriting", "Illustration & Digital Art",
+  "Brand Identity Design", "Social Media Management", "Finance", "Financial Reporting", "Budgeting",
+  "Auditing", "Accounting", "Bookkeeping", "Sponsorship & Fundraising", "Market Research",
+  "Business Planning", "Risk Management", "Project Management", "Strategic Planning", "Leadership",
+  "Team Building", "Web Development", "Mobile App Development", "Software Engineering",
+  "Data Analysis & Visualization", "Database Management", "Cybersecurity & IT Support",
+  "Artificial Intelligence & ML", "Systems Analysis", "CAD & Technical Drawing", "Circuit & Hardware Design",
+  "Statistical Analysis", "Scientific Research", "Laboratory Techniques", "Environmental & Safety Management",
+  "Event Planning", "Logistics & Supply Chain", "Venue & Stage Operations", "Audio/Visual Operations",
+  "Catering & Hospitality", "Registration & Check-in", "Protocol & Security", "Parliamentary Procedure",
+  "Legal Research & Drafting", "Policy Making", "Conflict Resolution", "HR & Membership", "Communication",
+  "Public Speaking", "Public Relations", "Community Outreach", "Documentation & Record Keeping",
+  "Academic Tutoring & Mentorship", "Curriculum & Module Design", "Educational Technology"
+];
+
+export const POPULAR_SKILLS = [
+  "Editing & Proofreading", "Photography", "Video Editing", "Graphic Design", "Finance",
+  "Auditing", "Event Planning", "Social Media Management", "Project Management", "Public Speaking"
+];
