@@ -2,6 +2,7 @@
 
 import { Calendar, CheckCircle, ChevronDown, ChevronUp, Clock, ShieldAlert, Sparkles, AlertTriangle, Bell, User, Check } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
+import { OverdueBadge } from "./overdue";
 import { useState } from "react";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
@@ -169,6 +170,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                     <span className="flex items-center gap-1">
                       <Calendar size={12} className="text-slate-400" />
                       Due {task.dueDate}
+                      <OverdueBadge task={task} />
                     </span>
                   </div>
                 </div>

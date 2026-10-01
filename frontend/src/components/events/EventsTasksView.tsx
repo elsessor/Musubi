@@ -8,6 +8,7 @@ import { EventsDashboard } from "./EventsDashboard";
 import { KanbanBoard } from "./KanbanBoard";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import type { Event, Task } from "./types";
+import { isStartAfterEnd } from "./dateValidation";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
@@ -38,6 +39,7 @@ export function EventsTasksView() {
   const [endDate, setEndDate] = useState("");
   const [committee, setCommittee] = useState("");
   const [creating, setCreating] = useState(false);
+  const [dateError, setDateError] = useState("");
 
   useEffect(() => {
     if (profile?.organizationId) {
@@ -171,6 +173,11 @@ export function EventsTasksView() {
   async function handleCreateEventSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+    if (isStartAfterEnd(startDate, endDate)) {
+      setDateError("Start date cannot be later than the event end date.");
+      return;
+    }
+    setDateError("");
     setCreating(true);
 
     const startFormatted = startDate
@@ -326,7 +333,7 @@ export function EventsTasksView() {
                   </label>
                   <MiniCalendarPicker
                     value={startDate}
-                    onChange={setStartDate}
+                    onChange={(value) => { setStartDate(value); setDateError(""); }}
                     minDate={new Date()}
                     placeholder="Select start date & time"
                     includeTime={true}
@@ -338,13 +345,14 @@ export function EventsTasksView() {
                   </label>
                   <MiniCalendarPicker
                     value={endDate}
-                    onChange={setEndDate}
-                    minDate={new Date()}
+                    onChange={(value) => { setEndDate(value); setDateError(""); }}
+                    minDate={startDate ? new Date(startDate) : new Date()}
                     placeholder="Select end date & time"
                     includeTime={true}
                   />
                 </div>
               </div>
+              {dateError ? <p className="text-xs font-semibold text-rose-600">{dateError}</p> : null}
 
               {/* BUTTONS */}
               <div className="grid grid-cols-2 gap-3 pt-2">

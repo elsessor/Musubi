@@ -2,6 +2,7 @@
 
 import { Calendar, CheckCircle2, ShieldAlert, Sparkles, AlertTriangle, ChevronDown, Check } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
+import { OverdueBadge } from "./overdue";
 import { useState } from "react";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
@@ -228,6 +229,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                     >
                       {displayInitials}
                     </span>
+                    <OverdueBadge task={task} />
                     <span className="text-xs font-medium text-slate-600 truncate max-w-[100px]">
                       {displayAssigneeName}
                     </span>

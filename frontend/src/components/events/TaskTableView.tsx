@@ -5,6 +5,7 @@ import type { Task, TaskPriority, TaskStatus } from "./types";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { OverdueBadge } from "./overdue";
 
 const priorityConfig: Record<TaskPriority, { label: string; classes: string; dot: string }> = {
   Low: { label: "Low", classes: "bg-slate-100 text-slate-600 ring-slate-200", dot: "bg-slate-400" },
@@ -270,6 +271,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
                     <div className="flex items-center gap-1.5">
                       <Calendar size={12} className="text-slate-400" />
                       {task.dueDate}
+                      <OverdueBadge task={task} />
                     </div>
                   </td>
 

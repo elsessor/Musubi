@@ -3,6 +3,7 @@
 import { AlertTriangle, Calendar, ChevronDown, Lock, UserCheck, Zap } from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority } from "./types";
+import { OverdueBadge } from "./overdue";
 
 const priorityConfig: Record<TaskPriority, { label: string; classes: string; dot: string }> = {
   Low:      { label: "Low",      classes: "bg-slate-100 text-slate-600 ring-slate-200 hover:bg-slate-200", dot: "bg-slate-400" },
@@ -57,6 +58,7 @@ export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdate
             {task.committee}
           </span>
         )}
+        <OverdueBadge task={task} />
       </div>
 
       {/* Title & Description */}

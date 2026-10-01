@@ -37,6 +37,9 @@ export type Task = {
   assignedMemberUID?: string | null;
   assignedMemberName?: string | null;
   deadline?: string;
+  originalStartDate?: string;
+  originalDueDate?: string;
+  dueDateHistory?: Array<{ from: string; to: string; changedAt: string; changedBy?: string }>;
   matchPercentage?: number;
   committee?: string;
   nudges?: Nudge[];

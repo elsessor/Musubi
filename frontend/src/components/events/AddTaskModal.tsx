@@ -4,6 +4,7 @@ import { Plus, Shield, X } from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
+import { isStartAfterEnd } from "./dateValidation";
 import type { CustomStatusConfig } from "./statusUtils";
 import type { OrganizationMember } from "@/services/auth.service";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
@@ -89,6 +90,7 @@ export function AddTaskModal({
   const [committee, setCommittee] = useState(committees[0]?.name || "");
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [dateError, setDateError] = useState("");
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
 
   const defaultStatuses: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
@@ -116,6 +118,12 @@ export function AddTaskModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+
+    if (isStartAfterEnd(startDate, dueDate)) {
+      setDateError("Start date cannot be later than the target date.");
+      return;
+    }
+    setDateError("");
 
     const selectedMember = activeRoster.find((m) => m.id === assigneeId) || activeRoster[0];
 
@@ -248,7 +256,7 @@ export function AddTaskModal({
               </label>
               <MiniCalendarPicker
                 value={startDate}
-                onChange={setStartDate}
+                onChange={(value) => { setStartDate(value); setDateError(""); }}
                 minDate={new Date()}
                 placeholder="Select start date & time"
                 includeTime={true}
@@ -260,13 +268,14 @@ export function AddTaskModal({
               </label>
               <MiniCalendarPicker
                 value={dueDate}
-                onChange={setDueDate}
-                minDate={new Date()}
+                onChange={(value) => { setDueDate(value); setDateError(""); }}
+                minDate={startDate ? new Date(startDate) : new Date()}
                 placeholder="Select due date & time"
                 includeTime={true}
               />
             </div>
           </div>
+          {dateError ? <p className="text-xs font-semibold text-rose-600">{dateError}</p> : null}
 
           {/* Leader Only Restriction */}
           <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">

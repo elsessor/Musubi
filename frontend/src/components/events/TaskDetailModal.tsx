@@ -17,6 +17,7 @@ import type { Task, TaskPriority, TaskStatus } from "./types";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { MOCK_ROSTER, type OrgMemberItem } from "./AddTaskModal";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
+import { isStartAfterEnd } from "./dateValidation";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
@@ -56,6 +57,7 @@ export function TaskDetailModal({
   const [committee, setCommittee] = useState<string>(task.committee || committees[0]?.name || "");
   const [startDate, setStartDate] = useState<string>(task.startDate || "");
   const [dueDate, setDueDate] = useState<string>(task.dueDate || "");
+  const [dateError, setDateError] = useState("");
   const [isLeaderOnly, setIsLeaderOnly] = useState<boolean>(Boolean(task.isLeaderOnly));
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -97,7 +99,15 @@ export function TaskDetailModal({
     e.preventDefault();
     if (!title.trim()) return;
 
+    if (isStartAfterEnd(startDate, dueDate)) {
+      setDateError("Start date cannot be later than the target date.");
+      return;
+    }
+    setDateError("");
+
     const selectedMember = activeRoster.find((m) => m.id === selectedMemberId) || activeRoster[0] || MOCK_ROSTER[0];
+    const nextDueDate = dueDate.trim();
+    const dueDateChanged = nextDueDate !== (task.dueDate || "");
 
     const updated: Task = {
       ...task,
@@ -112,7 +122,12 @@ export function TaskDetailModal({
           : task.priorityChangeRequest,
       committee,
       startDate: startDate.trim(),
-      dueDate: dueDate.trim(),
+      dueDate: nextDueDate,
+      originalStartDate: task.originalStartDate ?? task.startDate,
+      originalDueDate: task.originalDueDate ?? task.dueDate,
+      dueDateHistory: dueDateChanged
+        ? [...(task.dueDateHistory ?? []), { from: task.dueDate || "", to: nextDueDate, changedAt: new Date().toISOString() }]
+        : task.dueDateHistory,
       isLeaderOnly,
       assignee: {
         initials: selectedMember.initials,
@@ -242,7 +257,7 @@ export function TaskDetailModal({
               </label>
               <MiniCalendarPicker
                 value={startDate}
-                onChange={setStartDate}
+                onChange={(value) => { setStartDate(value); setDateError(""); }}
                 minDate={new Date()}
                 placeholder="Select start date & time"
                 includeTime={true}
@@ -254,13 +269,14 @@ export function TaskDetailModal({
               </label>
               <MiniCalendarPicker
                 value={dueDate}
-                onChange={setDueDate}
-                minDate={new Date()}
+                onChange={(value) => { setDueDate(value); setDateError(""); }}
+                minDate={startDate ? new Date(startDate) : new Date()}
                 placeholder="Select due date & time"
                 includeTime={true}
               />
             </div>
           </div> : null}
+          {dateError ? <p className="text-xs font-semibold text-rose-600">{dateError}</p> : null}
 
           {/* LEADER ONLY RESTRICTION */}
           {isLeader ? <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">
