@@ -31,6 +31,8 @@ type TaskDetailModalProps = {
   customStatuses?: CustomStatusConfig[];
   committees?: { id: string; name: string }[];
   roster?: OrgMemberItem[];
+  isLeader?: boolean;
+  canEdit?: boolean;
 };
 
 export function TaskDetailModal({
@@ -40,7 +42,9 @@ export function TaskDetailModal({
   onDeleteTask,
   customStatuses = [],
   committees = [],
-  roster = MOCK_ROSTER
+  roster = MOCK_ROSTER,
+  isLeader = true,
+  canEdit = true
 }: TaskDetailModalProps) {
   const activeRoster = Array.isArray(roster) && roster.length > 0 ? roster : MOCK_ROSTER;
 
@@ -48,6 +52,7 @@ export function TaskDetailModal({
   const [description, setDescription] = useState(task.description || "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [priority, setPriority] = useState<TaskPriority>(task.priority || "Medium");
+  const [requestedPriority, setRequestedPriority] = useState<TaskPriority | "">(task.priorityChangeRequest?.requestedPriority || "");
   const [committee, setCommittee] = useState<string>(task.committee || committees[0]?.name || "");
   const [startDate, setStartDate] = useState<string>(task.startDate || "");
   const [dueDate, setDueDate] = useState<string>(task.dueDate || "");
@@ -99,7 +104,12 @@ export function TaskDetailModal({
       title: title.trim(),
       description: description.trim(),
       status,
-      priority,
+      priority: isLeader ? priority : task.priority,
+      priorityChangeRequest: isLeader
+        ? task.priorityChangeRequest
+        : requestedPriority && requestedPriority !== task.priority
+          ? { requestedPriority }
+          : task.priorityChangeRequest,
       committee,
       startDate: startDate.trim(),
       dueDate: dueDate.trim(),
@@ -148,6 +158,7 @@ export function TaskDetailModal({
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              readOnly={!canEdit}
               placeholder="e.g. Secure Event Permits & Clearances"
               className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
             />
@@ -162,6 +173,7 @@ export function TaskDetailModal({
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              readOnly={!canEdit}
               placeholder="Specify requirements or instructions..."
               className="w-full resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2 text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none"
             />
@@ -176,22 +188,25 @@ export function TaskDetailModal({
                 onChange={(value) => setStatus(value as TaskStatus)}
                 options={statusOptions}
                 buttonClassName="py-2 text-xs"
+                disabled={!canEdit}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Priority</label>
-              <CustomSelect
-                value={priority}
-                onChange={(value) => setPriority(value as TaskPriority)}
-                options={priorityOptions}
-                buttonClassName="py-2 text-xs"
-              />
+              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">{isLeader ? "Priority" : "Request priority change"}</label>
+              {isLeader ? (
+                <CustomSelect value={priority} onChange={(value) => setPriority(value as TaskPriority)} options={priorityOptions} buttonClassName="py-2 text-xs" disabled={!canEdit} />
+              ) : (
+                <>
+                  <CustomSelect value={requestedPriority || task.priority || "Medium"} onChange={(value) => setRequestedPriority(value as TaskPriority)} options={priorityOptions} buttonClassName="py-2 text-xs" disabled={!canEdit || Boolean(task.priorityChangeRequest)} />
+                  {task.priorityChangeRequest ? <p className="mt-1 text-[10px] font-medium text-amber-700">A request for {task.priorityChangeRequest.requestedPriority} priority is awaiting leader review.</p> : <p className="mt-1 text-[10px] text-slate-500">A leader must approve this change.</p>}
+                </>
+              )}
             </div>
           </div>
 
           {/* ASSIGNEE & COMMITTEE */}
-          <div className="grid grid-cols-2 gap-3">
+          {isLeader ? <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
               <CustomSelect
@@ -217,10 +232,10 @@ export function TaskDetailModal({
                 ))}
               </select>
             </div>
-          </div>
+          </div> : null}
 
           {/* START DATE & DUE/END DATE WITH TIME */}
-          <div className="grid grid-cols-2 gap-3">
+          {isLeader ? <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                 Start Date &amp; Time
@@ -245,10 +260,10 @@ export function TaskDetailModal({
                 includeTime={true}
               />
             </div>
-          </div>
+          </div> : null}
 
           {/* LEADER ONLY RESTRICTION */}
-          <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">
+          {isLeader ? <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">
             <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -259,7 +274,7 @@ export function TaskDetailModal({
               <Shield size={14} className="text-amber-600" />
               Restricted to Leader Only Access
             </label>
-          </div>
+          </div> : null}
 
           {/* ADDITIONAL METADATA BADGES */}
           {(typeof task.matchPercentage === "number" || (task.blockedBy && task.blockedBy > 0) || task.isAiGenerated) && (
@@ -286,7 +301,7 @@ export function TaskDetailModal({
           )}
 
           {/* ACTION BUTTONS */}
-          <div className={`grid gap-3 border-t border-slate-100 pt-3 ${onDeleteTask ? "grid-cols-3" : "grid-cols-2"}`}>
+          <div className={`grid gap-3 border-t border-slate-100 pt-3 ${isLeader && onDeleteTask ? "grid-cols-3" : "grid-cols-2"}`}>
             <button
               type="button"
               onClick={onClose}
@@ -294,7 +309,7 @@ export function TaskDetailModal({
             >
               Cancel
             </button>
-            {onDeleteTask && (
+            {isLeader && onDeleteTask && (
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
@@ -305,15 +320,24 @@ export function TaskDetailModal({
                 <Trash2 size={15} />
               </button>
             )}
-            <button
+            {canEdit ? <button
               type="submit"
               className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md"
             >
               Save Changes
-            </button>
+            </button> : null}
           </div>
         </form>
       </div>
+      {isLeader && task.priorityChangeRequest ? (
+        <div className="fixed bottom-4 left-1/2 z-[60] w-[min(92vw,28rem)] -translate-x-1/2 rounded-2xl border border-amber-200 bg-amber-50 p-3 shadow-xl">
+          <p className="text-xs font-semibold text-amber-900">Priority change requested: {task.priority} → {task.priorityChangeRequest.requestedPriority}</p>
+          <div className="mt-2 flex justify-end gap-2">
+            <button type="button" onClick={() => onUpdateTask({ ...task, priorityChangeRequest: null })} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">Decline</button>
+            <button type="button" onClick={() => onUpdateTask({ ...task, priority: task.priorityChangeRequest!.requestedPriority, priorityChangeRequest: null })} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">Approve</button>
+          </div>
+        </div>
+      ) : null}
       {confirmDelete && onDeleteTask && (
         <ConfirmDeleteModal
           itemType="subtask"

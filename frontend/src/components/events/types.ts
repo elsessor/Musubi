@@ -40,6 +40,11 @@ export type Task = {
   matchPercentage?: number;
   committee?: string;
   nudges?: Nudge[];
+  priorityChangeRequest?: {
+    requestedPriority: TaskPriority;
+    requestedByUID?: string;
+    requestedAt?: string;
+  } | null;
 };
 
 export type Event = {

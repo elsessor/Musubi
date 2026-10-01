@@ -73,6 +73,7 @@ export function KanbanBoard({
   isLeader = true
 }: KanbanBoardProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const profile = useAuthStore((state) => state.profile);
   const showToast = useToastStore((state) => state.showToast);
   const [currentEvent, setCurrentEvent] = useState<Event>(event);
   const [tasks, setTasks] = useState<Task[]>(event.tasks || []);
@@ -104,6 +105,14 @@ export function KanbanBoard({
   const [dragOverStatusPill, setDragOverStatusPill] = useState<string | null>(null);
 
   const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_STATUSES);
+
+  function canEditTask(task: Task) {
+    if (isLeader) return true;
+    if (!profile?.uid) return false;
+    if (task.assignedMemberUID) return task.assignedMemberUID === profile.uid;
+    const assigneeName = task.assignedMemberName || task.assignee?.name || "";
+    return assigneeName.trim().toLowerCase() === profile.fullName.trim().toLowerCase();
+  }
 
   // Sync state if event prop changes
   useEffect(() => {
@@ -264,16 +273,16 @@ export function KanbanBoard({
     if (onUpdateEvent) {
       onUpdateEvent(updated);
     }
-    void updateEventFirestore(firebaseUser, event.id, {
-      status: finalStatus,
-      progress: finalProgress,
-      tasks: updatedTasks
-    }).catch((error) => {
+    const update = isLeader
+      ? { status: finalStatus, progress: finalProgress, tasks: updatedTasks }
+      : { tasks: updatedTasks };
+    void updateEventFirestore(firebaseUser, event.id, update).catch((error) => {
       console.error("Failed to update event:", error);
     });
   }
 
   async function handleAddTask(newTask: Task) {
+    if (!isLeader) return;
     const updatedTasks = [newTask, ...tasks];
     const completedTasks = updatedTasks.filter((task) => task.status === "Completed").length;
     const updatedProgress = updatedTasks.length ? Math.round((completedTasks / updatedTasks.length) * 100) : currentEvent.progress;
@@ -292,6 +301,7 @@ export function KanbanBoard({
   }
 
   function handleReassignConfirm(taskId: string, newAssignee: OrgMemberItem) {
+    if (!isLeader) return;
     const updatedTasks = tasks.map((t) =>
       t.id === taskId
         ? {
@@ -309,6 +319,7 @@ export function KanbanBoard({
   }
 
   function handleEventStatusChange(targetStatus: EventStatus) {
+    if (!isLeader) return;
     const isCompleted = targetStatus === "Completed";
     const updatedTasks = isCompleted
       ? tasks.map((t) => ({ ...t, status: "Completed" as TaskStatus }))
@@ -318,22 +329,36 @@ export function KanbanBoard({
   }
 
   function handleUpdateTaskStatus(taskId: string, targetStatus: TaskStatus) {
+    const target = tasks.find((task) => task.id === taskId);
+    if (!target || !canEditTask(target)) return;
     const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: targetStatus } : t));
     syncEvent(updatedTasks);
   }
 
   function handleUpdateTaskPriority(taskId: string, newPriority: TaskPriority) {
-    const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, priority: newPriority } : t));
+    const target = tasks.find((task) => task.id === taskId);
+    if (!target || !canEditTask(target)) return;
+    if (!isLeader && target.priorityChangeRequest) {
+      showToast({ title: "Priority request pending", description: "A leader needs to review the current priority request first.", tone: "info" });
+      return;
+    }
+    const updatedTasks = tasks.map((task) => task.id === taskId
+      ? isLeader ? { ...task, priority: newPriority, priorityChangeRequest: null } : { ...task, priorityChangeRequest: { requestedPriority: newPriority } }
+      : task);
     syncEvent(updatedTasks);
+    if (!isLeader) showToast({ title: "Priority change requested", description: "A leader will review your request.", tone: "success" });
   }
 
   function handleUpdateTask(updatedTask: Task) {
+    const original = tasks.find((task) => task.id === updatedTask.id);
+    if (!original || !canEditTask(original)) return;
     const updatedTasks = tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
     syncEvent(updatedTasks);
     setSelectedDetailTask(null);
   }
 
   function handleDeleteTask(taskId: string) {
+    if (!isLeader) return;
     const updatedTasks = tasks.filter((task) => task.id !== taskId);
     const updatedProgress = updatedTasks.length
       ? Math.round((updatedTasks.filter((task) => task.status === "Completed").length / updatedTasks.length) * 100)
@@ -343,6 +368,7 @@ export function KanbanBoard({
   }
 
   async function handleSaveEventDetails() {
+    if (!isLeader) return;
     const title = eventTitleDraft.trim();
     if (!title) {
       setEventDetailsError("Event title is required.");
@@ -370,6 +396,11 @@ export function KanbanBoard({
 
   function handleDrop(targetStatus: TaskStatus) {
     if (!draggedId) return;
+    const draggedTask = tasks.find((task) => task.id === draggedId);
+    if (!draggedTask || !canEditTask(draggedTask)) {
+      setDraggedId(null);
+      return;
+    }
     handleUpdateTaskStatus(draggedId, targetStatus);
     setDraggedId(null);
   }
@@ -432,7 +463,7 @@ export function KanbanBoard({
               <Trash2 size={14} /> Delete Event
             </button>
           )}
-          {currentEvent.status !== "Completed" && (
+          {isLeader && currentEvent.status !== "Completed" && (
             <button
               type="button"
               onClick={() => setStatusModalTarget("Completed")}
@@ -443,7 +474,7 @@ export function KanbanBoard({
             </button>
           )}
 
-          {currentEvent.status !== "Cancelled" && (
+          {isLeader && currentEvent.status !== "Cancelled" && (
             <button
               type="button"
               onClick={() => setStatusModalTarget("Cancelled")}
@@ -454,7 +485,7 @@ export function KanbanBoard({
             </button>
           )}
 
-          {(currentEvent.status === "Completed" || currentEvent.status === "Cancelled") && (
+          {isLeader && (currentEvent.status === "Completed" || currentEvent.status === "Cancelled") && (
             <button
               type="button"
               onClick={() => handleEventStatusChange("Active")}
@@ -706,14 +737,14 @@ export function KanbanBoard({
             ))}
           </div>
 
-          <button
+          {isLeader ? <button
             type="button"
             onClick={() => setShowAddTaskModal(true)}
             className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
           >
             <Plus size={14} />
             Add Task
-          </button>
+          </button> : null}
         </div>
       </div>
 
@@ -723,7 +754,7 @@ export function KanbanBoard({
           <TaskGridView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
-            onUpdatePriority={handleUpdateTaskPriority}
+            onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
           />
@@ -733,7 +764,7 @@ export function KanbanBoard({
           <TaskTableView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
-            onUpdatePriority={handleUpdateTaskPriority}
+            onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
           />
@@ -743,7 +774,7 @@ export function KanbanBoard({
           <TaskExpandedView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
-            onUpdatePriority={handleUpdateTaskPriority}
+            onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
           />
@@ -756,10 +787,10 @@ export function KanbanBoard({
                 key={status}
                 status={status}
                 tasks={getColumnTasks(status)}
-                onAddTask={() => setShowAddTaskModal(true)}
+                onAddTask={() => { if (isLeader) setShowAddTaskModal(true); }}
                 onDragStart={(id) => setDraggedId(id)}
                 onDrop={handleDrop}
-                onReassignTask={(t) => setReassignTaskTarget(t)}
+                onReassignTask={(t) => { if (isLeader) setReassignTaskTarget(t); }}
                 onSelectTask={(task) => setSelectedDetailTask(task)}
                 onUpdatePriority={handleUpdateTaskPriority}
                 customStatuses={customStatuses}
@@ -801,7 +832,7 @@ export function KanbanBoard({
             onUpdateStatus={handleUpdateTaskStatus}
             onUpdatePriority={handleUpdateTaskPriority}
             onSelectTask={(task) => setSelectedDetailTask(task)}
-            onAddTask={() => setShowAddTaskModal(true)}
+            onAddTask={isLeader ? () => setShowAddTaskModal(true) : undefined}
             customStatuses={customStatuses}
           />
         )}
@@ -822,11 +853,13 @@ export function KanbanBoard({
           customStatuses={customStatuses}
           committees={committees}
           roster={realRoster}
+          isLeader={isLeader}
+          canEdit={canEditTask(selectedDetailTask)}
         />
       )}
 
       {/* Add Task Modal */}
-      {showAddTaskModal && (
+      {isLeader && showAddTaskModal && (
         <AddTaskModal
           eventName={currentEvent.title}
           members={members}

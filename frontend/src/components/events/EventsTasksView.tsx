@@ -240,6 +240,7 @@ export function EventsTasksView() {
             onDeleteEvent={handleDeleteSelectedEvent}
             members={members}
             committees={committees}
+            isLeader={isLeader}
           />
         ) : (
           <EventsDashboard

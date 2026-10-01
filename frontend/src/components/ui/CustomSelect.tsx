@@ -22,6 +22,7 @@ export type CustomSelectProps = {
   placeholder?: string;
   buttonClassName?: string;
   dropdownClassName?: string;
+  disabled?: boolean;
 };
 
 export function CustomSelect({
@@ -30,7 +31,8 @@ export function CustomSelect({
   options,
   placeholder = "Select an option",
   buttonClassName = "",
-  dropdownClassName = ""
+  dropdownClassName = "",
+  disabled = false
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,12 +53,14 @@ export function CustomSelect({
     <div ref={containerRef} className="relative w-full">
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => { if (!disabled) setIsOpen(!isOpen); }}
+        disabled={disabled}
         className={cn(
           "flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-50 focus:bg-white focus:border-blue-500 focus:outline-none shadow-2xs select-none cursor-pointer",
           buttonClassName,
           selectedOption?.selectedClass,
-          isOpen && "border-blue-500 bg-white ring-2 ring-blue-100"
+          isOpen && "border-blue-500 bg-white ring-2 ring-blue-100",
+          disabled && "cursor-not-allowed opacity-60"
         )}
       >
         <div className="flex items-center gap-2 truncate text-left">
