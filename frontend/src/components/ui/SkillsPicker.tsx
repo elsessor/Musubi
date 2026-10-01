@@ -8,6 +8,7 @@ export function SkillsPicker({ selectedSkills, onChange }: { selectedSkills: str
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const filteredSkills = useMemo(() => {
     const search = query.trim().toLowerCase();
     return search ? SKILL_OPTIONS.filter((skill) => skill.toLowerCase().includes(search)) : SKILL_OPTIONS;
@@ -22,10 +23,14 @@ export function SkillsPicker({ selectedSkills, onChange }: { selectedSkills: str
   }, []);
 
   const containsSkill = (skill: string) => selectedSkills.some((selected) => selected.toLowerCase() === skill.toLowerCase());
-  const toggleSkill = (skill: string) => {
+  const selectSkill = (skill: string) => {
     onChange(containsSkill(skill)
       ? selectedSkills.filter((selected) => selected.toLowerCase() !== skill.toLowerCase())
       : [...selectedSkills, skill]);
+    setQuery("");
+  };
+  const toggleSkill = (skill: string) => {
+    selectSkill(skill);
   };
   const addCustomSkill = () => {
     const skill = query.trim();
@@ -61,7 +66,7 @@ export function SkillsPicker({ selectedSkills, onChange }: { selectedSkills: str
       </div>
 
       <div ref={containerRef} className="relative">
-        <div className={`flex min-h-11 flex-wrap items-center gap-1.5 rounded-xl border bg-white p-2 ${isOpen ? "border-[#244775] ring-2 ring-[#244775]/15" : "border-slate-200"}`} onClick={() => setIsOpen(true)}>
+        <div className={`flex min-h-11 flex-wrap items-center gap-1.5 rounded-xl border bg-white p-2 ${isOpen ? "border-[#244775] ring-2 ring-[#244775]/15" : "border-slate-200"}`} onClick={() => { setIsOpen(true); inputRef.current?.focus(); }}>
           <Search className="ml-1 size-4 shrink-0 text-slate-400" />
           {selectedSkills.map((skill) => (
             <span key={skill} className="inline-flex items-center gap-1 rounded-lg bg-[#e8edf5] px-2.5 py-1 text-xs font-bold text-[#193960]">
@@ -72,10 +77,15 @@ export function SkillsPicker({ selectedSkills, onChange }: { selectedSkills: str
             </span>
           ))}
           <input
+            ref={inputRef}
             value={query}
             onFocus={() => setIsOpen(true)}
             onChange={(event) => { setQuery(event.target.value); setIsOpen(true); }}
             onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setIsOpen(false);
+                return;
+              }
               if (event.key !== "Enter") return;
               event.preventDefault();
               const exact = SKILL_OPTIONS.find((skill) => skill.toLowerCase() === query.trim().toLowerCase());
@@ -92,7 +102,7 @@ export function SkillsPicker({ selectedSkills, onChange }: { selectedSkills: str
         </div>
 
         {isOpen ? (
-          <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg">
+          <div className="mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg">
             {query.trim() && !SKILL_OPTIONS.some((skill) => skill.toLowerCase() === query.trim().toLowerCase()) && !containsSkill(query.trim()) ? (
               <button type="button" onMouseDown={(event) => { event.preventDefault(); addCustomSkill(); }} className="flex w-full items-center justify-between border-b border-slate-100 px-3.5 py-2.5 text-left text-[13px] font-medium text-[#244775] hover:bg-[#edf3fc]">
                 <span>Add custom skill: “{query.trim()}”</span><span className="rounded bg-[#244775] px-2 py-0.5 text-[11px] font-bold text-white">+ Add</span>
@@ -101,7 +111,7 @@ export function SkillsPicker({ selectedSkills, onChange }: { selectedSkills: str
             {filteredSkills.map((skill) => {
               const active = containsSkill(skill);
               return (
-                <button key={skill} type="button" onMouseDown={(event) => { event.preventDefault(); toggleSkill(skill); }} className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-[13px] ${active ? "bg-[#edf3fc] font-semibold text-[#1d3b63]" : "text-slate-700 hover:bg-[#f3f6fa]"}`}>
+                <button key={skill} type="button" onMouseDown={(event) => { event.preventDefault(); selectSkill(skill); }} className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-[13px] ${active ? "bg-[#edf3fc] font-semibold text-[#1d3b63]" : "text-slate-700 hover:bg-[#f3f6fa]"}`}>
                   <span>{skill}</span>{active ? <Check className="size-3.5 text-[#244775]" /> : null}
                 </button>
               );

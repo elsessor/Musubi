@@ -29,6 +29,7 @@ import {
   organizationJoinRequestsController,
   organizationManagementDetailController,
   organizationMembersController,
+  removeOrganizationMemberController,
   organizationRequestsController,
   organizationsController,
   reassignMemberController,
@@ -37,6 +38,7 @@ import {
   updateAdminMemberController,
   updateEventController,
   updateMeController,
+  updateOrganizationCommitteeController,
   updateMemberRoleController,
   updateOrganizationController
 } from "../controllers/auth.controller.js";
@@ -77,8 +79,10 @@ authRouter.get("/audit-logs", auditLogsController);
 authRouter.get("/audit-logs/stream", auditLogsStreamController);
 
 authRouter.get("/organizations/:organizationId/members", organizationMembersController);
+authRouter.delete("/organizations/:organizationId/members/:memberId", removeOrganizationMemberController);
 authRouter.get("/organizations/:organizationId/committees", organizationCommitteesController);
 authRouter.post("/organizations/:organizationId/committees", createOrganizationCommitteeController);
+authRouter.patch("/organizations/:organizationId/committees/:committeeId", updateOrganizationCommitteeController);
 authRouter.post("/organizations/:organizationId/committees/:committeeId/members", addOrganizationCommitteeMembersController);
 authRouter.get("/organizations/:organizationId/join-requests", organizationJoinRequestsController);
 authRouter.patch("/organizations/:organizationId/join-requests/:requestId", reviewOrganizationJoinRequestController);

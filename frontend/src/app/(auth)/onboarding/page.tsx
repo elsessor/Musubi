@@ -6,9 +6,9 @@ import { Check, ChevronDown, ChevronRight, Search, X, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { SuccessDialog } from "@/components/ui/SuccessDialog";
 import { completeOnboarding, getOrganizationDirectory, joinOrganization, type OrganizationDirectoryOption } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
-import { useToastStore } from "@/store/toastStore";
 import { PROGRAM_OPTIONS, SKILL_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
 
 type Role = "leader" | "member";
@@ -72,8 +72,8 @@ export default function OnboardingPage() {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const profile = useAuthStore((state) => state.profile);
   const setProfile = useAuthStore((state) => state.setProfile);
-  const showToast = useToastStore((state) => state.showToast);
   const [stage, setStage] = useState<Stage>("role");
+  const [onboardingSuccess, setOnboardingSuccess] = useState<{ title: string; description: string; actionLabel: string; destination: "pending" | "dashboard" } | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [orgPath, setOrgPath] = useState<"find" | "create">("find");
   const [orgSearch, setOrgSearch] = useState("");
@@ -222,20 +222,22 @@ export default function OnboardingPage() {
       }
 
       setProfile(session.user);
-      showToast({
-        title: "Profile saved",
-        description: isNewOrganization
-          ? "Your organization request was submitted for review."
-          : selectedOrganization
-          ? "Your join request was submitted for leader approval."
-          : "Your onboarding is complete.",
-        tone: "success"
-      });
-
       if (isNewOrganization || selectedOrganization) {
-        setStage("pending");
+        setOnboardingSuccess({
+          title: "Request submitted",
+          description: isNewOrganization
+            ? "Your organization registration is awaiting administrator review."
+            : "Your request to join is awaiting leader approval.",
+          actionLabel: "View request status",
+          destination: "pending"
+        });
       } else {
-        router.replace("/dashboard");
+        setOnboardingSuccess({
+          title: "Onboarding complete",
+          description: "Your profile is ready. Continue to your dashboard to get started.",
+          actionLabel: "Go to dashboard",
+          destination: "dashboard"
+        });
       }
     } catch (completionError) {
       setError(completionError instanceof Error ? completionError.message : "Unable to save your onboarding details.");
@@ -246,6 +248,13 @@ export default function OnboardingPage() {
 
   function finishOnboarding() {
     router.replace("/dashboard");
+  }
+
+  function continueAfterOnboarding() {
+    const destination = onboardingSuccess?.destination;
+    setOnboardingSuccess(null);
+    if (destination === "pending") setStage("pending");
+    else if (destination === "dashboard") router.replace("/dashboard");
   }
 
   const isNewOrganization = role === "leader" && orgPath === "create";
@@ -337,6 +346,14 @@ export default function OnboardingPage() {
         </section>
         {stage !== "pending" && <p className="mt-4 text-center text-xs font-medium text-slate-400">You can update these details anytime from your profile settings.</p>}
       </div>
+      {onboardingSuccess ? (
+        <SuccessDialog
+          title={onboardingSuccess.title}
+          description={onboardingSuccess.description}
+          actionLabel={onboardingSuccess.actionLabel}
+          onAction={continueAfterOnboarding}
+        />
+      ) : null}
     </main>
   );
 }

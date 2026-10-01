@@ -12,6 +12,7 @@ import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/Button";
 import { Divider } from "@/components/ui/Divider";
 import { Input } from "@/components/ui/Input";
+import { SuccessDialog } from "@/components/ui/SuccessDialog";
 import { registerWithEmail, signInWithGoogle } from "@/firebase/auth";
 import { exchangeFirebaseSession } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
@@ -25,6 +26,7 @@ export function RegisterForm() {
   const authStore = useAuthStore();
   const showToast = useToastStore((state) => state.showToast);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [successRoute, setSuccessRoute] = useState<string | null>(null);
 
   const {
     formState: { errors, isSubmitting },
@@ -48,13 +50,7 @@ export function RegisterForm() {
     authStore.setFirebaseUser(user);
     authStore.setProfile(session.user);
 
-    showToast({
-      title: "Account created",
-      description: "Your workspace is ready.",
-      tone: "success"
-    });
-
-    router.push(getPostAuthenticationRoute(session.user));
+    setSuccessRoute(getPostAuthenticationRoute(session.user));
   }
 
   async function completeEmailRegistration(user: Awaited<ReturnType<typeof registerWithEmail>>) {
@@ -62,13 +58,7 @@ export function RegisterForm() {
     authStore.setFirebaseUser(user);
     authStore.setProfile(session.user);
 
-    showToast({
-      title: "Account created",
-      description: "Your account has been created successfully. Let's set up your profile.",
-      tone: "success"
-    });
-
-    router.push(getPostAuthenticationRoute(session.user));
+    setSuccessRoute(getPostAuthenticationRoute(session.user));
   }
 
   async function onSubmit(values: RegisterFormValues) {
@@ -117,6 +107,7 @@ export function RegisterForm() {
   const isBusy = isSubmitting || googleLoading;
 
   return (
+    <>
     <AuthCard>
       <div className="mb-8">
         <h2 className="text-3xl font-extrabold text-slate-950">Create an account</h2>
@@ -214,5 +205,14 @@ export function RegisterForm() {
         </Link>
       </p>
     </AuthCard>
+    {successRoute ? (
+      <SuccessDialog
+        title="Account created"
+        description="Your account is ready. Continue to set up your profile and workspace."
+        actionLabel="Continue"
+        onAction={() => router.push(successRoute)}
+      />
+    ) : null}
+    </>
   );
 }

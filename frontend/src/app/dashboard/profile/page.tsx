@@ -20,6 +20,7 @@ import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event, Task } from "@/components/events/types";
 import { getDashboardNavItems } from "@/utils/routes";
 import { PROGRAM_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
+import { useToastStore } from "@/store/toastStore";
 
 type UserProfileData = {
   fullName: string;
@@ -72,6 +73,7 @@ export default function DashboardProfilePage() {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const profile = useAuthStore((state) => state.profile);
   const setProfile = useAuthStore((state) => state.setProfile);
+  const showToast = useToastStore((state) => state.showToast);
   const logout = useLogout();
 
   const [userData, setUserData] = useState<UserProfileData>({
@@ -253,6 +255,11 @@ export default function DashboardProfilePage() {
       setUserData((prev) => ({ ...prev, ...updatedData }));
 
       setProfile(updatedProfile);
+      showToast({
+        title: "Profile updated",
+        description: "Your profile changes have been saved.",
+        tone: "success"
+      });
 
       setIsEditModalOpen(false);
     } catch (err) {
@@ -664,10 +671,10 @@ export default function DashboardProfilePage() {
 
       {/* Edit Profile Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-2 backdrop-blur-xs sm:p-4">
+          <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                   <User size={18} />
                 </div>
@@ -682,8 +689,9 @@ export default function DashboardProfilePage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveProfile} className="mt-5 space-y-4">
-              {profileSaveError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{profileSaveError}</p> : null}
+            <form onSubmit={handleSaveProfile} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+                {profileSaveError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{profileSaveError}</p> : null}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
@@ -698,7 +706,7 @@ export default function DashboardProfilePage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                     Position / Role
@@ -715,19 +723,14 @@ export default function DashboardProfilePage() {
                   <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                     Year Level
                   </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {YEAR_LEVEL_OPTIONS.map((yearLevel) => (
-                      <button
-                        key={yearLevel}
-                        type="button"
-                        aria-pressed={editYearLevel === yearLevel}
-                        onClick={() => setEditYearLevel(yearLevel)}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${editYearLevel === yearLevel ? "border-[#244775] bg-[#244775] text-white" : "border-slate-200 bg-white text-slate-600 hover:border-blue-300"}`}
-                      >
-                        {yearLevel}
-                      </button>
-                    ))}
-                  </div>
+                  <select
+                    value={editYearLevel}
+                    onChange={(event) => setEditYearLevel(event.target.value)}
+                    className="h-10 w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
+                  >
+                    <option value="" disabled>Choose year level</option>
+                    {YEAR_LEVEL_OPTIONS.map((yearLevel) => <option key={yearLevel} value={yearLevel}>{yearLevel}</option>)}
+                  </select>
                 </div>
               </div>
 
@@ -764,7 +767,9 @@ export default function DashboardProfilePage() {
               {/* Skill Keywords */}
               <SkillsPicker selectedSkills={editSkills} onChange={setEditSkills} />
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+              </div>
+
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:gap-3 sm:px-6 sm:py-4">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}

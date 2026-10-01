@@ -14,6 +14,7 @@ import {
   Pencil,
   Save,
   Search,
+  UserRoundX,
   UsersRound
 } from "lucide-react";
 
@@ -22,6 +23,8 @@ import { useLogout } from "@/hooks/useLogout";
 import { OrganizationAccessModal } from "@/components/dashboard/OrganizationAccessModal";
 import { CreateCommitteeModal } from "@/components/dashboard/CreateCommitteeModal";
 import { MemberProfileModal } from "@/components/dashboard/MemberProfileModal";
+import { ConfirmRemoveCommitteeMemberModal } from "@/components/dashboard/ConfirmRemoveCommitteeMemberModal";
+import { OrganizationSettingsModal, type OrganizationSettings } from "@/components/dashboard/OrganizationSettingsModal";
 import {
   createOrganizationCommittee,
   getOrganizationCommittees,
@@ -29,6 +32,7 @@ import {
   getOrganization,
   getOrganizationJoinRequests,
   getOrganizationMembers,
+  removeOrganizationMember,
   reviewOrganizationJoinRequest,
   subscribeOrganizationMembersFirestore,
   updateOrganizationDetails,
@@ -41,6 +45,7 @@ import {
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { AnnouncementsView, PostAnnouncementModal } from "@/components/dashboard/AnnouncementsView";
 import {
@@ -141,6 +146,7 @@ export default function OrganizationPage() {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const authLoading = useAuthStore((state) => state.loading);
   const setProfile = useAuthStore((state) => state.setProfile);
+  const showToast = useToastStore((state) => state.showToast);
   const logout = useLogout();
   const [organization, setOrganization] = useState<OrganizationRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -155,6 +161,8 @@ export default function OrganizationPage() {
   const [accessModalOpen, setAccessModalOpen] = useState(false);
   const [committeeModalOpen, setCommitteeModalOpen] = useState(false);
   const [profileMember, setProfileMember] = useState<MemberRow | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<MemberRow | null>(null);
+  const [isRemovingMember, setIsRemovingMember] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isPostAnnouncementOpen, setIsPostAnnouncementOpen] = useState(false);
@@ -166,6 +174,12 @@ export default function OrganizationPage() {
     });
     return () => unsubscribe();
   }, [profile?.organizationId, profile?.role]);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "committees") {
+      setActiveTab("committees");
+    }
+  }, []);
 
   async function handlePostAnnouncement(data: {
     title: string;
@@ -190,8 +204,19 @@ export default function OrganizationPage() {
           return (b.timestamp || 0) - (a.timestamp || 0);
         });
       });
+      showToast({
+        title: "Announcement posted",
+        description: "Your announcement is now available to its selected audience.",
+        tone: "success"
+      });
     } catch (err) {
       console.warn("[OrganizationPage] Error creating announcement:", err);
+      showToast({
+        title: "Announcement not posted",
+        description: "We couldn’t post your announcement. Please try again.",
+        tone: "error"
+      });
+      throw err;
     }
   }
 
@@ -218,9 +243,7 @@ export default function OrganizationPage() {
   useEffect(() => {
     if (!profile?.organizationId) return;
     const unsubscribe = subscribeOrganizationMembersFirestore(profile.organizationId, (realtimeMembers) => {
-      if (realtimeMembers && realtimeMembers.length > 0) {
-        setMembers(realtimeMembers);
-      }
+      setMembers(realtimeMembers);
     });
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
@@ -266,7 +289,38 @@ export default function OrganizationPage() {
     const result = await createOrganizationCommittee(firebaseUser, profile.organizationId, input);
     setCommittees((current) => [...current, result.committee]);
     setMembers((current) => current.map((member) => input.memberIds.includes(member.id) ? { ...member, committeeId: result.committee.id, committeeName: result.committee.name } : member));
+    showToast({
+      title: "Committee created",
+      description: `${result.committee.name} is ready to manage.`,
+      tone: "success"
+    });
     setCommitteeModalOpen(false);
+  }
+
+  async function removeMemberFromOrganization() {
+    if (!firebaseUser || !profile?.organizationId || !memberToRemove) return;
+    setIsRemovingMember(true);
+    try {
+      await removeOrganizationMember(firebaseUser, profile.organizationId, memberToRemove.id);
+      setMembers((current) => current.filter((member) => member.id !== memberToRemove.id));
+      setCommittees((current) => current.map((committee) => committee.headMemberUID === memberToRemove.id ? { ...committee, headMemberUID: null, headMemberId: null } : committee));
+      setProfileMember((current) => current?.id === memberToRemove.id ? null : current);
+      showToast({ title: "Member removed", description: `${memberToRemove.name} was removed from the organization.`, tone: "success" });
+      setMemberToRemove(null);
+    } catch (cause) {
+      showToast({ title: "Unable to remove member", description: cause instanceof Error ? cause.message : "Please try again.", tone: "error" });
+    } finally {
+      setIsRemovingMember(false);
+    }
+  }
+
+  async function saveOrganizationSettings(settings: OrganizationSettings) {
+    if (!firebaseUser || !profile?.organizationId || profile.role !== "Student Leader") {
+      throw new Error("Only this organization's student leader can change these settings.");
+    }
+    const updated = await updateOrganizationDetails(firebaseUser, profile.organizationId, { organizationConfig: settings });
+    setOrganization(updated);
+    showToast({ title: "Organization settings saved", description: "Task assignment and monitoring settings were updated.", tone: "success" });
   }
 
   const memberRows = useMemo<MemberRow[]>(
@@ -352,7 +406,9 @@ export default function OrganizationPage() {
             memberCount={members.length}
             events={events}
             firebaseUser={firebaseUser}
+            isLeader={profile.role === "Student Leader"}
             onUpdate={setOrganization}
+            onSaveSettings={saveOrganizationSettings}
             onNavigateMembers={() => setActiveTab("members")}
           />
         ) : activeTab === "members" ? (
@@ -367,6 +423,7 @@ export default function OrganizationPage() {
             onViewProfile={setProfileMember}
             currentUserId={profile.uid}
             currentUserName={profile.fullName}
+            onRemoveMember={setMemberToRemove}
           />
         ) : activeTab === "committees" ? (
           <Committees
@@ -408,6 +465,7 @@ export default function OrganizationPage() {
         />
       ) : null}
       {profileMember ? <MemberProfileModal member={profileMember} onClose={() => setProfileMember(null)} /> : null}
+      {memberToRemove ? <ConfirmRemoveCommitteeMemberModal memberName={memberToRemove.name} committeeName="" organizationRemoval isRemoving={isRemovingMember} onCancel={() => setMemberToRemove(null)} onConfirm={() => void removeMemberFromOrganization()} /> : null}
       <PostAnnouncementModal
         isOpen={isPostAnnouncementOpen}
         onClose={() => setIsPostAnnouncementOpen(false)}
@@ -427,7 +485,9 @@ function Overview({
   memberCount,
   events,
   firebaseUser,
+  isLeader,
   onUpdate,
+  onSaveSettings,
   onNavigateMembers
 }: {
   organization: OrganizationRecord;
@@ -435,12 +495,20 @@ function Overview({
   memberCount: number;
   events: Event[];
   firebaseUser: import("firebase/auth").User | null;
+  isLeader: boolean;
   onUpdate: (updated: OrganizationRecord) => void;
+  onSaveSettings: (settings: OrganizationSettings) => Promise<void>;
   onNavigateMembers: () => void;
 }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const doneGoalsCount = useMemo(() => events.filter((e) => e.status === "Completed").length, [events]);
   const activeGoalsCount = useMemo(() => events.filter((e) => e.status === "Active").length, [events]);
   const pendingGoalsCount = useMemo(() => events.filter((e) => e.status !== "Completed" && e.status !== "Active").length, [events]);
+  const organizationSettings: OrganizationSettings = {
+    delegationMode: organization.organizationConfig.delegationMode === "Manual" ? "Manual" : "Heuristic",
+    aiTaskAtomization: organization.organizationConfig.aiTaskAtomization !== false,
+    nudgeMonitoring: organization.organizationConfig.nudgeMonitoring !== false
+  };
 
   return (
     <div className="mt-5 space-y-4">
@@ -463,19 +531,15 @@ function Overview({
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 divide-x divide-y divide-[#dce3ed] lg:grid-cols-4 lg:divide-y-0">
+        <div className={`grid grid-cols-2 divide-x divide-y divide-[#dce3ed] ${isLeader ? "lg:grid-cols-4 lg:divide-y-0" : "lg:grid-cols-2 lg:divide-y-0"}`}>
           <Stat value={String(memberCount)} label="Total Members" color="text-[#2868ed]" />
           <Stat value={String(activeGoalsCount)} label="Active Goals" color="text-[#7c3aed]" />
-          <Stat
-            value={typeof organization.organizationConfig.delegationMode === "string" ? organization.organizationConfig.delegationMode : "Heuristic"}
-            label="Delegation"
-            color="text-amber-500"
-          />
-          <Stat
-            value={typeof organization.organizationConfig.nudgeMonitoring === "boolean" ? (organization.organizationConfig.nudgeMonitoring ? "On" : "Off") : "On"}
-            label="Nudges"
-            color="text-emerald-500"
-          />
+          {isLeader ? (
+            <>
+              <Stat value={organizationSettings.delegationMode} label="Delegation" color="text-amber-500" />
+              <Stat value={organizationSettings.nudgeMonitoring ? "On" : "Off"} label="Nudges" color="text-emerald-500" />
+            </>
+          ) : null}
         </div>
       </article>
 
@@ -484,22 +548,19 @@ function Overview({
 
         <div className="space-y-4">
           <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white">
-            <CardTitle title="Orchestration Config" />
-            <ConfigRow
-              label="Delegation Mode"
-              value={typeof organization.organizationConfig.delegationMode === "string" ? organization.organizationConfig.delegationMode : "Heuristic"}
-              tone="purple"
-            />
-            <ConfigRow
-              label="AI Task Atomization"
-              value={organization.organizationConfig.aiTaskAtomization !== false ? "Enabled" : "Not configured"}
-              tone="green"
-            />
-            <ConfigRow
-              label="Nudge Monitoring"
-              value={organization.organizationConfig.nudgeMonitoring !== false ? "Enabled" : "Not configured"}
-              tone="green"
-            />
+            {isLeader ? (
+              <>
+                <CardTitle title="Organization Settings" action="Edit" onActionClick={() => setSettingsOpen(true)} />
+                <ConfigRow label="Delegation Mode" value={organizationSettings.delegationMode} tone="purple" />
+                <ConfigRow label="AI Task Assistance" value={organizationSettings.aiTaskAtomization ? "Enabled" : "Disabled"} tone={organizationSettings.aiTaskAtomization ? "green" : "gray"} />
+                <ConfigRow label="Nudge Monitoring" value={organizationSettings.nudgeMonitoring ? "Enabled" : "Disabled"} tone={organizationSettings.nudgeMonitoring ? "green" : "gray"} />
+              </>
+            ) : (
+              <>
+                <CardTitle title="AI Task Assistance" />
+                <ConfigRow label="AI assistance for task suggestions" value={organizationSettings.aiTaskAtomization ? "Enabled" : "Disabled"} tone={organizationSettings.aiTaskAtomization ? "green" : "gray"} />
+              </>
+            )}
           </article>
 
           <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white">
@@ -569,6 +630,13 @@ function Overview({
           </div>
         )}
       </article>
+      {isLeader && settingsOpen ? (
+        <OrganizationSettingsModal
+          initialSettings={organizationSettings}
+          onClose={() => setSettingsOpen(false)}
+          onSave={onSaveSettings}
+        />
+      ) : null}
     </div>
   );
 }
@@ -771,17 +839,69 @@ function MemberPreviewRow({ initials, name, role, status, isYou }: { initials: s
   );
 }
 
-function Members({ search, members: visibleMembers, onSearch, joinRequests, isLeader, reviewingRequestId, onReview, onViewProfile, currentUserId, currentUserName }: { search: string; members: MemberRow[]; onSearch: (value: string) => void; joinRequests: OrganizationJoinRequest[]; isLeader: boolean; reviewingRequestId: string; onReview: (id: string, status: "accepted" | "rejected") => void; onViewProfile: (member: MemberRow) => void; currentUserId?: string; currentUserName?: string }) {
-  return <div className="mt-6">{isLeader && joinRequests.length > 0 && <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 className="text-sm font-bold text-amber-950">Pending join requests ({joinRequests.length})</h3><div className="mt-3 space-y-3">{joinRequests.map((request) => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"><div><p className="text-sm font-bold text-slate-900">{request.name}</p><p className="text-xs text-slate-500">{request.position} · {request.email}</p></div><div className="flex gap-2"><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "rejected")} className="h-8 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600">Decline</button><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "accepted")} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">Accept</button></div></div>)}</div></div>}<div className="flex items-center justify-between gap-4"><h2 className="text-[21px] font-bold">Member Management</h2></div><label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3"><Search className="size-4 text-slate-500" /><input className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} /></label><div className="mt-5 overflow-x-auto rounded-2xl border border-[#dce3ed] bg-white"><table className="min-w-[1180px] w-full border-collapse text-left"><thead className="bg-[#e8eef7] text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold">Member Name</th><th className="px-3 py-3 font-semibold">Role</th><th className="px-3 py-3 font-semibold">Committee</th><th className="px-3 py-3 font-semibold">Skills</th><th className="px-3 py-3 font-semibold">Workload</th><th className="px-3 py-3 font-semibold">Reliability</th><th className="px-3 py-3 font-semibold">Availability</th><th className="px-4 py-3" /></tr></thead><tbody>{visibleMembers.map((member) => { const isYou = Boolean((currentUserId && member.id === currentUserId) || (currentUserName && member.name.trim().toLowerCase() === currentUserName.trim().toLowerCase())); return <tr className={`border-t border-[#dfe5ee] text-[13px] transition ${isYou ? "bg-blue-50/70 hover:bg-blue-50/90 font-medium" : "hover:bg-slate-50/60"}`} key={member.id || member.name}><td className="px-4 py-3"><div className="flex items-center gap-3"><Avatar initials={member.initials} isYou={isYou} /><span className={isYou ? "font-extrabold text-[#1d4ed8]" : "font-medium text-slate-900"}>{member.name}</span>{isYou ? <span className="rounded-full bg-[#2563eb] px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">You</span> : null}</div></td><td className="px-3 py-3 text-slate-500">{member.role}</td><td className="px-3 py-3"><span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] text-violet-700">{member.committee}</span></td><td className="px-3 py-3"><div className="flex max-w-[410px] flex-wrap gap-1">{member.skills.slice(0, 4).map((skill) => <span className="rounded bg-[#e8eef7] px-2 py-0.5 text-[11px] text-[#214574]" key={skill}>{skill}</span>)}{member.skills.length > 4 ? <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">+{member.skills.length - 4}</span> : null}</div></td><td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded bg-slate-100"><div className={`h-full rounded ${member.workload >= 80 ? "bg-rose-500" : member.workload >= 60 ? "bg-amber-400" : "bg-emerald-500"}`} style={{ width: `${member.workload}%` }} /></div><span className="text-[11px] text-slate-500">{member.workload}%</span></div></td><td className="px-3 py-3 text-[11px] font-semibold">{member.reliability}</td><td className="px-3 py-3"><Availability value={member.availability} /></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => onViewProfile(member)} className="text-[12px] font-medium text-[#2868ed] hover:text-blue-700">View Profile</button></td></tr>; })}</tbody></table>{visibleMembers.length === 0 && <p className="p-8 text-center text-sm text-slate-500">No members match your search.</p>}</div></div>;
+function Members({ search, members: visibleMembers, onSearch, joinRequests, isLeader, reviewingRequestId, onReview, onViewProfile, onRemoveMember, currentUserId, currentUserName }: { search: string; members: MemberRow[]; onSearch: (value: string) => void; joinRequests: OrganizationJoinRequest[]; isLeader: boolean; reviewingRequestId: string; onReview: (id: string, status: "accepted" | "rejected") => void; onViewProfile: (member: MemberRow) => void; onRemoveMember: (member: MemberRow) => void; currentUserId?: string; currentUserName?: string }) {
+  return <div className="mt-6">{isLeader && joinRequests.length > 0 && <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 className="text-sm font-bold text-amber-950">Pending join requests ({joinRequests.length})</h3><div className="mt-3 space-y-3">{joinRequests.map((request) => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"><div><p className="text-sm font-bold text-slate-900">{request.name}</p><p className="text-xs text-slate-500">{request.position} · {request.email}</p></div><div className="flex gap-2"><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "rejected")} className="h-8 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600">Decline</button><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "accepted")} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">Accept</button></div></div>)}</div></div>}<div className="flex items-center justify-between gap-4"><h2 className="text-[21px] font-bold">Member Management</h2></div><label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3"><Search className="size-4 text-slate-500" /><input className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} /></label><div className="mt-5 overflow-x-auto rounded-2xl border border-[#dce3ed] bg-white"><table className="min-w-[1180px] w-full border-collapse text-left"><thead className="bg-[#e8eef7] text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold">Member Name</th><th className="px-3 py-3 font-semibold">Role</th><th className="px-3 py-3 font-semibold">Committee</th><th className="px-3 py-3 font-semibold">Skills</th><th className="px-3 py-3 font-semibold">Workload</th><th className="px-3 py-3 font-semibold">Reliability</th><th className="px-3 py-3 font-semibold">Availability</th><th className="px-4 py-3" /></tr></thead><tbody>{visibleMembers.map((member) => { const isYou = Boolean((currentUserId && member.id === currentUserId) || (currentUserName && member.name.trim().toLowerCase() === currentUserName.trim().toLowerCase())); return <tr className={`border-t border-[#dfe5ee] text-[13px] transition ${isYou ? "bg-blue-50/70 hover:bg-blue-50/90 font-medium" : "hover:bg-slate-50/60"}`} key={member.id || member.name}><td className="px-4 py-3"><div className="flex items-center gap-3"><Avatar initials={member.initials} isYou={isYou} /><span className={isYou ? "font-extrabold text-[#1d4ed8]" : "font-medium text-slate-900"}>{member.name}</span>{isYou ? <span className="rounded-full bg-[#2563eb] px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">You</span> : null}</div></td><td className="px-3 py-3 text-slate-500">{member.role}</td><td className="px-3 py-3"><span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] text-violet-700">{member.committee}</span></td><td className="px-3 py-3"><div className="flex max-w-[410px] flex-wrap gap-1">{member.skills.slice(0, 4).map((skill) => <span className="rounded bg-[#e8eef7] px-2 py-0.5 text-[11px] text-[#214574]" key={skill}>{skill}</span>)}{member.skills.length > 4 ? <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">+{member.skills.length - 4}</span> : null}</div></td><td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded bg-slate-100"><div className={`h-full rounded ${member.workload >= 80 ? "bg-rose-500" : member.workload >= 60 ? "bg-amber-400" : "bg-emerald-500"}`} style={{ width: `${member.workload}%` }} /></div><span className="text-[11px] text-slate-500">{member.workload}%</span></div></td><td className="px-3 py-3 text-[11px] font-semibold">{member.reliability}</td><td className="px-3 py-3"><Availability value={member.availability} /></td><td className="px-4 py-3 text-right"><div className="flex items-center justify-end gap-3"><button type="button" onClick={() => onViewProfile(member)} className="text-[12px] font-medium text-[#2868ed] hover:text-blue-700">View Profile</button>{isLeader && !isYou ? <button type="button" onClick={() => onRemoveMember(member)} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-[12px] font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800"><UserRoundX className="size-3.5" />Remove</button> : null}</div></td></tr>; })}</tbody></table>{visibleMembers.length === 0 && <p className="p-8 text-center text-sm text-slate-500">No members match your search.</p>}</div></div>;
 }
-function Committees({ committees, members, canCreate, onCreate, currentUserId, currentUserName }: { committees: OrganizationCommitteeRecord[]; members: OrganizationMember[]; canCreate: boolean; onCreate: () => void; currentUserId?: string; currentUserName?: string }) { return <div className="mt-6"><div className="flex flex-wrap items-center justify-between gap-4"><p className="text-sm text-slate-500">Sub-groups within the organization. Each committee has a designated head and a set of members.</p>{canCreate ? <button type="button" onClick={onCreate} className="flex h-9 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4" />New Committee</button> : null}</div>{committees.length ? <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{committees.map((committee) => { const committeeMembers = members.filter((member) => member.committeeId === committee.id); const head = members.find((member) => member.id === committee.headMemberUID); return <a key={committee.id} href={`/dashboard/organization/committees/${committee.id}`} className="block cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"><article className="rounded-2xl border border-[#dce3ed] bg-white p-5"><div className="flex items-start justify-between gap-4"><div><h2 className="text-sm font-bold text-slate-900">{committee.name}</h2><p className="mt-1 text-xs leading-relaxed text-slate-500">{committee.description || "No description provided."}</p></div><span className="font-mono text-[10px] text-slate-500">{committee.id.slice(0, 7).toUpperCase()}</span></div><div className="my-3 border-t border-slate-100" /><p className="text-xs text-slate-700">🏆 Head: <span className="font-semibold">{head?.name || "Not assigned"}</span></p><p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Members ({committeeMembers.length})</p><div className="mt-2 flex flex-wrap gap-2">{committeeMembers.length ? committeeMembers.map((member) => { const isYou = Boolean((currentUserId && member.id === currentUserId) || (currentUserName && member.name.trim().toLowerCase() === currentUserName.trim().toLowerCase())); return <span key={member.id} className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition ${isYou ? "bg-blue-100 text-[#1d4ed8] font-bold ring-1 ring-blue-300" : "bg-[#e8eef7] text-[#213f68]"}`}><span className={`flex size-4 items-center justify-center rounded-full text-[7px] text-white ${isYou ? "bg-[#2563eb]" : "bg-[#213f68]"}`}>{member.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("")}</span>{member.name.split(" ")[0]}{isYou ? " (You)" : ""}</span>; }) : <span className="text-xs text-slate-400">No members assigned.</span>}</div></article></a>; })}</div> : <div className="mt-5 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-center"><ClipboardList className="size-7 text-slate-400" /><h2 className="mt-3 text-lg font-bold">No committees yet</h2><p className="mt-1 text-sm text-slate-500">Create a committee to organize members around a shared responsibility.</p>{canCreate ? <button onClick={onCreate} className="mt-4 rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white" type="button">Create committee</button> : null}</div>}</div>; }
+function Committees({ committees, members, canCreate, onCreate, currentUserId, currentUserName }: {
+  committees: OrganizationCommitteeRecord[];
+  members: OrganizationMember[];
+  canCreate: boolean;
+  onCreate: () => void;
+  currentUserId?: string;
+  currentUserName?: string;
+}) {
+  return (
+    <div className="mt-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <p className="text-sm text-slate-500">Sub-groups within the organization. Each committee has a designated head and a set of members.</p>
+        {canCreate ? <button type="button" onClick={onCreate} className="flex h-9 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4" />New Committee</button> : null}
+      </div>
+      {committees.length ? (
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {committees.map((committee) => <CommitteeCard key={committee.id} committee={committee} members={members} currentUserId={currentUserId} currentUserName={currentUserName} />)}
+        </div>
+      ) : (
+        <div className="mt-5 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-center">
+          <ClipboardList className="size-7 text-slate-400" />
+          <h2 className="mt-3 text-lg font-bold">No committees yet</h2>
+          <p className="mt-1 text-sm text-slate-500">Create a committee to organize members around a shared responsibility.</p>
+          {canCreate ? <button onClick={onCreate} className="mt-4 rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white" type="button">Create committee</button> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+function CommitteeCard({ committee, members, currentUserId, currentUserName }: {
+  committee: OrganizationCommitteeRecord;
+  members: OrganizationMember[];
+  currentUserId?: string;
+  currentUserName?: string;
+}) {
+  const committeeMembers = members.filter((member) => member.committeeId === committee.id);
+  const head = members.find((member) => member.id === committee.headMemberUID);
+  return (
+    <article className="rounded-2xl border border-[#dce3ed] bg-white p-5 shadow-sm">
+      <div className="min-w-0">
+        <a href={"/dashboard/organization/committees/" + committee.id} className="text-sm font-bold text-slate-900 hover:text-blue-700">{committee.name}</a>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">{committee.description || "No description provided."}</p>
+      </div>
+      <div className="my-3 border-t border-slate-100" />
+      <p className="text-xs text-slate-700">Head: <span className="font-semibold">{head?.name || "Not assigned"}</span></p>
+      <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Members ({committeeMembers.length})</p>
+      <div className="mt-2 flex flex-wrap gap-2">{committeeMembers.length ? committeeMembers.map((member) => {
+        const isYou = Boolean((currentUserId && member.id === currentUserId) || (currentUserName && member.name.trim().toLowerCase() === currentUserName.trim().toLowerCase()));
+        return <span key={member.id} className={"flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium " + (isYou ? "bg-blue-100 font-bold text-[#1d4ed8] ring-1 ring-blue-300" : "bg-[#e8eef7] text-[#213f68]")}><span className={"flex size-4 items-center justify-center rounded-full text-[7px] text-white " + (isYou ? "bg-[#2563eb]" : "bg-[#213f68]")}>{member.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("")}</span>{member.name.split(" ")[0]}{isYou ? " (You)" : ""}</span>;
+      }) : <span className="text-xs text-slate-400">No members assigned.</span>}</div>
+    </article>
+  );
+}
 function EmptyPanel({ tab }: { tab: Exclude<OrganizationTab, "overview" | "members"> }) { const label = tab === "committees" ? "Committees" : "Announcements"; const Icon = tab === "committees" ? ClipboardList : Megaphone; return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-center"><Icon className="size-7 text-slate-400" /><h2 className="mt-3 text-lg font-bold">{label}</h2><p className="mt-1 text-sm text-slate-500">{label} will appear here once they are added to your organization.</p></div>; }
 function LoadCard({ message }: { message: string }) { return <div className="mt-6 rounded-2xl border border-[#dce3ed] bg-white p-10 text-center text-sm text-slate-500">{message}</div>; }
 function PendingJoinCard({ organizationName }: { organizationName: string }) { return <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-10 text-center"><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Pending approval</span><h2 className="mt-4 text-lg font-extrabold text-slate-900">Your request to join {organizationName} is pending</h2><p className="mt-2 text-sm text-slate-600">An organization leader must accept your request before you can access this organization.</p></div>; }
 function ErrorCard({ message }: { message: string }) { return <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 p-8 text-center text-sm font-medium text-rose-700">{message}</div>; }
 function CardTitle({ title, subtitle, action, onActionClick }: { title: string; subtitle?: string; action?: string; onActionClick?: () => void }) { return <div className="flex min-h-12 items-center justify-between gap-3 px-4 py-3 border-b border-[#e5eaf1]"><div><h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</h3>{subtitle && <p className="mt-0.5 text-[10px] text-slate-500">{subtitle}</p>}</div>{action && <button onClick={onActionClick} className="text-[11px] font-medium text-[#2868ed] hover:text-blue-700 transition">{action}</button>}</div>; }
 function DetailRow({ label, value }: { label: string; value: string }) { return <div className="flex min-h-9 items-center justify-between gap-6 border-t border-[#e5eaf1] px-4 py-2.5 text-[11px]"><span className="uppercase font-semibold text-slate-500">{label}</span><span className="max-w-[65%] truncate font-medium text-slate-700">{value}</span></div>; }
-function ConfigRow({ label, value, tone }: { label: string; value: string; tone: "purple" | "green" }) { return <div className="flex items-center justify-between border-t border-[#e5eaf1] px-4 py-4 text-[12px]"><span className="font-medium text-slate-800">{label}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${tone === "purple" ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"}`}>{value}</span></div>; }
+function ConfigRow({ label, value, tone }: { label: string; value: string; tone: "purple" | "green" | "gray" }) { return <div className="flex items-center justify-between border-t border-[#e5eaf1] px-4 py-4 text-[12px]"><span className="font-medium text-slate-800">{label}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${tone === "purple" ? "bg-violet-100 text-violet-700" : tone === "green" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{value}</span></div>; }
 function Stat({ value, label, color }: { value: string; label: string; color: string }) { return <div className="py-3 text-center"><p className={`text-[15px] font-bold ${color}`}>{value}</p><p className="mt-1 text-[10px] text-slate-500">{label}</p></div>; }
 function Avatar({ initials, isYou }: { initials: string; isYou?: boolean }) { return <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${isYou ? "bg-[#2563eb] ring-2 ring-blue-300" : "bg-[#213f68]"}`}>{initials}</span>; }
 function Availability({ value }: { value: string }) { const tone = value === "Available" ? "bg-emerald-50 text-emerald-600" : value === "Busy" ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-500"; return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${tone}`}><i className="size-1 rounded-full bg-current" />{value}</span>; }

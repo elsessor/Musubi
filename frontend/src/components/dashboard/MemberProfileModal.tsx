@@ -30,6 +30,9 @@ export function MemberProfileModal({
 }) {
   const workloadColor =
     member.workload >= 80 ? "bg-rose-500" : member.workload >= 50 ? "bg-amber-400" : "bg-emerald-500";
+  const assignedTasks = member.assignedTasks ?? [];
+  const visibleTasks = assignedTasks.slice(0, 3);
+  const remainingTaskCount = Math.max(0, assignedTasks.length - visibleTasks.length);
 
   return (
     <div
@@ -127,13 +130,16 @@ export function MemberProfileModal({
           </div>
 
           {/* Member Assigned Subtasks */}
-          {member.assignedTasks && member.assignedTasks.length > 0 && (
+          {assignedTasks.length > 0 && (
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                Active Sub-tasks ({member.assignedTasks.length})
-              </p>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Active Sub-tasks ({assignedTasks.length})
+                </p>
+                {remainingTaskCount > 0 ? <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">+{remainingTaskCount} more</span> : null}
+              </div>
               <div className="space-y-2">
-                {member.assignedTasks.map((task) => (
+                {visibleTasks.map((task) => (
                   <div
                     key={task.id}
                     className="p-3 rounded-xl border border-slate-200/80 bg-white text-xs space-y-1"

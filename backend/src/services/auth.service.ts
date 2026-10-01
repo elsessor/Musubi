@@ -439,6 +439,50 @@ export async function getOrganizationMembers(uid: string, organizationId: string
   });
 }
 
+export async function removeOrganizationMember(uid: string, organizationId: string, memberId: string) {
+  const leader = await getCurrentUser(uid);
+  if (leader.role !== "Student Leader" || leader.organizationId !== organizationId) {
+    throw new AppError("Only this organization's student leader can remove members.", 403);
+  }
+  if (uid === memberId) throw new AppError("You cannot remove yourself from the organization.", 400);
+
+  const memberRef = firestore.collection("users").doc(memberId);
+  const memberSnapshot = await memberRef.get();
+  const member = memberSnapshot.data();
+  if (!memberSnapshot.exists || member?.organizationId !== organizationId) {
+    throw new AppError("This member is no longer part of the organization.", 404);
+  }
+  if (member.role === "Student Leader") {
+    throw new AppError("Organization leaders cannot be removed from the Members tab.", 400);
+  }
+
+  const organizationRef = firestore.collection("organizations").doc(organizationId);
+  const committees = await firestore.collection("committees").where("orgId", "==", organizationRef).get();
+  const batch = firestore.batch();
+  batch.update(memberRef, {
+    organizationId: null,
+    organizationName: firebaseAdmin.firestore.FieldValue.delete(),
+    committeeId: firebaseAdmin.firestore.FieldValue.delete(),
+    committeeName: firebaseAdmin.firestore.FieldValue.delete()
+  });
+  committees.docs.forEach((committee) => {
+    if (committee.data().headMemberUID === memberId) batch.update(committee.ref, { headMemberUID: null });
+  });
+  await batch.commit();
+
+  const memberName = typeof member.fullName === "string" ? member.fullName : "Organization member";
+  writeAuditLog({
+    actorUID: uid,
+    actorName: leader.fullName,
+    actorRole: leader.role,
+    action: "Member removed from organization",
+    actionCategory: "Organization",
+    targetType: "User",
+    targetName: memberName,
+    orgId: organizationId
+  });
+}
+
 export async function getOrganizationCommittees(uid: string, organizationId: string) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to these committees.", 403);
@@ -504,6 +548,77 @@ export async function addMembersToOrganizationCommittee(uid: string, organizatio
   return { memberIds: uniqueMemberIds };
 }
 
+export async function updateOrganizationCommittee(
+  uid: string,
+  organizationId: string,
+  committeeId: string,
+  input: { name: string; description: string; headMemberId: string | null; memberIds: string[] }
+) {
+  const user = await getCurrentUser(uid);
+  if (user.role !== "Student Leader" || user.organizationId !== organizationId) {
+    throw new AppError("Only this organization's student leader can manage committees.", 403);
+  }
+
+  const name = input.name.trim();
+  const description = input.description.trim();
+  if (!name || name.length > 120) throw new AppError("Enter a valid committee name.", 400);
+  if (description.length > 1000) throw new AppError("Committee descriptions must be 1,000 characters or fewer.", 400);
+
+  const organizationRef = firestore.collection("organizations").doc(organizationId);
+  const committeeRef = firestore.collection("committees").doc(committeeId);
+  const committeeSnapshot = await committeeRef.get();
+  if (!committeeSnapshot.exists || committeeSnapshot.data()?.orgId?.path !== organizationRef.path) {
+    throw new AppError("Committee was not found.", 404);
+  }
+
+  const memberIds = Array.from(new Set(input.memberIds));
+  if (input.headMemberId && !memberIds.includes(input.headMemberId)) {
+    throw new AppError("The committee head must be included in the committee.", 400);
+  }
+
+  const organizationMembers = await firestore.collection("users").where("organizationId", "==", organizationId).get();
+  const organizationCommittees = await firestore.collection("committees").where("orgId", "==", organizationRef).get();
+  const memberIdsInOrganization = new Set(organizationMembers.docs.map((document) => document.id));
+  if (memberIds.some((memberId) => !memberIdsInOrganization.has(memberId))) {
+    throw new AppError("Every committee member must belong to this organization.", 400);
+  }
+
+  const selectedMembers = new Set(memberIds);
+  const updates: Array<{ ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> }> = [
+    { ref: committeeRef, data: { name, description, headMemberUID: input.headMemberId } }
+  ];
+  for (const otherCommittee of organizationCommittees.docs) {
+    if (otherCommittee.id === committeeId) continue;
+    const otherData = otherCommittee.data();
+    const headId = typeof otherData.headMemberUID === "string" ? otherData.headMemberUID : null;
+    if (headId && selectedMembers.has(headId)) {
+      const formerHead = organizationMembers.docs.find((member) => member.id === headId);
+      if (formerHead?.data().committeeId !== committeeId) {
+        updates.push({ ref: otherCommittee.ref, data: { headMemberUID: null } });
+      }
+    }
+  }
+  for (const member of organizationMembers.docs) {
+    const data = member.data();
+    if (selectedMembers.has(member.id)) {
+      if (data.committeeId !== committeeId || data.committeeName !== name) {
+        updates.push({ ref: member.ref, data: { committeeId, committeeName: name } });
+      }
+    } else if (data.committeeId === committeeId) {
+      updates.push({ ref: member.ref, data: { committeeId: null, committeeName: null } });
+    }
+  }
+
+  for (let offset = 0; offset < updates.length; offset += 450) {
+    const batch = firestore.batch();
+    updates.slice(offset, offset + 450).forEach(({ ref, data }) => batch.set(ref, data, { merge: true }));
+    await batch.commit();
+  }
+
+  writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role, action: "Committee updated", actionCategory: "Organization", targetType: "Committee", targetName: name, orgId: organizationId });
+  return { id: committeeId, name, description, headMemberUID: input.headMemberId };
+}
+
 function normalizeOrganization(id: string, data: FirebaseFirestore.DocumentData) {
   const asIsoString = (value: unknown): string | null => value && typeof (value as { toDate?: unknown }).toDate === "function" ? ((value as { toDate: () => Date }).toDate()).toISOString() : null;
   return {
@@ -556,7 +671,7 @@ export async function getOrganizationManagementDetail(uid: string, organizationI
   return { organization: normalizeOrganization(snapshot.id, snapshot.data() ?? {}), members, committees, goalSummary };
 }
 
-export async function updateOrganizationForAdmin(uid: string, organizationId: string, input: { name?: string; type?: string; description?: string; setupStatus?: string }) {
+export async function updateOrganizationForAdmin(uid: string, organizationId: string, input: { name?: string; type?: string; description?: string; setupStatus?: string; organizationConfig?: { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } }) {
   const currentUser = await getCurrentUser(uid);
   if (currentUser.role !== "Admin" && currentUser.organizationId !== organizationId) {
     throw new AppError("Organization leader or administrator access is required.", 403);
@@ -565,6 +680,16 @@ export async function updateOrganizationForAdmin(uid: string, organizationId: st
   const before = await ref.get();
   if (!before.exists) throw new AppError("Organization was not found.", 404);
   const update: Record<string, unknown> = { updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() };
+  if (input.organizationConfig !== undefined) {
+    if (currentUser.role !== "Student Leader" || currentUser.organizationId !== organizationId) {
+      throw new AppError("Only this organization's student leader can manage organization settings.", 403);
+    }
+    const existingConfig = before.data()?.organizationConfig;
+    update.organizationConfig = {
+      ...(existingConfig && typeof existingConfig === "object" && !Array.isArray(existingConfig) ? existingConfig : {}),
+      ...input.organizationConfig
+    };
+  }
   if (input.name !== undefined) {
     const newOrgName = input.name.trim();
     update.name = newOrgName;
@@ -604,7 +729,9 @@ export async function updateOrganizationForAdmin(uid: string, organizationId: st
       actorUID: uid,
       actorName: currentUser.fullName,
       actorRole: currentUser.role,
-      action: currentUser.role === "Admin" ? "Organization details updated by administrator" : "Organization details updated",
+      action: input.organizationConfig !== undefined
+        ? "Organization orchestration settings updated"
+        : currentUser.role === "Admin" ? "Organization details updated by administrator" : "Organization details updated",
       actionCategory: "Organization",
       targetType: "Organization",
       targetName: orgName,

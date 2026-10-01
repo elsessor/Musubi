@@ -370,7 +370,7 @@ export async function getOrganization(user: User, organizationId: string): Promi
 export async function updateOrganizationDetails(
   user: User,
   organizationId: string,
-  input: { name?: string; type?: string; description?: string; setupStatus?: string }
+  input: { name?: string; type?: string; description?: string; setupStatus?: string; organizationConfig?: { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } }
 ): Promise<OrganizationRecord> {
   const token = await user.getIdToken();
   const res = await fetch(`${API_BASE_URL}/auth/organizations/${organizationId}`, {
@@ -501,6 +501,22 @@ export function createOrganizationCommittee(user: User, organizationId: string, 
 
 export function addOrganizationCommitteeMembers(user: User, organizationId: string, committeeId: string, memberIds: string[]) {
   return organizationRequest<{ memberIds: string[] }>(user, `/auth/organizations/${organizationId}/committees/${committeeId}/members`, { method: "POST", body: JSON.stringify({ memberIds }) });
+}
+
+export function removeOrganizationMember(user: User, organizationId: string, memberId: string) {
+  return organizationRequest<void>(user, `/auth/organizations/${organizationId}/members/${memberId}`, { method: "DELETE" });
+}
+
+export function updateOrganizationCommittee(
+  user: User,
+  organizationId: string,
+  committeeId: string,
+  input: { name: string; description: string; headMemberId: string | null; memberIds: string[] }
+) {
+  return organizationRequest<{ committee: OrganizationCommitteeRecord }>(user, `/auth/organizations/${organizationId}/committees/${committeeId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
 }
 
 export function createOrganization(

@@ -25,6 +25,7 @@ import {
   getOrganizationJoinRequests,
   getOrganizationManagementDetail,
   getOrganizationMembers,
+  removeOrganizationMember,
   getOrganizationRequests,
   getOrganizationsForAdmin,
   joinOrganization,
@@ -36,6 +37,7 @@ import {
   updateMemberForAdmin,
   updateMemberRoleForAdmin,
   updateCurrentUserProfile,
+  updateOrganizationCommittee,
   updateOrganizationForAdmin,
   watchAdminMemberDirectory,
   watchAuditLogs
@@ -309,8 +311,16 @@ export async function updateOrganizationController(request: Request, response: R
     const decoded = await firebaseAuth.verifyIdToken(token);
     const body = request.body as Record<string, unknown>;
     const allowedStatus = body.setupStatus === undefined || body.setupStatus === "pending" || body.setupStatus === "active" || body.setupStatus === "inactive";
+    const config = body.organizationConfig;
+    const validConfig = config === undefined || (
+      typeof config === "object" && config !== null && !Array.isArray(config) &&
+      ((config as Record<string, unknown>).delegationMode === "Heuristic" || (config as Record<string, unknown>).delegationMode === "Manual") &&
+      typeof (config as Record<string, unknown>).aiTaskAtomization === "boolean" &&
+      typeof (config as Record<string, unknown>).nudgeMonitoring === "boolean"
+    );
     if (
       !allowedStatus ||
+      !validConfig ||
       (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim())) ||
       (body.type !== undefined && (typeof body.type !== "string" || !body.type.trim())) ||
       (body.description !== undefined && typeof body.description !== "string")
@@ -322,7 +332,8 @@ export async function updateOrganizationController(request: Request, response: R
         name: body.name as string | undefined,
         type: body.type as string | undefined,
         description: body.description as string | undefined,
-        setupStatus: body.setupStatus as string | undefined
+        setupStatus: body.setupStatus as string | undefined,
+        organizationConfig: config as { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } | undefined
       })
     });
   } catch (error) { next(error); }
@@ -370,6 +381,35 @@ export async function addOrganizationCommitteeMembersController(request: Request
 }
 
 // ── Admin members ─────────────────────────────────────────────────────────────
+
+export async function updateOrganizationCommitteeController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    const body = request.body as Record<string, unknown>;
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    if (typeof body.name !== "string" || typeof body.description !== "string") throw new AppError("Committee name and description are required.", 400);
+    if (!(typeof body.headMemberId === "string" || body.headMemberId === null)) throw new AppError("Invalid committee head.", 400);
+    if (!Array.isArray(body.memberIds) || !body.memberIds.every((id) => typeof id === "string")) throw new AppError("Committee members must be a list of member IDs.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const committee = await updateOrganizationCommittee(decoded.uid, request.params.organizationId, request.params.committeeId, {
+      name: body.name,
+      description: body.description,
+      headMemberId: body.headMemberId,
+      memberIds: body.memberIds
+    });
+    response.status(200).json({ committee });
+  } catch (error) { next(error); }
+}
+
+export async function removeOrganizationMemberController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    await removeOrganizationMember(decoded.uid, request.params.organizationId, request.params.memberId);
+    response.status(200).json({ success: true });
+  } catch (error) { next(error); }
+}
 
 export async function adminMembersController(request: Request, response: Response, next: NextFunction) {
   try {

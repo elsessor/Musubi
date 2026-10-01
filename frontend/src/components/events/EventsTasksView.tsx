@@ -11,6 +11,7 @@ import type { Event, Task } from "./types";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 import { createEventFirestore, deleteEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
 import { getOrganizationCommittees, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 
@@ -19,6 +20,7 @@ type Tab = "events" | "atomizer";
 export function EventsTasksView() {
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const showToast = useToastStore((state) => state.showToast);
   const isLeader = profile?.role === "Student Leader" || profile?.role === "Admin";
 
   const [activeTab, setActiveTab] = useState<Tab>("events");
@@ -131,6 +133,13 @@ export function EventsTasksView() {
           progress: 0,
           tasks: publishedTasks
         });
+        showToast({
+          title: "Event created",
+          description: publishedTasks.length
+            ? `Your event is ready to manage with ${publishedTasks.length} ${publishedTasks.length === 1 ? "task" : "tasks"}.`
+            : "Your event is ready to manage.",
+          tone: "success"
+        });
       } catch (err) {
         console.error("Failed to create new event from description:", err);
       }
@@ -148,9 +157,9 @@ export function EventsTasksView() {
     const updatedEvent = { ...targetEvent, tasks, progress };
 
     handleUpdateEvent(updatedEvent);
-    void updateEventFirestore(firebaseUser, targetEvent.id, { tasks, progress }).catch((error) => {
-      console.error("Failed to publish atomized tasks:", error);
-    });
+    void updateEventFirestore(firebaseUser, targetEvent.id, { tasks, progress })
+      .then(() => showToast({ title: "Tasks added", description: `Your ${publishedTasks.length === 1 ? "task is" : "tasks are"} ready to manage in ${targetEvent.title}.`, tone: "success" }))
+      .catch((error) => console.error("Failed to publish atomized tasks:", error));
     setActiveTab("events");
   }
 
@@ -184,6 +193,7 @@ export function EventsTasksView() {
         progress: 0,
         tasks: []
       });
+      showToast({ title: "Event created", description: `${title.trim()} is ready to manage.`, tone: "success" });
       setIsModalOpen(false);
       setTitle("");
       setDescription("");

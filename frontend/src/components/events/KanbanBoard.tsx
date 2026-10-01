@@ -37,6 +37,7 @@ import { TaskCalendarView } from "./TaskCalendarView";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 import { updateEventFirestore } from "@/services/events.service";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
@@ -72,6 +73,7 @@ export function KanbanBoard({
   isLeader = true
 }: KanbanBoardProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const showToast = useToastStore((state) => state.showToast);
   const [currentEvent, setCurrentEvent] = useState<Event>(event);
   const [tasks, setTasks] = useState<Task[]>(event.tasks || []);
 
@@ -271,9 +273,21 @@ export function KanbanBoard({
     });
   }
 
-  function handleAddTask(newTask: Task) {
+  async function handleAddTask(newTask: Task) {
     const updatedTasks = [newTask, ...tasks];
-    syncEvent(updatedTasks);
+    const completedTasks = updatedTasks.filter((task) => task.status === "Completed").length;
+    const updatedProgress = updatedTasks.length ? Math.round((completedTasks / updatedTasks.length) * 100) : currentEvent.progress;
+    const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: updatedProgress };
+    try {
+      await updateEventFirestore(firebaseUser, event.id, { tasks: updatedTasks, progress: updatedProgress });
+      setCurrentEvent(updatedEvent);
+      setTasks(updatedTasks);
+      onUpdateEvent?.(updatedEvent);
+      showToast({ title: "Task created", description: `${newTask.title} is ready to manage in ${currentEvent.title}.`, tone: "success" });
+    } catch (error) {
+      console.error("Failed to create task:", error);
+      showToast({ title: "Task not saved", description: "We couldn’t save the task. Please try again.", tone: "error" });
+    }
     setShowAddTaskModal(false);
   }
 

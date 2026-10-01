@@ -331,8 +331,8 @@ export function PostAnnouncementModal({
               disabled={submitting || !isValid}
               className={`w-full rounded-2xl py-3 text-xs font-bold transition ${
                 isValid && !submitting
-                  ? "bg-[#9cb0c9] text-white hover:bg-[#859cb8] active:scale-[0.98]"
-                  : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  ? "bg-[#1e3a5f] text-white hover:bg-[#152a45] active:scale-[0.98]"
+                  : "bg-[#1e3a5f] text-white opacity-40 cursor-not-allowed"
               }`}
             >
               {submitting ? "Posting..." : "Post Announcement"}

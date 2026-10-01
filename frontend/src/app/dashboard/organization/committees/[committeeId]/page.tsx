@@ -3,22 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ClipboardList, Search } from "lucide-react";
+import { ArrowLeft, ClipboardList, Pencil, Plus, Search, UserRoundX } from "lucide-react";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AddCommitteeMembersModal } from "@/components/dashboard/AddCommitteeMembersModal";
+import { ConfirmRemoveCommitteeMemberModal } from "@/components/dashboard/ConfirmRemoveCommitteeMemberModal";
+import { EditCommitteeModal } from "@/components/dashboard/EditCommitteeModal";
 import { MemberProfileModal } from "@/components/dashboard/MemberProfileModal";
+import type { Event } from "@/components/events/types";
+import { subscribeEventsFirestore } from "@/services/events.service";
 import { useLogout } from "@/hooks/useLogout";
 import {
-  addOrganizationCommitteeMembers,
   getOrganization,
   getOrganizationCommittees,
   getOrganizationMembers,
+  updateOrganizationCommittee,
   type OrganizationCommitteeRecord,
   type OrganizationMember,
   type OrganizationRecord
 } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 import { getDashboardNavItems } from "@/utils/routes";
 
 function dateLabel() {
@@ -31,16 +36,21 @@ export default function CommitteePage() {
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const authLoading = useAuthStore((state) => state.loading);
+  const showToast = useToastStore((state) => state.showToast);
   const logout = useLogout();
 
   const [profileMember, setProfileMember] = useState<OrganizationMember | null>(null);
   const [committee, setCommittee] = useState<OrganizationCommitteeRecord | null>(null);
   const [organization, setOrganization] = useState<OrganizationRecord | null>(null);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [addMembersOpen, setAddMembersOpen] = useState(false);
+  const [editCommitteeOpen, setEditCommitteeOpen] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<OrganizationMember | null>(null);
+  const [isRemovingMember, setIsRemovingMember] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !profile) router.replace("/sign-in");
@@ -63,17 +73,96 @@ export default function CommitteePage() {
       .finally(() => setLoading(false));
   }, [firebaseUser, params.committeeId, profile?.organizationId]);
 
+  useEffect(() => {
+    if (!firebaseUser || !profile?.organizationId) {
+      setEvents([]);
+      return;
+    }
+    const unsubscribe = subscribeEventsFirestore(firebaseUser, profile.organizationId, setEvents);
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
+  }, [firebaseUser, profile?.organizationId]);
+
   const committeeMembers = useMemo(() => {
     return members
       .filter((member) => member.committeeId === committee?.id)
       .filter((member) => `${member.name} ${member.position} ${member.role} ${member.skills.join(" ")}`.toLowerCase().includes(query.toLowerCase()));
   }, [committee?.id, members, query]);
 
+  const memberStats = useMemo(() => {
+    const allTasks = events.flatMap((event) => (event.tasks || []).map((task) => ({ ...task, eventTitle: event.title })));
+    return new Map(members.map((member) => {
+      const name = member.name.trim().toLowerCase();
+      const memberTasks = allTasks.filter((task) => {
+        if (task.assignedMemberUID && task.assignedMemberUID === member.id) return true;
+        const assigneeName = (task.assignee?.name || task.assignedMemberName || "").trim().toLowerCase();
+        return Boolean(assigneeName && (assigneeName === name || assigneeName.includes(name) || name.includes(assigneeName)));
+      });
+      const activeTasks = memberTasks.filter((task) => ["In Progress", "To Do", "In Review", "Pending"].includes(task.status));
+      const completedTasks = memberTasks.filter((task) => ["Completed", "Done"].includes(task.status));
+      const explicitStatus = (member as OrganizationMember & { availability?: string; status?: string }).availability || (member as OrganizationMember & { status?: string }).status;
+      return [member.id, {
+        workload: Math.min(100, activeTasks.length * 25),
+        reliability: memberTasks.length ? `${Math.round((completedTasks.length / memberTasks.length) * 100)}%` : "—",
+        availability: ["Available", "Busy", "On Leave"].includes(explicitStatus || "") ? explicitStatus! : activeTasks.length >= 4 ? "Busy" : "Available",
+        assignedTasks: activeTasks.map((task) => ({ id: task.id, title: task.title, eventTitle: task.eventTitle, status: task.status, matchPercentage: task.matchPercentage }))
+      }] as const;
+    }));
+  }, [events, members]);
+
   async function addMembers(memberIds: string[]) {
     if (!firebaseUser || !profile?.organizationId || !committee) return;
-    await addOrganizationCommitteeMembers(firebaseUser, profile.organizationId, committee.id, memberIds);
-    setMembers((current) => current.map((member) => (memberIds.includes(member.id) ? { ...member, committeeId: committee.id, committeeName: committee.name } : member)));
+    const allMemberIds = Array.from(new Set([...members.filter((member) => member.committeeId === committee.id).map((member) => member.id), ...memberIds]));
+    if (committee.headMemberUID && !allMemberIds.includes(committee.headMemberUID)) allMemberIds.push(committee.headMemberUID);
+    const { committee: updatedCommittee } = await updateOrganizationCommittee(firebaseUser, profile.organizationId, committee.id, {
+      name: committee.name,
+      description: committee.description,
+      headMemberId: committee.headMemberUID,
+      memberIds: allMemberIds
+    });
+    setCommittee(updatedCommittee);
+    setMembers((current) => current.map((member) => allMemberIds.includes(member.id) ? { ...member, committeeId: updatedCommittee.id, committeeName: updatedCommittee.name } : member));
     setAddMembersOpen(false);
+    showToast({ title: "Members added", description: `Members are now assigned to ${updatedCommittee.name}.`, tone: "success" });
+  }
+
+  async function saveCommitteeEdits(input: { name: string; description: string; headMemberId: string | null }) {
+    if (!firebaseUser || !profile?.organizationId || !committee) throw new Error("Unable to update committee right now.");
+    const memberIds = members.filter((member) => member.committeeId === committee.id).map((member) => member.id);
+    if (input.headMemberId && !memberIds.includes(input.headMemberId)) memberIds.push(input.headMemberId);
+    const { committee: updatedCommittee } = await updateOrganizationCommittee(firebaseUser, profile.organizationId, committee.id, { ...input, memberIds });
+    setCommittee(updatedCommittee);
+    setMembers((current) => current.map((member) => {
+      if (memberIds.includes(member.id)) return { ...member, committeeId: updatedCommittee.id, committeeName: updatedCommittee.name };
+      return member;
+    }));
+    setEditCommitteeOpen(false);
+    showToast({ title: "Committee updated", description: `${updatedCommittee.name} is ready to manage.`, tone: "success" });
+  }
+
+  async function removeCommitteeMember(memberId: string) {
+    if (!firebaseUser || !profile?.organizationId || !committee) return;
+    setIsRemovingMember(true);
+    const memberIds = members.filter((member) => member.committeeId === committee.id && member.id !== memberId).map((member) => member.id);
+    const headMemberId = committee.headMemberUID === memberId ? null : committee.headMemberUID;
+    if (headMemberId && !memberIds.includes(headMemberId)) memberIds.push(headMemberId);
+    try {
+      const { committee: updatedCommittee } = await updateOrganizationCommittee(firebaseUser, profile.organizationId, committee.id, {
+        name: committee.name,
+        description: committee.description,
+        headMemberId,
+        memberIds
+      });
+      setCommittee(updatedCommittee);
+      setMembers((current) => current.map((member) => member.id === memberId ? { ...member, committeeId: null, committeeName: null } : member));
+      showToast({ title: "Member removed", description: "The member was removed from this committee.", tone: "success" });
+      setMemberToRemove(null);
+    } catch (cause) {
+      showToast({ title: "Unable to remove member", description: cause instanceof Error ? cause.message : "Please try again.", tone: "error" });
+    } finally {
+      setIsRemovingMember(false);
+    }
   }
 
   if (authLoading || !profile) {
@@ -93,7 +182,7 @@ export default function CommitteePage() {
   return (
     <DashboardLayout activeNavId="organization" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems(profile.role)} notificationCount={0} onLogout={logout} user={user}>
       <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
-        <Link href="/dashboard/organization" className="inline-flex items-center gap-2 text-sm font-semibold text-[#2868ed] hover:text-blue-700">
+        <Link href="/dashboard/organization?tab=committees" className="inline-flex items-center gap-2 text-sm font-semibold text-[#2868ed] hover:text-blue-700">
           <ArrowLeft className="size-4" />
           Back to organization
         </Link>
@@ -109,17 +198,20 @@ export default function CommitteePage() {
         ) : (
           <>
             <div className="mt-5 rounded-2xl border border-[#dce3ed] bg-white p-6">
-              <p className="text-xs font-bold uppercase tracking-wide text-[#2868ed]">{organization?.name}</p>
-              <h1 className="mt-1 text-2xl font-extrabold">{committee.name}</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-500">{committee.description || "No description provided."}</p>
-              <p className="mt-4 text-sm">
-                Committee head: <span className="font-bold">{members.find((member) => member.id === committee.headMemberUID)?.name || "Not assigned"}</span>
-              </p>
-            </div>
-            <div className="mt-6 flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-[#2868ed]">{organization?.name}</p>
+                  <h1 className="mt-1 text-2xl font-extrabold">{committee.name}</h1>
+                  <p className="mt-2 max-w-3xl text-sm text-slate-500">{committee.description || "No description provided."}</p>
+                  <p className="mt-4 text-sm">Committee head: <span className="font-bold">{members.find((member) => member.id === committee.headMemberUID)?.name || "Not assigned"}</span></p>
+                </div>
+                {profile.role === "Student Leader" ? <button type="button" onClick={() => setEditCommitteeOpen(true)} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700"><Pencil className="size-4" />Edit committee</button> : null}
+              </div>
+            </div>            <div className="mt-6 flex items-center justify-between gap-4">
               <h2 className="text-xl font-bold">Committee members ({committeeMembers.length})</h2>
               {profile.role === "Student Leader" ? (
-                <button type="button" onClick={() => setAddMembersOpen(true)} className="rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white">
+                <button type="button" onClick={() => setAddMembersOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white">
+                  <Plus className="size-4" />
                   Add members
                 </button>
               ) : null}
@@ -193,22 +285,23 @@ export default function CommitteePage() {
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
                             <div className="h-1.5 w-20 rounded bg-slate-100">
-                              <div className="h-full rounded bg-emerald-500" style={{ width: "0%" }} />
+                              <div className={`h-full rounded ${((memberStats.get(member.id)?.workload ?? 0) >= 80) ? "bg-rose-500" : (memberStats.get(member.id)?.workload ?? 0) >= 60 ? "bg-amber-400" : "bg-emerald-500"}`} style={{ width: `${memberStats.get(member.id)?.workload ?? 0}%` }} />
                             </div>
-                            <span className="text-[11px] text-slate-500">0%</span>
+                            <span className="text-[11px] text-slate-500">{memberStats.get(member.id)?.workload ?? 0}%</span>
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-[11px] font-semibold">-</td>
+                        <td className="px-3 py-3 text-[11px] font-semibold">{memberStats.get(member.id)?.reliability ?? "—"}</td>
                         <td className="px-3 py-3">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-600">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${(memberStats.get(member.id)?.availability ?? "Available") === "Available" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-700"}`}>
                             <i className="size-1 rounded-full bg-current" />
-                            Available
+                            {memberStats.get(member.id)?.availability ?? "Available"}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button type="button" onClick={() => setProfileMember(member)} className="text-[12px] font-medium text-[#2868ed] hover:text-blue-700">
-                            View Profile
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button type="button" onClick={() => setProfileMember(member)} className="text-[12px] font-medium text-[#2868ed] hover:text-blue-700">View Profile</button>
+                            {profile.role === "Student Leader" ? <button type="button" onClick={() => setMemberToRemove(member)} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-[12px] font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800"><UserRoundX className="size-3.5" />Remove</button> : null}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -228,15 +321,33 @@ export default function CommitteePage() {
             role: profileMember.position || profileMember.role,
             committee: committee?.name || "Not assigned",
             skills: profileMember.skills,
-            workload: 0,
-            reliability: "-",
-            availability: "Available"
+            workload: memberStats.get(profileMember.id)?.workload ?? 0,
+            reliability: memberStats.get(profileMember.id)?.reliability ?? "—",
+            availability: memberStats.get(profileMember.id)?.availability ?? "Available",
+            assignedTasks: memberStats.get(profileMember.id)?.assignedTasks
           }}
           onClose={() => setProfileMember(null)}
         />
       ) : null}
+      {editCommitteeOpen && committee ? (
+        <EditCommitteeModal
+          committee={committee}
+          members={members.filter((member) => member.committeeId === committee.id || member.id === committee.headMemberUID)}
+          onClose={() => setEditCommitteeOpen(false)}
+          onSave={saveCommitteeEdits}
+        />
+      ) : null}
       {addMembersOpen && committee ? (
         <AddCommitteeMembersModal members={members.filter((member) => member.committeeId !== committee.id)} onClose={() => setAddMembersOpen(false)} onAdd={addMembers} />
+      ) : null}
+      {memberToRemove && committee ? (
+        <ConfirmRemoveCommitteeMemberModal
+          memberName={memberToRemove.name}
+          committeeName={committee.name}
+          isRemoving={isRemovingMember}
+          onCancel={() => setMemberToRemove(null)}
+          onConfirm={() => void removeCommitteeMember(memberToRemove.id)}
+        />
       ) : null}
     </DashboardLayout>
   );
