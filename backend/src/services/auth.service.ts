@@ -56,7 +56,7 @@ async function getOrCreateUserDocument(uid: string, clientFullName?: string): Pr
         ? firebaseUser.displayName.trim()
         : undefined;
 
-    if ((currentFullName === "Campus Member" || !currentFullName.trim()) && candidateName) {
+    if (candidateName && (currentFullName === "Campus Member" || !currentFullName.trim() || currentFullName !== candidateName)) {
       currentFullName = candidateName;
       await userRef.update({ fullName: candidateName });
       try {
@@ -230,6 +230,52 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     onboardingCompleted: user.onboardingCompleted
   };
 }
+
+export async function updateUserProfile(
+  uid: string,
+  input: { fullName?: string; position?: string; yearLevel?: string; program?: string; birthdate?: string; skills?: string[] }
+): Promise<LoginResponse["user"]> {
+  const userRef = firestore.collection("users").doc(uid);
+  const snap = await userRef.get();
+  if (!snap.exists) throw new AppError("User profile was not found.", 404);
+
+  const updates: Record<string, unknown> = {
+    updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (typeof input.fullName === "string" && input.fullName.trim()) {
+    const trimmed = input.fullName.trim();
+    updates.fullName = trimmed;
+    try {
+      await firebaseAuth.updateUser(uid, { displayName: trimmed });
+    } catch (err) {
+      console.error("[updateUserProfile] Error updating firebaseAuth displayName:", err);
+    }
+  }
+
+  if (typeof input.position === "string") updates.position = input.position.trim();
+  if (typeof input.yearLevel === "string") updates.yearLevel = input.yearLevel.trim();
+  if (typeof input.program === "string") updates.program = input.program.trim();
+  if (typeof input.birthdate === "string") updates.birthdate = input.birthdate.trim();
+  if (Array.isArray(input.skills)) updates.skills = input.skills.filter((s): s is string => typeof s === "string");
+
+  await userRef.set(updates, { merge: true });
+
+  const updatedUser = await getCurrentUser(uid);
+  writeAuditLog({
+    actorUID: uid,
+    actorName: updatedUser.fullName,
+    actorRole: updatedUser.role,
+    action: "User profile updated",
+    actionCategory: "User Management",
+    targetType: "User",
+    targetName: updatedUser.email,
+    orgId: updatedUser.organizationId
+  });
+
+  return updatedUser;
+}
+
 
 export async function getOrganizationRequests(uid: string) {
   const user = await getCurrentUser(uid);

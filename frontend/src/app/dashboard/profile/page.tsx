@@ -20,6 +20,7 @@ import {
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { subscribeEventsFirestore } from "@/services/events.service";
+import { updateUserProfile } from "@/services/auth.service";
 import type { Event, Task } from "@/components/events/types";
 
 type UserProfileData = {
@@ -293,7 +294,6 @@ export default function DashboardProfilePage() {
     setIsSaving(true);
 
     try {
-      const userRef = doc(getFirebaseDb(), "users", firebaseUser.uid);
       const updatedData = {
         fullName: editName.trim() || userData.fullName,
         position: editPosition.trim() || userData.position,
@@ -303,12 +303,17 @@ export default function DashboardProfilePage() {
         skills: editSkills
       };
 
-      await updateDoc(userRef, updatedData);
-
       if (firebaseUser) {
         try {
-          await updateProfile(firebaseUser, { displayName: updatedData.fullName });
-        } catch {}
+          await updateUserProfile(firebaseUser, updatedData);
+        } catch (apiErr) {
+          console.warn("[ProfilePage] API update fallback to client doc:", apiErr);
+          const userRef = doc(getFirebaseDb(), "users", firebaseUser.uid);
+          await updateDoc(userRef, updatedData);
+          try {
+            await updateProfile(firebaseUser, { displayName: updatedData.fullName });
+          } catch {}
+        }
       }
 
       setUserData((prev) => ({ ...prev, ...updatedData }));
