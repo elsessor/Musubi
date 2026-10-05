@@ -84,6 +84,8 @@ export type Subtask = {
   };
   priority: TaskPriority;
   assigneeName?: string;
+  dueDate?: string;
+  deadline?: string;
   status?: TaskStatus;
   validationWarnings?: string[];
 };

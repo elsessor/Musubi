@@ -66,13 +66,17 @@ export function AddTaskModal({ eventName, members, onClose, onAddTask }: AddTask
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
 
+  const defaultDueDateStr = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  );
+
   const [liveMembers, setLiveMembers] = useState<OrganizationMember[]>(members || []);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>("To Do");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
   const [assigneeId, setAssigneeId] = useState<string>("");
-  const [dueDate, setDueDate] = useState("Aug 28");
+  const [dueDate, setDueDate] = useState(defaultDueDateStr);
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
 
   useEffect(() => {
