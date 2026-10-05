@@ -104,6 +104,9 @@ export function subscribeAnnouncementsFirestore(
       const isOrgMatch =
         !targetOrgId ||
         targetOrgId === "all" ||
+        targetOrgId === "default-org" ||
+        !itemOrgId ||
+        itemOrgId === "default-org" ||
         (itemOrgId && itemOrgId === targetOrgId);
 
       if (!isOrgMatch) return;
@@ -169,6 +172,9 @@ export function subscribeAnnouncementsFirestore(
         const isOrgMatch =
           !targetOrgId ||
           targetOrgId === "all" ||
+          targetOrgId === "default-org" ||
+          !itemOrgId ||
+          itemOrgId === "default-org" ||
           (itemOrgId && itemOrgId === targetOrgId);
 
         if (!isOrgMatch) {

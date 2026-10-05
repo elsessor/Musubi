@@ -7,6 +7,7 @@ import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { getOrganization } from "@/services/auth.service";
+import { subscribeNotificationsFirestore } from "@/services/notifications.service";
 import { useAuthStore } from "@/store/authStore";
 import type { UserRole } from "@/types/auth";
 
@@ -204,6 +205,26 @@ export function TopHeader({
     };
   }, [firebaseUser, liveOrganizationName, liveUser.organizationId]);
 
+  // Real-time unread notifications subscription for header bell
+  const [liveUnreadCount, setLiveUnreadCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const authUser = firebaseUser ?? useAuthStore.getState().firebaseUser;
+    const targetOrgId = liveUser.organizationId || profile?.organizationId || null;
+    const unsubscribe = subscribeNotificationsFirestore(
+      authUser,
+      targetOrgId,
+      (notifications) => {
+        const unread = notifications.filter((n) => n.unread).length;
+        setLiveUnreadCount(unread);
+      }
+    );
+
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
+  }, [firebaseUser, liveUser.organizationId, profile?.organizationId]);
+
   // Close profile dropdown on outside click or Escape
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -311,13 +332,14 @@ export function TopHeader({
       <div className="flex shrink-0 items-center gap-3 sm:gap-5">
         {liveUser.role !== "Admin" ? (
           <button
-            aria-label={`Notifications ${notificationCount}`}
-            className="relative flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:size-14 sm:rounded-[18px]"
+            aria-label={`Notifications ${liveUnreadCount !== null ? liveUnreadCount : (notificationCount || 0)}`}
+            onClick={() => router.push("/dashboard/notifications")}
+            className="relative flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:size-14 sm:rounded-[18px] cursor-pointer"
             type="button"
           >
             <Bell className="size-5 sm:size-6" strokeWidth={1.75} />
             <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
-              {notificationCount}
+              {liveUnreadCount !== null ? liveUnreadCount : (notificationCount || 0)}
             </span>
           </button>
         ) : null}
