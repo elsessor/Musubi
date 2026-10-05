@@ -1234,42 +1234,48 @@ export async function createAnnouncementService(
 
 export async function getAnnouncementsService(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
-  const targetOrgId = orgId || user.organizationId || "default-org";
+  const targetOrgId = orgId || user.organizationId;
 
   const snapshot = await firestore.collection("announcements").get();
   const list: any[] = [];
 
   snapshot.docs.forEach((docSnap) => {
     const data = docSnap.data();
-    const itemOrgId = data.organizationId || data.orgId || "default-org";
+    const itemOrgId = data.organizationId || data.orgId;
     const targetAudience = data.targetAudience || "All Members";
 
-    if (user.role === "Organization Member" && targetAudience === "Leaders Only") {
+    // 1. Strict Organization Match Filter
+    const isSysAdmin = user.role === "Admin" || (user.role as string) === "System Administrator";
+    const isOrgMatch =
+      (isSysAdmin && (!orgId || orgId === "all")) ||
+      (targetOrgId && itemOrgId === targetOrgId) ||
+      (user.organizationId && itemOrgId === user.organizationId);
+
+    if (!isOrgMatch) {
       return;
     }
 
-    const isAllMembers = targetAudience === "All Members";
-    const isOrgMatch =
-      !targetOrgId ||
-      targetOrgId === "default-org" ||
-      itemOrgId === "default-org" ||
-      itemOrgId === targetOrgId;
+    // 2. Audience / Role Filter
+    const isMember = user.role === "Organization Member";
+    const isLeadersOnly = targetAudience === "Leaders Only" || targetAudience === "Officers Only";
 
-    if (isAllMembers || isOrgMatch) {
-      list.push({
-        id: docSnap.id,
-        organizationId: itemOrgId,
-        title: typeof data.title === "string" ? data.title : "Untitled Announcement",
-        content: typeof data.content === "string" ? data.content : "",
-        targetAudience,
-        isPinned: Boolean(data.isPinned),
-        authorName: typeof data.authorName === "string" ? data.authorName : "Student Leader",
-        authorUid: typeof data.authorUid === "string" ? data.authorUid : "",
-        authorRole: typeof data.authorRole === "string" ? data.authorRole : "Student Leader",
-        createdAt: typeof data.createdAt === "string" ? data.createdAt : "Recent",
-        timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now()
-      });
+    if (isMember && isLeadersOnly) {
+      return;
     }
+
+    list.push({
+      id: docSnap.id,
+      organizationId: itemOrgId,
+      title: typeof data.title === "string" ? data.title : "Untitled Announcement",
+      content: typeof data.content === "string" ? data.content : "",
+      targetAudience,
+      isPinned: Boolean(data.isPinned),
+      authorName: typeof data.authorName === "string" ? data.authorName : "Student Leader",
+      authorUid: typeof data.authorUid === "string" ? data.authorUid : "",
+      authorRole: typeof data.authorRole === "string" ? data.authorRole : "Student Leader",
+      createdAt: typeof data.createdAt === "string" ? data.createdAt : "Recent",
+      timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now()
+    });
   });
 
   list.sort((a, b) => {

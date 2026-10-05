@@ -100,24 +100,28 @@ export function subscribeAnnouncementsFirestore(
     const allSources = [...cached, ...topLevelAnnouncements, ...subColAnnouncements];
 
     allSources.forEach((a) => {
-      const itemOrgId = a.organizationId || "default-org";
-      const isAllMembers = !a.targetAudience || a.targetAudience === "All Members";
+      const itemOrgId = a.organizationId;
       const isOrgMatch =
         !targetOrgId ||
-        targetOrgId === "default-org" ||
-        itemOrgId === "default-org" ||
-        itemOrgId === targetOrgId;
+        targetOrgId === "all" ||
+        (itemOrgId && itemOrgId === targetOrgId);
 
-      if (isAllMembers || isOrgMatch) {
-        // Unique key based on title + content + createdAt to deduplicate temporary IDs and duplicate feeds
-        const uniqueKey = `${(a.title || "").trim().toLowerCase()}_${(a.content || "").trim().toLowerCase()}_${a.createdAt}`;
-        const existing = uniqueMap.get(uniqueKey);
-        if (!existing) {
-          uniqueMap.set(uniqueKey, a);
-        } else if (existing.id.startsWith("ann-") && !a.id.startsWith("ann-")) {
-          // Upgrade temporary local ID to real Firestore ID
-          uniqueMap.set(uniqueKey, a);
-        }
+      if (!isOrgMatch) return;
+
+      const activeRole = userRole || useAuthStore.getState().profile?.role;
+      const isMember = activeRole === "Organization Member";
+      const isLeadersOnly = a.targetAudience === "Leaders Only" || a.targetAudience === "Officers Only";
+
+      if (isMember && isLeadersOnly) return;
+
+      // Unique key based on title + content + createdAt to deduplicate temporary IDs and duplicate feeds
+      const uniqueKey = `${(a.title || "").trim().toLowerCase()}_${(a.content || "").trim().toLowerCase()}_${a.createdAt}`;
+      const existing = uniqueMap.get(uniqueKey);
+      if (!existing) {
+        uniqueMap.set(uniqueKey, a);
+      } else if (existing.id.startsWith("ann-") && !a.id.startsWith("ann-")) {
+        // Upgrade temporary local ID to real Firestore ID
+        uniqueMap.set(uniqueKey, a);
       }
     });
 
@@ -127,12 +131,7 @@ export function subscribeAnnouncementsFirestore(
       return (b.timestamp || 0) - (a.timestamp || 0);
     });
 
-    const activeRole = userRole || useAuthStore.getState().profile?.role;
-    const filtered = activeRole === "Organization Member"
-      ? list.filter((a) => a.targetAudience !== "Leaders Only")
-      : list;
-
-    onData(filtered);
+    onData(list);
   }
 
   // Initial immediate emit from cache before network listeners return
@@ -165,22 +164,28 @@ export function subscribeAnnouncementsFirestore(
       topLevelAnnouncements = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        const itemOrgId = data.organizationId || data.orgId || "default-org";
+        const itemOrgId = data.organizationId || data.orgId;
 
-        const isAllMembers = !data.targetAudience || data.targetAudience === "All Members";
         const isOrgMatch =
           !targetOrgId ||
-          targetOrgId === "default-org" ||
-          itemOrgId === "default-org" ||
-          itemOrgId === targetOrgId;
+          targetOrgId === "all" ||
+          (itemOrgId && itemOrgId === targetOrgId);
 
-        if (!isAllMembers && !isOrgMatch) {
+        if (!isOrgMatch) {
+          return;
+        }
+
+        const activeRole = userRole || useAuthStore.getState().profile?.role;
+        const isMember = activeRole === "Organization Member";
+        const isLeadersOnly = data.targetAudience === "Leaders Only" || data.targetAudience === "Officers Only";
+
+        if (isMember && isLeadersOnly) {
           return;
         }
 
         const annItem: Announcement = {
           id: docSnap.id,
-          organizationId: itemOrgId,
+          organizationId: itemOrgId || targetOrgId || "default-org",
           title: typeof data.title === "string" ? data.title : "Untitled Announcement",
           content: typeof data.content === "string" ? data.content : "",
           targetAudience: typeof data.targetAudience === "string" ? data.targetAudience : "All Members",
@@ -203,16 +208,24 @@ export function subscribeAnnouncementsFirestore(
   );
 
   // 4. Subscribe to sub-collection "organizations/{orgId}/announcements"
-  const subRef = collection(db, "organizations", targetOrgId, "announcements");
+  const subRef = collection(db, "organizations", targetOrgId || "default-org", "announcements");
   const unsubSub = onSnapshot(
     subRef,
     (snapshot) => {
       subColAnnouncements = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        const activeRole = userRole || useAuthStore.getState().profile?.role;
+        const isMember = activeRole === "Organization Member";
+        const isLeadersOnly = data.targetAudience === "Leaders Only" || data.targetAudience === "Officers Only";
+
+        if (isMember && isLeadersOnly) {
+          return;
+        }
+
         const annItem: Announcement = {
           id: docSnap.id,
-          organizationId: targetOrgId,
+          organizationId: targetOrgId || "default-org",
           title: typeof data.title === "string" ? data.title : "Untitled Announcement",
           content: typeof data.content === "string" ? data.content : "",
           targetAudience: typeof data.targetAudience === "string" ? data.targetAudience : "All Members",
