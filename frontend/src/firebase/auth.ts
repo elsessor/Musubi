@@ -30,6 +30,15 @@ export async function registerWithEmail(credentials: RegisterCredentials): Promi
 
   await updateProfile(result.user, { displayName: credentials.fullName });
 
+  if (auth.currentUser) {
+    try {
+      await auth.currentUser.reload();
+      return auth.currentUser;
+    } catch {
+      // fallback
+    }
+  }
+
   return result.user;
 }
 
