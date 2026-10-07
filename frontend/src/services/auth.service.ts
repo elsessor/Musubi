@@ -121,8 +121,9 @@ function normalizeAdminInviteStatus(value: unknown): AdminMemberRecord["inviteSt
 
 // ── Session / auth ────────────────────────────────────────────────────────────
 
-export async function exchangeFirebaseSession(user: User): Promise<BackendLoginResponse> {
+export async function exchangeFirebaseSession(user: User, fullName?: string): Promise<BackendLoginResponse> {
   const idToken = await user.getIdToken();
+  const displayName = (fullName && fullName.trim()) || user.displayName || undefined;
 
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
@@ -130,7 +131,7 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
       "Content-Type": "application/json",
       Authorization: `Bearer ${idToken}`
     },
-    body: JSON.stringify({ idToken })
+    body: JSON.stringify({ idToken, fullName: displayName })
   });
 
   if (!response.ok) {

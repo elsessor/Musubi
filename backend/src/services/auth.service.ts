@@ -43,12 +43,32 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
   };
 }
 
-async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
+async function getOrCreateUserDocument(uid: string, clientFullName?: string): Promise<FirestoreUser> {
   const userRef = firestore.collection("users").doc(uid);
   const snapshot = await userRef.get();
+  const firebaseUser = await firebaseAuth.getUser(uid);
 
   if (snapshot.exists) {
     const data = snapshot.data() ?? {};
+    let currentFullName = typeof data.fullName === "string" ? data.fullName : "Campus Member";
+
+    const candidateName =
+      (clientFullName && clientFullName.trim() && clientFullName.trim() !== "Campus Member")
+        ? clientFullName.trim()
+        : (firebaseUser.displayName && firebaseUser.displayName.trim() && firebaseUser.displayName.trim() !== "Campus Member")
+        ? firebaseUser.displayName.trim()
+        : undefined;
+
+    if ((currentFullName === "Campus Member" || !currentFullName.trim()) && candidateName) {
+      currentFullName = candidateName;
+      await userRef.update({ fullName: candidateName });
+      try {
+        await firebaseAuth.updateUser(uid, { displayName: candidateName });
+      } catch {
+        // ignore update error if any
+      }
+    }
+
     let orgName = typeof data.organizationName === "string" && data.organizationName.trim() ? data.organizationName : null;
     if (typeof data.organizationId === "string" && data.organizationId.trim()) {
       try {
@@ -63,17 +83,23 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
         console.error("[getOrCreateUserDocument] Error syncing organizationName:", err);
       }
     }
-    const user = normalizeUserDocument(uid, { ...data, organizationName: orgName });
+    const user = normalizeUserDocument(uid, { ...data, fullName: currentFullName, organizationName: orgName });
     await userRef.update({
       lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
     });
     return user;
   }
 
-  const firebaseUser = await firebaseAuth.getUser(uid);
+  const effectiveName =
+    (clientFullName && clientFullName.trim() && clientFullName.trim() !== "Campus Member")
+      ? clientFullName.trim()
+      : (firebaseUser.displayName && firebaseUser.displayName.trim() && firebaseUser.displayName.trim() !== "Campus Member")
+      ? firebaseUser.displayName.trim()
+      : "Campus Member";
+
   const user: FirestoreUser = {
     uid,
-    fullName: firebaseUser.displayName ?? "Campus Member",
+    fullName: effectiveName,
     email: firebaseUser.email ?? "",
     role: DEFAULT_ROLE,
     position: null,
@@ -90,16 +116,23 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
   };
 
   await userRef.set(user);
+  if (effectiveName !== "Campus Member" && !firebaseUser.displayName) {
+    try {
+      await firebaseAuth.updateUser(uid, { displayName: effectiveName });
+    } catch {
+      // ignore
+    }
+  }
   return user;
 }
 
-export async function loginWithFirebaseToken(idToken: string): Promise<LoginResponse> {
+export async function loginWithFirebaseToken(idToken: string, clientFullName?: string): Promise<LoginResponse> {
   if (!idToken) {
     throw new AppError("Firebase ID token is required.", 400);
   }
 
   const decodedToken = await firebaseAuth.verifyIdToken(idToken);
-  const user = await getOrCreateUserDocument(decodedToken.uid);
+  const user = await getOrCreateUserDocument(decodedToken.uid, clientFullName);
 
   const payload: JwtPayload = {
     uid: user.uid,
@@ -1509,42 +1542,48 @@ export async function createAnnouncementService(
 
 export async function getAnnouncementsService(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
-  const targetOrgId = orgId || user.organizationId || "default-org";
+  const targetOrgId = orgId || user.organizationId;
 
   const snapshot = await firestore.collection("announcements").get();
   const list: any[] = [];
 
   snapshot.docs.forEach((docSnap) => {
     const data = docSnap.data();
-    const itemOrgId = data.organizationId || data.orgId || "default-org";
+    const itemOrgId = data.organizationId || data.orgId;
     const targetAudience = data.targetAudience || "All Members";
 
-    if (user.role === "Organization Member" && targetAudience === "Leaders Only") {
+    // 1. Strict Organization Match Filter
+    const isSysAdmin = user.role === "Admin" || (user.role as string) === "System Administrator";
+    const isOrgMatch =
+      (isSysAdmin && (!orgId || orgId === "all")) ||
+      (targetOrgId && itemOrgId === targetOrgId) ||
+      (user.organizationId && itemOrgId === user.organizationId);
+
+    if (!isOrgMatch) {
       return;
     }
 
-    const isAllMembers = targetAudience === "All Members";
-    const isOrgMatch =
-      !targetOrgId ||
-      targetOrgId === "default-org" ||
-      itemOrgId === "default-org" ||
-      itemOrgId === targetOrgId;
+    // 2. Audience / Role Filter
+    const isMember = user.role === "Organization Member";
+    const isLeadersOnly = targetAudience === "Leaders Only" || targetAudience === "Officers Only";
 
-    if (isAllMembers || isOrgMatch) {
-      list.push({
-        id: docSnap.id,
-        organizationId: itemOrgId,
-        title: typeof data.title === "string" ? data.title : "Untitled Announcement",
-        content: typeof data.content === "string" ? data.content : "",
-        targetAudience,
-        isPinned: Boolean(data.isPinned),
-        authorName: typeof data.authorName === "string" ? data.authorName : "Student Leader",
-        authorUid: typeof data.authorUid === "string" ? data.authorUid : "",
-        authorRole: typeof data.authorRole === "string" ? data.authorRole : "Student Leader",
-        createdAt: typeof data.createdAt === "string" ? data.createdAt : "Recent",
-        timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now()
-      });
+    if (isMember && isLeadersOnly) {
+      return;
     }
+
+    list.push({
+      id: docSnap.id,
+      organizationId: itemOrgId,
+      title: typeof data.title === "string" ? data.title : "Untitled Announcement",
+      content: typeof data.content === "string" ? data.content : "",
+      targetAudience,
+      isPinned: Boolean(data.isPinned),
+      authorName: typeof data.authorName === "string" ? data.authorName : "Student Leader",
+      authorUid: typeof data.authorUid === "string" ? data.authorUid : "",
+      authorRole: typeof data.authorRole === "string" ? data.authorRole : "Student Leader",
+      createdAt: typeof data.createdAt === "string" ? data.createdAt : "Recent",
+      timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now()
+    });
   });
 
   list.sort((a, b) => {

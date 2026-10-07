@@ -57,7 +57,8 @@ export async function loginController(request: Request, response: Response, next
   try {
     const idToken = typeof request.body.idToken === "string" ? request.body.idToken : getBearerToken(request);
     if (!idToken) throw new AppError("Firebase ID token is required.", 400);
-    const session = await loginWithFirebaseToken(idToken);
+    const fullName = typeof request.body.fullName === "string" && request.body.fullName.trim() ? request.body.fullName.trim() : undefined;
+    const session = await loginWithFirebaseToken(idToken, fullName);
     response.status(200).json(session);
   } catch (error) { next(error); }
 }

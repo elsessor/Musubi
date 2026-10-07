@@ -23,6 +23,7 @@ export type CustomSelectProps = {
   buttonClassName?: string;
   dropdownClassName?: string;
   disabled?: boolean;
+  direction?: "up" | "down" | "auto";
 };
 
 export function CustomSelect({
@@ -32,9 +33,11 @@ export function CustomSelect({
   placeholder = "Select an option",
   buttonClassName = "",
   dropdownClassName = "",
-  disabled = false
+  disabled = false,
+  direction = "auto"
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,13 +50,30 @@ export function CustomSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleToggle = () => {
+    if (disabled) return;
+
+    if (!isOpen && containerRef.current) {
+      if (direction === "up") {
+        setOpenUpward(true);
+      } else if (direction === "down") {
+        setOpenUpward(false);
+      } else {
+        const rect = containerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        setOpenUpward(spaceBelow < 240);
+      }
+    }
+    setIsOpen((prev) => !prev);
+  };
+
   const selectedOption = options.find((opt) => opt.value === value);
 
   return (
     <div ref={containerRef} className="relative w-full">
       <button
         type="button"
-        onClick={() => { if (!disabled) setIsOpen(!isOpen); }}
+        onClick={handleToggle}
         disabled={disabled}
         className={cn(
           "flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-50 focus:bg-white focus:border-blue-500 focus:outline-none shadow-2xs select-none cursor-pointer",
@@ -100,7 +120,8 @@ export function CustomSelect({
       {isOpen && (
         <div
           className={cn(
-            "absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl animate-in fade-in slide-in-from-top-2",
+            "absolute left-0 right-0 z-50 max-h-56 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl transition-all",
+            openUpward ? "bottom-full mb-1 animate-in fade-in slide-in-from-bottom-2" : "top-full mt-1 animate-in fade-in slide-in-from-top-2",
             dropdownClassName
           )}
         >
