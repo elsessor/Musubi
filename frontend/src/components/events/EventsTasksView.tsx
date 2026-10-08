@@ -6,7 +6,7 @@ import { BookOpen, CalendarDays, Plus, X, Zap } from "lucide-react";
 import { AtomizerForm } from "./AtomizerForm";
 import { EventsDashboard } from "./EventsDashboard";
 import { KanbanBoard } from "./KanbanBoard";
-import type { Event, Task } from "./types";
+import type { Event, EventStatus, Task } from "./types";
 
 import { getFirebaseDb } from "@/firebase/config";
 import { useAuthStore } from "@/store/authStore";
@@ -173,6 +173,20 @@ export function EventsTasksView() {
     }
   }
 
+  function handleUpdateEventStatus(eventId: string, newStatus: EventStatus) {
+    const targetEvent = events.find((e) => e.id === eventId);
+    if (!targetEvent) return;
+    const newProgress =
+      newStatus === "Completed"
+        ? 100
+        : targetEvent.status === "Completed" && targetEvent.progress === 100
+        ? 50
+        : targetEvent.progress;
+
+    const updated = { ...targetEvent, status: newStatus, progress: newProgress };
+    handleUpdateEvent(updated);
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* Tab navigation */}
@@ -199,13 +213,14 @@ export function EventsTasksView() {
         {currentTab === "atomizer" && isLeader ? (
           <AtomizerForm events={events} members={members} onPublishGoalTasks={handlePublishGoalTasks} />
         ) : selectedEvent ? (
-          <KanbanBoard event={selectedEvent} members={members} onBack={handleBack} onUpdateEvent={handleUpdateEvent} />
+          <KanbanBoard event={selectedEvent} members={members} onBack={handleBack} onUpdateEvent={handleUpdateEvent} isLeader={isLeader} />
         ) : (
           <EventsDashboard
             events={events}
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}
             onNewEvent={handleNewEvent}
+            onUpdateEventStatus={handleUpdateEventStatus}
           />
         )}
       </div>

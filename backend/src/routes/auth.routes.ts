@@ -33,6 +33,7 @@ import {
   reassignMemberController,
   reviewOrganizationJoinRequestController,
   reviewOrganizationRequestController,
+  rateTaskController,
   updateAdminMemberController,
   updateEventController,
   updateMemberRoleController,
@@ -54,6 +55,7 @@ authRouter.post("/events", requireAuth, createEventController);
 authRouter.get("/announcements", requireAuth, getAnnouncementsController);
 authRouter.post("/announcements", requireAuth, createAnnouncementController);
 authRouter.patch("/events/:eventId", requireAuth, updateEventController);
+authRouter.post("/events/:eventId/tasks/:taskId/rate", requireAuth, rateTaskController);
 authRouter.delete("/organizations/:organizationId/events", requireAuth, clearEventsController);
 
 authRouter.get("/org-requests", organizationRequestsController);

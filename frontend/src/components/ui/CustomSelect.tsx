@@ -19,7 +19,9 @@ export type CustomSelectProps = {
   placeholder?: string;
   buttonClassName?: string;
   dropdownClassName?: string;
+  containerClassName?: string;
   direction?: "up" | "down" | "auto";
+  icon?: React.ReactNode;
 };
 
 export function CustomSelect({
@@ -29,7 +31,9 @@ export function CustomSelect({
   placeholder = "Select an option",
   buttonClassName = "",
   dropdownClassName = "",
-  direction = "auto"
+  containerClassName = "",
+  direction = "auto",
+  icon
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
@@ -63,7 +67,7 @@ export function CustomSelect({
   const selectedOption = options.find((opt) => opt.value === value);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={cn("relative w-full", containerClassName)}>
       <button
         type="button"
         onClick={handleToggle}
@@ -74,6 +78,7 @@ export function CustomSelect({
         )}
       >
         <div className="flex items-center gap-2 truncate text-left">
+          {icon && <span className="shrink-0 text-slate-500">{icon}</span>}
           {selectedOption?.initials && (
             <span
               className={cn(

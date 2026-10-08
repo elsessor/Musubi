@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Calendar, Lock, UserCheck, Zap } from "lucide-react";
+import { AlertTriangle, Calendar, Lock, Star, UserCheck, Zap } from "lucide-react";
 import type { Task, TaskPriority } from "./types";
 
 const priorityConfig: Record<TaskPriority, { label: string; classes: string }> = {
@@ -14,9 +14,11 @@ type TaskCardProps = {
   task: Task;
   onDragStart?: (taskId: string) => void;
   onReassign?: (task: Task) => void;
+  onRateTask?: (task: Task) => void;
+  isLeader?: boolean;
 };
 
-export function TaskCard({ task, onDragStart, onReassign }: TaskCardProps) {
+export function TaskCard({ task, onDragStart, onReassign, onRateTask, isLeader }: TaskCardProps) {
   const pCfg = priorityConfig[task.priority];
 
   return (
@@ -44,6 +46,29 @@ export function TaskCard({ task, onDragStart, onReassign }: TaskCardProps) {
           <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
             <Zap size={10} /> AI Generated
           </span>
+        )}
+
+        {/* Rating Badge or Leader Review Button */}
+        {task.status === "Completed" && (
+          typeof task.rating === "number" ? (
+            <span
+              title={task.ratingFeedback ? `Leader Feedback: "${task.ratingFeedback}"` : `Rating: ${task.rating} / 5`}
+              className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200"
+            >
+              <Star size={10} className="fill-amber-400 text-amber-400" /> {task.rating}/5
+            </span>
+          ) : isLeader && onRateTask ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRateTask(task);
+              }}
+              className="inline-flex items-center gap-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold transition cursor-pointer"
+            >
+              <Star size={10} className="fill-amber-400 text-amber-400" /> Review
+            </button>
+          ) : null
         )}
       </div>
 

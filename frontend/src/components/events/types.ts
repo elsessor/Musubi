@@ -38,6 +38,13 @@ export type Task = {
   matchPercentage?: number;
   committee?: string;
   nudges?: Nudge[];
+
+  // Rating & AI Training fields
+  rating?: number;
+  ratingFeedback?: string;
+  ratedAt?: string;
+  ratedBy?: string;
+  needsRating?: boolean;
 };
 
 export type Event = {

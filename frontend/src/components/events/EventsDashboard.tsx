@@ -19,6 +19,10 @@ import type { Event, EventStatus } from "./types";
 import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { CustomSelect } from "@/components/ui/CustomSelect";
+
+import { useAuthStore } from "@/store/authStore";
+import { updateEventFirestore } from "@/services/events.service";
 
 type StatusFilter = EventStatus | "All";
 type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
@@ -112,7 +116,6 @@ function buildCalendarDays(currentDate: Date, events: Event[]) {
           return true;
         }
       } else {
-        // Fallback placement for TBD or unparseable dates: distribute evenly across calendar
         const fallbackDays = [5, 15, 25, 1, 10, 20];
         const assignedDay = fallbackDays[evtIdx % fallbackDays.length];
         if (d === assignedDay) return true;
@@ -147,14 +150,27 @@ type EventsDashboardProps = {
   isLeader?: boolean;
   onSelectEvent: (event: Event) => void;
   onNewEvent: () => void;
+  onUpdateEventStatus?: (eventId: string, newStatus: EventStatus) => void;
   committees?: { id: string; name: string }[];
 };
 
-export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent, committees = [] }: EventsDashboardProps) {
+export function EventsDashboard({
+  events,
+  isLeader = true,
+  onSelectEvent,
+  onNewEvent,
+  onUpdateEventStatus,
+  committees = []
+}: EventsDashboardProps) {
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date(2026, 7, 1)); // Default Aug 2026
+  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date(2026, 7, 1));
+
+  // Drag and drop state for Event Cards in Kanban view
+  const [draggedEventId, setDraggedEventId] = useState<string | null>(null);
+  const [dragOverEventColumn, setDragOverEventColumn] = useState<string | null>(null);
 
   useEffect(() => {
     if (events.length > 0) {
@@ -279,6 +295,40 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
     setDragOverStatusPill(null);
   }
 
+  async function handleDropEventCardOnColumn(targetStatusName: string) {
+    if (!draggedEventId) return;
+    const eventToMove = events.find((e) => e.id === draggedEventId);
+    if (!eventToMove || eventToMove.status === targetStatusName) {
+      setDraggedEventId(null);
+      setDragOverEventColumn(null);
+      return;
+    }
+
+    const newStatus = targetStatusName as EventStatus;
+    const newProgress =
+      newStatus === "Completed"
+        ? 100
+        : eventToMove.status === "Completed" && eventToMove.progress === 100
+        ? 50
+        : eventToMove.progress;
+
+    if (onUpdateEventStatus) {
+      onUpdateEventStatus(eventToMove.id, newStatus);
+    }
+
+    setDraggedEventId(null);
+    setDragOverEventColumn(null);
+
+    try {
+      await updateEventFirestore(firebaseUser, eventToMove.id, {
+        status: newStatus,
+        progress: newProgress,
+      });
+    } catch (err) {
+      console.error("Failed to update event status in Firestore on drop:", err);
+    }
+  }
+
   const activeCount    = events.filter((e) => e.status === "Active").length;
   const planningCount  = events.filter((e) => e.status === "Planning").length;
   const completedCount = events.filter((e) => e.status === "Completed").length;
@@ -339,21 +389,21 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <div className="relative flex items-center">
-            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
-            <select
-              value={selectedCommittee}
-              onChange={(e) => setSelectedCommittee(e.target.value)}
-              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
-            >
-              <option value="All">All Committees</option>
-              {allCommitteeNames.map((commName) => (
-                <option key={commName} value={commName}>
-                  {commName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <CustomSelect
+            value={selectedCommittee}
+            onChange={setSelectedCommittee}
+            options={[
+              { value: "All", label: "All Committees" },
+              ...allCommitteeNames.map((commName) => ({
+                value: commName,
+                label: commName,
+              })),
+            ]}
+            icon={<SlidersHorizontal size={13} className="text-slate-400" />}
+            containerClassName="w-auto min-w-[150px]"
+            buttonClassName="h-8 rounded-xl bg-white border-slate-200 px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            dropdownClassName="w-48 shadow-xl border-slate-200/90 rounded-2xl"
+          />
 
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">
@@ -594,23 +644,46 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
             const isColDraggable = isLeader;
             const isDraggingCol = draggedStatusPill === status;
             const isDragOverCol = dragOverStatusPill === status;
+            const isDragOverForEvent = dragOverEventColumn === status && Boolean(draggedEventId);
 
             return (
               <div
                 key={status}
-                className={`flex flex-col gap-3 transition-all ${
-                  isDraggingCol ? "opacity-30 scale-95" : ""
-                } ${isDragOverCol ? "ring-2 ring-blue-500 rounded-2xl p-1 bg-blue-50/40" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (draggedEventId) {
+                    setDragOverEventColumn(status);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverEventColumn === status) setDragOverEventColumn(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedEventId) {
+                    handleDropEventCardOnColumn(status);
+                  }
+                }}
+                className={`flex flex-col gap-3 rounded-2xl p-2.5 transition-all min-h-[340px] ${
+                  isDraggingCol ? "opacity-30 scale-95 border-2 border-dashed border-blue-400" : ""
+                } ${
+                  isDragOverCol ? "ring-2 ring-blue-500 bg-blue-50/40" : ""
+                } ${
+                  isDragOverForEvent
+                    ? "ring-2 ring-blue-500 bg-blue-50/60 shadow-inner"
+                    : "bg-slate-50/50 border border-slate-100"
+                }`}
               >
+                {/* Column header */}
                 <div
-                  draggable={isColDraggable}
+                  draggable={isColDraggable && !draggedEventId}
                   onDragStart={(e) => {
-                    if (!isColDraggable) return;
+                    if (!isColDraggable || draggedEventId) return;
                     e.dataTransfer.setData("text/plain", status);
                     setDraggedStatusPill(status);
                   }}
                   onDragOver={(e) => {
-                    if (!isLeader) return;
+                    if (!isLeader || draggedEventId) return;
                     e.preventDefault();
                     if (draggedStatusPill && draggedStatusPill !== status) {
                       setDragOverStatusPill(status);
@@ -620,7 +693,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                     if (dragOverStatusPill === status) setDragOverStatusPill(null);
                   }}
                   onDrop={(e) => {
-                    if (!isColDraggable) return;
+                    if (!isColDraggable || draggedEventId) return;
                     e.preventDefault();
                     handleDropStatusPill(status);
                   }}
@@ -642,31 +715,53 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
                   <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold">{statusEvents.length}</span>
                 </div>
 
-                <div className="space-y-3">
-                  {statusEvents.map((event) => (
-                    <article
-                      key={event.id}
-                      onClick={() => onSelectEvent(event)}
-                      className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow cursor-pointer"
-                    >
-                      <div className={`h-1 w-full rounded-full ${theme.dot} mb-3`} />
-                      <h4 className="text-sm font-bold text-slate-900">{event.title}</h4>
-                      <div className="mt-2.5">
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                          <span>{event.progress}% done</span>
-                          <span>👥 {event.memberCount}</span>
+                {/* Event Cards */}
+                <div className="flex-1 space-y-3">
+                  {statusEvents.map((event) => {
+                    const isCardDragging = draggedEventId === event.id;
+                    return (
+                      <article
+                        key={event.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          e.dataTransfer.setData("text/plain", event.id);
+                          setDraggedEventId(event.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggedEventId(null);
+                          setDragOverEventColumn(null);
+                        }}
+                        onClick={() => onSelectEvent(event)}
+                        className={`group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:shadow-md cursor-grab active:cursor-grabbing ${
+                          isCardDragging ? "opacity-30 scale-95 border-2 border-dashed border-blue-400 shadow-none" : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className={`h-1 flex-1 rounded-full ${theme.dot}`} />
+                          <GripVertical size={13} className="ml-2 text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
                         </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                          <div className={`h-full rounded-full ${theme.dot}`} style={{ width: `${event.progress}%` }} />
+                        <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{event.title}</h4>
+                        {event.description && (
+                          <p className="mt-1 text-xs text-slate-500 line-clamp-2 font-medium">{event.description}</p>
+                        )}
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
+                            <span>{event.progress}% done</span>
+                            <span>👥 {event.memberCount}</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                            <div className={`h-full rounded-full ${theme.dot}`} style={{ width: `${event.progress}%` }} />
+                          </div>
                         </div>
-                      </div>
-                      <p className="mt-3 text-[11px] font-medium text-slate-500">📅 {event.startDate}</p>
-                    </article>
-                  ))}
+                        <p className="mt-3 text-[11px] font-medium text-slate-500">📅 {event.startDate}</p>
+                      </article>
+                    );
+                  })}
 
                   {statusEvents.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center text-xs text-slate-400 font-medium">
-                      No events
+                    <div className="flex h-32 items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-white/50 text-center text-xs text-slate-400 font-medium transition-colors">
+                      {isDragOverForEvent ? "Drop card here" : "No events"}
                     </div>
                   )}
                 </div>

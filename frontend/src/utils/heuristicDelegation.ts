@@ -150,31 +150,45 @@ export function findBestMemberForSubtask(
     const Am = (assignedCounts ? assignedCounts[member.name] || 0 : 0) + (member.activeTasksCount || 0);
     const Wm = Am / maxThreshold;
 
-    // 3. Reliability Indicator (R_m = C_ontime / C_total, default 1.0)
+    // 3. Reliability Indicator (R_m) combining on-time performance & Leader Star Ratings (1.0 to 5.0★)
     let Rm = 1.0;
     if (typeof member.completedTotal === "number" && member.completedTotal > 0) {
       const onTime = typeof member.completedOnTime === "number" ? member.completedOnTime : member.completedTotal;
       Rm = Math.min(1.0, Math.max(0.0, onTime / member.completedTotal));
     }
 
-    // 4. Composite Match Score Formula: CS_m = (w1 * S_m) - (w2 * W_m) + (w3 * R_m)
-    const CSm = (W1_SKILL * Sm) - (W2_WORKLOAD * Wm) + (W3_RELIABILITY * Rm);
+    const avgRating = typeof member.averageRating === "number" ? member.averageRating : 5.0;
+    const ratingFactor = Math.min(1.0, Math.max(0.2, avgRating / 5.0));
+    Rm = Math.min(1.0, Math.max(0.1, Rm * ratingFactor));
+
+    // Low Rating Penalty: Members rated below 3.0 stars are flagged as unreliable
+    let ratingPenalty = 0;
+    if (avgRating < 3.0) {
+      ratingPenalty = (3.0 - avgRating) * 0.25;
+    }
+
+    // 4. Composite Match Score Formula: CS_m = (w1 * S_m) - (w2 * W_m) + (w3 * R_m) - ratingPenalty
+    const CSm = (W1_SKILL * Sm) - (W2_WORKLOAD * Wm) + (W3_RELIABILITY * Rm) - ratingPenalty;
 
     // Human-readable AI confidence match score (50% - 98%)
     let displayScore = Math.round(((CSm + 0.30) / 1.0) * 100);
-    if (matchedSkills.length > 0 || Sm >= 0.7) {
+    if (avgRating < 3.0) {
+      displayScore = Math.min(60, Math.max(40, displayScore - 20));
+    } else if (matchedSkills.length > 0 || Sm >= 0.7) {
       displayScore = Math.min(98, Math.max(75, displayScore));
     } else {
       displayScore = Math.min(65, Math.max(50, displayScore));
     }
 
     let explanation = "";
-    if (matchedSkills.length > 0) {
-      explanation = `Jaccard Skill Similarity S_m = ${Sm.toFixed(2)} (${matchedSkills.join(", ")})`;
+    if (avgRating < 3.0) {
+      explanation = `Unreliable candidate flag (${avgRating.toFixed(1)}★ rating). Low rating penalty applied.`;
+    } else if (matchedSkills.length > 0) {
+      explanation = `Skill Match S_m = ${Sm.toFixed(2)} (${matchedSkills.join(", ")}), Rating = ${avgRating.toFixed(1)}★`;
     } else if (Sm >= 0.7) {
-      explanation = `Matched role/name: ${member.name} (${member.position || member.role})`;
+      explanation = `Matched role: ${member.name} (${member.position || member.role}) — ${avgRating.toFixed(1)}★ rating`;
     } else {
-      explanation = `Assigned by capacity: W_m = ${Wm.toFixed(2)} (${Am}/${maxThreshold} tasks), R_m = ${Rm.toFixed(2)}`;
+      explanation = `Capacity assignment: W_m = ${Wm.toFixed(2)}, R_m = ${Rm.toFixed(2)} (${avgRating.toFixed(1)}★ rating)`;
     }
 
     return {
@@ -197,14 +211,21 @@ export function findBestMemberForSubtask(
     eligiblePool = candidateScores;
   }
 
-  // Decision Criteria 2 & 3: Select highest positive CS_m, tie-broken by lowest absolute Workload Score (W_m)
+  // Decision Criteria 2 & 3: Select highest positive CS_m, tie-broken by lowest absolute Workload Score (W_m) & higher star rating
   eligiblePool.sort((a, b) => {
     const diff = b.compositeScore - a.compositeScore;
     if (Math.abs(diff) > 0.0001) {
       return diff;
     }
-    // Tie-breaker: candidate with lower absolute Workload Score (W_m)
-    return a.workloadScore - b.workloadScore;
+    // Tie-breaker 1: candidate with lower absolute Workload Score (W_m)
+    const wDiff = a.workloadScore - b.workloadScore;
+    if (Math.abs(wDiff) > 0.0001) {
+      return wDiff;
+    }
+    // Tie-breaker 2: candidate with higher average star rating
+    const ratingA = typeof a.member.averageRating === "number" ? a.member.averageRating : 5.0;
+    const ratingB = typeof b.member.averageRating === "number" ? b.member.averageRating : 5.0;
+    return ratingB - ratingA;
   });
 
   const winner = eligiblePool[0];

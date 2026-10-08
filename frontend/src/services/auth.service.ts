@@ -59,6 +59,8 @@ export type OrganizationMember = {
   activeTasksCount?: number;
   completedOnTime?: number;
   completedTotal?: number;
+  averageRating?: number;
+  totalRatingsCount?: number;
 };
 
 export type OrganizationJoinRequest = {

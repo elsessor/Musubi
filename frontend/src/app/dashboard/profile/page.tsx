@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import {
+  Award,
   Calendar,
   Check,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   Loader2,
   Plus,
   Sparkles,
+  Star,
   User,
   X
 } from "lucide-react";
@@ -34,6 +36,17 @@ type UserProfileData = {
   birthdate: string;
   skills: string[];
   status: string;
+  averageRating: number;
+  totalRatingsCount: number;
+  ratingsHistory: Array<{
+    taskId: string;
+    taskTitle: string;
+    eventTitle?: string;
+    rating: number;
+    feedback?: string;
+    date: string;
+    ratedByName?: string;
+  }>;
 };
 
 export default function DashboardProfilePage() {
@@ -57,7 +70,10 @@ export default function DashboardProfilePage() {
     program: "",
     birthdate: "",
     skills: profile?.skills || [],
-    status: "Available"
+    status: "Available",
+    averageRating: 5.0,
+    totalRatingsCount: 0,
+    ratingsHistory: []
   });
 
   const [events, setEvents] = useState<Event[]>([]);
@@ -113,7 +129,10 @@ export default function DashboardProfilePage() {
             program: data.program || prev.program || "",
             birthdate: data.birthdate || prev.birthdate || "",
             skills: Array.isArray(data.skills) ? data.skills : (profile?.skills || prev.skills),
-            status: data.availability || data.status || "Available"
+            status: data.availability || data.status || "Available",
+            averageRating: typeof data.averageRating === "number" ? data.averageRating : prev.averageRating,
+            totalRatingsCount: typeof data.totalRatingsCount === "number" ? data.totalRatingsCount : prev.totalRatingsCount,
+            ratingsHistory: Array.isArray(data.ratingsHistory) ? data.ratingsHistory : prev.ratingsHistory
           }));
         }
         setLoading(false);
@@ -473,8 +492,104 @@ export default function DashboardProfilePage() {
 
         {/* Main Content Grid (3 Columns) */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Left Column (User Details & Skill Keywords) */}
+          {/* Left Column (User Details, Rating & Skill Keywords) */}
           <div className="space-y-6 lg:col-span-1">
+            {/* Performance & AI Delegation Rating Card */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600">
+                    Leader Reviews &amp; AI Training
+                  </span>
+                  <h3 className="text-base font-extrabold text-slate-900 mt-0.5">
+                    Performance Rating
+                  </h3>
+                </div>
+                <span className="flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-500 border border-amber-200">
+                  <Star size={18} className="fill-amber-400" />
+                </span>
+              </div>
+
+              {/* Big Star Score Display */}
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-black text-slate-900">
+                  {userData.averageRating.toFixed(1)}
+                </span>
+                <span className="text-sm font-bold text-slate-400">/ 5.0</span>
+              </div>
+
+              {/* Star visuals */}
+              <div className="flex items-center gap-1.5">
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const isFilled = star <= Math.round(userData.averageRating);
+                  return (
+                    <Star
+                      key={star}
+                      size={18}
+                      className={
+                        isFilled ? "fill-amber-400 text-amber-400" : "fill-slate-100 text-slate-300"
+                      }
+                    />
+                  );
+                })}
+                <span className="ml-2 text-xs font-semibold text-slate-500">
+                  ({userData.totalRatingsCount} {userData.totalRatingsCount === 1 ? "rating" : "ratings"})
+                </span>
+              </div>
+
+              {/* Reliability Status Badge */}
+              <div>
+                {userData.averageRating >= 4.5 ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 border border-emerald-200/80 text-emerald-800 text-xs font-bold">
+                    <Award size={16} className="text-emerald-600 shrink-0" />
+                    <span>Priority AI Delegation ⭐ (Top Performer)</span>
+                  </div>
+                ) : userData.averageRating >= 3.5 ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-blue-50 p-3 border border-blue-200/80 text-blue-800 text-xs font-bold">
+                    <Award size={16} className="text-blue-600 shrink-0" />
+                    <span>Reliable Team Member</span>
+                  </div>
+                ) : userData.averageRating >= 2.5 ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-slate-100 p-3 border border-slate-200 text-slate-700 text-xs font-bold">
+                    <span>Satisfactory Performance</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-3 border border-rose-200 text-rose-800 text-xs font-bold">
+                    <span>⚠️ Low Rating Threshold — Unreliable Flagged</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Ratings History List */}
+              {userData.ratingsHistory && userData.ratingsHistory.length > 0 && (
+                <div className="pt-2 space-y-2.5 border-t border-slate-100">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Recent Leader Feedback
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {userData.ratingsHistory.map((item, idx) => (
+                      <div key={idx} className="rounded-xl bg-slate-50 p-2.5 border border-slate-100 text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800 line-clamp-1">{item.taskTitle}</span>
+                          <span className="flex items-center gap-0.5 text-[11px] font-extrabold text-amber-600 shrink-0">
+                            <Star size={11} className="fill-amber-400 text-amber-400" /> {item.rating}/5
+                          </span>
+                        </div>
+                        {item.feedback && (
+                          <p className="text-[11px] text-slate-600 italic leading-snug">
+                            &quot;{item.feedback}&quot;
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          {item.ratedByName || "Leader"} · {item.date}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* User Details Card */}
             <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
               <div className="divide-y divide-slate-100 text-xs">

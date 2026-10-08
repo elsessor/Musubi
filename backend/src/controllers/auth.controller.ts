@@ -31,6 +31,7 @@ import {
   reassignMemberForAdmin,
   reviewOrganizationJoinRequest,
   reviewOrganizationRequest,
+  rateTaskForLeader,
   updateEventForUser,
   updateMemberForAdmin,
   updateMemberRoleForAdmin,
@@ -587,6 +588,26 @@ export async function getAnnouncementsController(request: Request, response: Res
     const orgId = request.query.orgId as string | undefined;
     const announcements = await getAnnouncementsService(uid, orgId);
     response.status(200).json({ announcements });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function rateTaskController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const authReq = request as AuthenticatedRequest;
+    const uid = authReq.authUser?.uid;
+    if (!uid) throw new AppError("User authentication is required.", 401);
+
+    const { eventId, taskId } = request.params;
+    const { rating, feedback } = request.body;
+
+    if (typeof rating !== "number" || rating < 1 || rating > 5) {
+      throw new AppError("Rating must be a number between 1 and 5 stars.", 400);
+    }
+
+    const result = await rateTaskForLeader(uid, eventId, taskId, rating, feedback);
+    response.status(200).json(result);
   } catch (error) {
     next(error);
   }

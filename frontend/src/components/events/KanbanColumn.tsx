@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { GripVertical, Plus } from "lucide-react";
 import type { Task, TaskStatus } from "./types";
 import { TaskCard } from "./TaskCard";
@@ -12,6 +13,7 @@ type KanbanColumnProps = {
   onDragStart?: (taskId: string) => void;
   onDrop?: (status: TaskStatus) => void;
   onReassignTask?: (task: Task) => void;
+  onRateTask?: (task: Task) => void;
   customStatuses?: CustomStatusConfig[];
   isLeader?: boolean;
   onColumnDragStart?: (status: TaskStatus) => void;
@@ -28,6 +30,7 @@ export function KanbanColumn({
   onDragStart,
   onDrop,
   onReassignTask,
+  onRateTask,
   customStatuses,
   isLeader = false,
   onColumnDragStart,
@@ -38,13 +41,20 @@ export function KanbanColumn({
 }: KanbanColumnProps) {
   const theme = getStatusTheme(status, customStatuses);
   const isDraggableColumn = Boolean(isLeader && onColumnDragStart);
+  const [isTaskOver, setIsTaskOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    if (!isTaskOver) setIsTaskOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsTaskOver(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsTaskOver(false);
     onDrop?.(status);
   };
 
@@ -52,8 +62,9 @@ export function KanbanColumn({
     <div
       className={`flex h-full min-w-[280px] max-w-[300px] flex-col rounded-2xl bg-[#f4f6f9] transition-all ${
         isColumnDragging ? "opacity-30 scale-95 border-2 border-dashed border-blue-400" : ""
-      } ${isColumnDragOver ? "ring-2 ring-blue-500 bg-blue-50/50" : ""}`}
+      } ${isColumnDragOver || isTaskOver ? "ring-2 ring-blue-500 bg-blue-50/60 shadow-inner" : ""}`}
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Column header */}
@@ -96,7 +107,7 @@ export function KanbanColumn({
           </div>
         ) : (
           tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onDragStart={onDragStart} onReassign={onReassignTask} />
+            <TaskCard key={task.id} task={task} onDragStart={onDragStart} onReassign={onReassignTask} onRateTask={onRateTask} isLeader={isLeader} />
           ))
         )}
       </div>

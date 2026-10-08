@@ -1365,5 +1365,111 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
   return list;
 }
 
+export async function rateTaskForLeader(
+  uid: string,
+  eventId: string,
+  taskId: string,
+  rating: number,
+  feedback?: string
+) {
+  const leader = await getCurrentUser(uid);
+  if (leader.role !== "Student Leader" && leader.role !== "Admin") {
+    throw new AppError("Only Student Leaders or Admins can rate member tasks.", 403);
+  }
+
+  const docRef = firestore.collection("events").doc(eventId);
+  const snap = await docRef.get();
+  if (!snap.exists) throw new AppError("Event not found.", 404);
+
+  const eventData = snap.data() ?? {};
+  const tasks: any[] = Array.isArray(eventData.tasks) ? eventData.tasks : [];
+  const taskIndex = tasks.findIndex((t) => t.id === taskId || t.subtaskUID === taskId);
+  if (taskIndex === -1) throw new AppError("Task not found in event.", 404);
+
+  const task = tasks[taskIndex];
+  const validatedRating = Math.min(5, Math.max(1, Math.round(rating)));
+
+  const updatedTask = {
+    ...task,
+    rating: validatedRating,
+    ratingFeedback: feedback ? feedback.trim() : "",
+    ratedAt: new Date().toISOString(),
+    ratedBy: leader.fullName || "Student Leader",
+    needsRating: false
+  };
+
+  tasks[taskIndex] = updatedTask;
+  await docRef.update({ tasks, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+
+  const assigneeName = (task.assignee?.name || task.assignedMemberName || "").trim();
+  const assigneeUID = task.assignedMemberUID || null;
+
+  if (assigneeUID || assigneeName) {
+    try {
+      let userDocRef: FirebaseFirestore.DocumentReference | null = null;
+      if (assigneeUID) {
+        userDocRef = firestore.collection("users").doc(assigneeUID);
+      } else if (assigneeName && leader.organizationId) {
+        const userSnap = await firestore
+          .collection("users")
+          .where("organizationId", "==", leader.organizationId)
+          .get();
+        const foundDoc = userSnap.docs.find((d) => {
+          const name = (d.data().fullName || d.data().name || "").trim().toLowerCase();
+          return name === assigneeName.toLowerCase() || name.includes(assigneeName.toLowerCase());
+        });
+        if (foundDoc) {
+          userDocRef = foundDoc.ref;
+        }
+      }
+
+      if (userDocRef) {
+        const userSnap = await userDocRef.get();
+        if (userSnap.exists) {
+          const userData = userSnap.data() ?? {};
+          const currentTotal = typeof userData.totalRatingsCount === "number" ? userData.totalRatingsCount : 0;
+          const currentAvg = typeof userData.averageRating === "number" ? userData.averageRating : 5.0;
+          const currentHistory: any[] = Array.isArray(userData.ratingsHistory) ? userData.ratingsHistory : [];
+
+          const newTotal = currentTotal + 1;
+          const newAvg = Number((((currentAvg * currentTotal) + validatedRating) / newTotal).toFixed(1));
+
+          const newHistoryItem = {
+            taskId: task.id || taskId,
+            taskTitle: task.title || "Completed Task",
+            eventTitle: eventData.title || "Event",
+            rating: validatedRating,
+            feedback: feedback ? feedback.trim() : "",
+            date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            ratedByName: leader.fullName || "Student Leader"
+          };
+
+          await userDocRef.update({
+            averageRating: newAvg,
+            totalRatingsCount: newTotal,
+            ratingsHistory: [newHistoryItem, ...currentHistory]
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[rateTaskForLeader] Error updating member profile rating:", err);
+    }
+  }
+
+  writeAuditLog({
+    actorUID: uid,
+    actorName: leader.fullName,
+    actorRole: leader.role,
+    action: `Rated task "${task.title || "Task"}" (${validatedRating}★) for ${assigneeName || "Member"}`,
+    actionCategory: "Events & Tasks",
+    targetType: "Task Rating",
+    targetName: task.title || "Task",
+    orgId: leader.organizationId
+  });
+
+  return { success: true, updatedTask };
+}
+
+
 
 

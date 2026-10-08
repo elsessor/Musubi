@@ -203,3 +203,28 @@ export async function clearMockEventsFirestore(user: User | null, orgId?: string
     // Ignore cleanup errors
   }
 }
+
+export async function rateTaskInEvent(
+  user: User | null,
+  eventId: string,
+  taskId: string,
+  rating: number,
+  feedback?: string
+): Promise<void> {
+  const token = await getValidToken(user);
+  if (token) {
+    const res = await fetch(`${API_BASE_URL}/auth/events/${eventId}/tasks/${taskId}/rate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ rating, feedback })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(typeof err.message === "string" ? err.message : "Failed to rate task.");
+    }
+    return;
+  }
+}

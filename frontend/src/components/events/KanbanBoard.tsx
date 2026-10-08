@@ -14,6 +14,7 @@ import {
   Rows,
   Search,
   SlidersHorizontal,
+  Star,
   Table,
   Users,
   XCircle
@@ -31,8 +32,10 @@ import { TaskExpandedView } from "./TaskExpandedView";
 import { TaskCalendarView } from "./TaskCalendarView";
 
 import { useAuthStore } from "@/store/authStore";
-import { updateEventFirestore } from "@/services/events.service";
+import { updateEventFirestore, rateTaskInEvent } from "@/services/events.service";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { CustomSelect } from "@/components/ui/CustomSelect";
+import { TaskRatingModal } from "./TaskRatingModal";
 
 const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
@@ -63,9 +66,14 @@ export function KanbanBoard({
   onBack,
   onUpdateEvent,
   committees = [],
-  isLeader = true
+  isLeader: isLeaderProp
 }: KanbanBoardProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const profile = useAuthStore((state) => state.profile);
+
+  const isLeader = profile
+    ? profile.role === "Student Leader" || profile.role === "Admin"
+    : Boolean(isLeaderProp);
   const [currentEvent, setCurrentEvent] = useState<Event>(event);
   const [tasks, setTasks] = useState<Task[]>(event.tasks || []);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -77,6 +85,7 @@ export function KanbanBoard({
   // Modals state
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
+  const [ratingTaskTarget, setRatingTaskTarget] = useState<Task | null>(null);
   const [statusModalTarget, setStatusModalTarget] = useState<"Completed" | "Cancelled" | null>(null);
 
   // Custom task statuses state & localStorage (scoped per event)
@@ -288,8 +297,47 @@ export function KanbanBoard({
   }
 
   function handleUpdateTaskStatus(taskId: string, targetStatus: TaskStatus) {
-    const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: targetStatus } : t));
+    let taskToRate: Task | null = null;
+    const updatedTasks = tasks.map((t) => {
+      if (t.id === taskId) {
+        const isNewlyCompleted = targetStatus === "Completed" && t.status !== "Completed";
+        const updated = {
+          ...t,
+          status: targetStatus,
+          ...(isNewlyCompleted ? { needsRating: true } : {})
+        };
+        if (isNewlyCompleted) taskToRate = updated;
+        return updated;
+      }
+      return t;
+    });
+
     syncEvent(updatedTasks);
+
+    if (taskToRate && isLeader) {
+      setRatingTaskTarget(taskToRate);
+    }
+  }
+
+  async function handleRateTaskSubmit(taskId: string, rating: number, feedback: string) {
+    const updatedTasks = tasks.map((t) =>
+      t.id === taskId
+        ? {
+            ...t,
+            rating,
+            ratingFeedback: feedback,
+            ratedAt: new Date().toISOString(),
+            ratedBy: profile?.fullName || "Student Leader",
+            needsRating: false
+          }
+        : t
+    );
+
+    syncEvent(updatedTasks);
+
+    await rateTaskInEvent(firebaseUser, currentEvent.id, taskId, rating, feedback).catch((err) => {
+      console.error("Failed to submit task rating to backend:", err);
+    });
   }
 
   function handleUpdateTaskPriority(taskId: string, newPriority: TaskPriority) {
@@ -332,6 +380,9 @@ export function KanbanBoard({
   }
 
   const completedCount = tasks.filter((t) => t.status === "Completed").length;
+  const unratedCompletedTasks = tasks.filter(
+    (t) => t.status === "Completed" && (t.needsRating || typeof t.rating !== "number")
+  );
 
   return (
     <div className="flex h-full flex-col animate-in fade-in duration-200">
@@ -386,6 +437,32 @@ export function KanbanBoard({
           )}
         </div>
       </div>
+
+      {/* Pending Leader Review & Rating Banner */}
+      {isLeader && unratedCompletedTasks.length > 0 && (
+        <div className="mb-4 flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-slate-800 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 border border-amber-200 shrink-0">
+              <Star size={16} className="fill-amber-400 text-amber-400" />
+            </span>
+            <div>
+              <p className="text-xs font-bold text-slate-900">
+                {unratedCompletedTasks.length} Completed {unratedCompletedTasks.length === 1 ? "Task" : "Tasks"} Awaiting Review
+              </p>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Review completed work to rate member execution and update AI delegation metrics.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRatingTaskTarget(unratedCompletedTasks[0])}
+            className="rounded-xl bg-[#213f68] hover:bg-[#1a3254] px-4 py-2 text-xs font-semibold text-white shadow-xs transition cursor-pointer shrink-0"
+          >
+            Review &amp; Rate Task
+          </button>
+        </div>
+      )}
 
       {/* Event Header Summary Card */}
       <div className="mb-4 rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-xs">
@@ -453,21 +530,21 @@ export function KanbanBoard({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <div className="relative flex items-center">
-            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
-            <select
-              value={selectedCommittee}
-              onChange={(e) => setSelectedCommittee(e.target.value)}
-              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
-            >
-              <option value="All">All Committees</option>
-              {allCommitteeNames.map((commName) => (
-                <option key={commName} value={commName}>
-                  {commName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <CustomSelect
+            value={selectedCommittee}
+            onChange={setSelectedCommittee}
+            options={[
+              { value: "All", label: "All Committees" },
+              ...allCommitteeNames.map((commName) => ({
+                value: commName,
+                label: commName,
+              })),
+            ]}
+            icon={<SlidersHorizontal size={13} className="text-slate-400" />}
+            containerClassName="w-auto min-w-[150px]"
+            buttonClassName="h-8 rounded-xl bg-white border-slate-200 px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            dropdownClassName="w-48 shadow-xl border-slate-200/90 rounded-2xl"
+          />
 
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">
@@ -626,6 +703,7 @@ export function KanbanBoard({
                 onDragStart={(id) => setDraggedId(id)}
                 onDrop={handleDrop}
                 onReassignTask={(t) => setReassignTaskTarget(t)}
+                onRateTask={(t) => setRatingTaskTarget(t)}
                 customStatuses={customStatuses}
                 isLeader={isLeader}
                 onColumnDragStart={(st) => setDraggedStatusPill(st)}
@@ -715,6 +793,16 @@ export function KanbanBoard({
         onReorderStatusOrder={handleReorderStatusOrder}
         onDeleteStatus={handleDeleteCustomStatus}
       />
+
+      {/* Member Task Rating Modal */}
+      {ratingTaskTarget && (
+        <TaskRatingModal
+          isOpen={Boolean(ratingTaskTarget)}
+          onClose={() => setRatingTaskTarget(null)}
+          task={ratingTaskTarget}
+          onRate={handleRateTaskSubmit}
+        />
+      )}
     </div>
   );
 }
