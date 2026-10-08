@@ -33,6 +33,7 @@ import {
   organizationRequestsController,
   organizationsController,
   reassignMemberController,
+  rerollSubtaskController,
   reviewOrganizationJoinRequestController,
   reviewOrganizationRequestController,
   updateAdminMemberController,
@@ -56,6 +57,7 @@ authRouter.patch("/profile", requireAuth, updateProfileController);
 authRouter.patch("/me", requireAuth, updateMeController);
 
 authRouter.post("/atomize", atomizeGoalController);
+authRouter.post("/reroll-subtask", rerollSubtaskController);
 authRouter.get("/events", requireAuth, getEventsController);
 authRouter.post("/events", requireAuth, createEventController);
 authRouter.get("/announcements", requireAuth, getAnnouncementsController);

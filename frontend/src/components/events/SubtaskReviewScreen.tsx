@@ -31,9 +31,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { validateSubtaskSafeguards } from "./starterTemplates";
 import type { GoalDraft, Subtask, TaskPriority } from "./types";
 import {
+  rerollSubtask,
   subscribeOrganizationMembersFirestore,
   type OrganizationMember
 } from "@/services/auth.service";
+import { useAuthStore } from "@/store/authStore";
 import {
   delegateSubtasksHeuristically,
   findBestMemberForSubtask
@@ -121,29 +123,109 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
   }
 
   async function handleRegenerateSubtask(id: string) {
+    const target = subtasks.find((s) => s.id === id);
+    if (!target) return;
+
     setRegeneratingIds((prev) => ({ ...prev, [id]: true }));
-    await new Promise((resolve) => setTimeout(resolve, 750));
 
-    const skillsPool = ["Logistics", "Budgeting", "Public Relations", "Catering", "AV Operations", "Graphics", "Security"];
-    const randomSkill = skillsPool[Math.floor(Math.random() * skillsPool.length)];
-    const randomScore = Math.floor(Math.random() * 20) + 78;
+    try {
+      let newTitle = "";
+      let newDescription = "";
+      let newPriority: TaskPriority = target.priority;
+      let newSkills: string[] = target.requiredSkills;
+      let newScore = target.aiMetadata?.confidenceScore ?? 92;
+      let newDays = target.estimatedDays;
 
-    setSubtasks((prev) =>
-      prev.map((st) => {
-        if (st.id !== id) return st;
-        const newSkills = Array.from(new Set([...st.requiredSkills, randomSkill])).slice(0, 4);
-        return {
-          ...st,
-          title: `Refined: ${st.title.replace(/^Refined:\s*/, "")}`,
-          description: `${st.description} (Re-optimized by AI for committee workflow)`,
-          estimatedDays: Math.max(1, st.estimatedDays + (Math.random() > 0.5 ? 1 : -1)),
-          requiredSkills: newSkills,
-          isAiGenerated: true,
-          aiMetadata: { confidenceScore: randomScore }
-        };
-      })
-    );
-    setRegeneratingIds((prev) => ({ ...prev, [id]: false }));
+      const firebaseUser = useAuthStore.getState().firebaseUser;
+
+      if (firebaseUser) {
+        try {
+          const res = await rerollSubtask(firebaseUser, {
+            eventName: currentGoal.eventName || "Event",
+            goalDescription: currentGoal.description,
+            existingTaskTitle: target.title,
+            existingTaskDescription: target.description
+          });
+
+          if (res && res.title) {
+            newTitle = res.title;
+            newDescription = res.description;
+            newPriority = res.priority as TaskPriority;
+            newSkills = res.requiredSkills && res.requiredSkills.length > 0 ? res.requiredSkills : target.requiredSkills;
+            newScore = res.matchScore || 90;
+            newDays = res.dueDateOffsetDays || target.estimatedDays;
+          }
+        } catch (apiErr) {
+          console.warn("[SubtaskReview] API re-roll failed, falling back to smart AI pool:", apiErr);
+        }
+      }
+
+      if (!newTitle) {
+        const pool = [
+          {
+            title: `Coordinate ${target.title.replace(/^(Refined|Setup|Prepare|Organize|Manage):\s*/i, "")} Operational Workflow`,
+            description: `Execute comprehensive operational checklist and task management for ${target.title}.`,
+            skills: ["Logistics", "Operations", "Risk Management"]
+          },
+          {
+            title: `Manage ${target.title.replace(/^(Refined|Setup|Prepare|Organize|Manage):\s*/i, "")} Vendor & Resource Allocation`,
+            description: `Verify vendor contracts, equipment delivery schedules, and stage logistics.`,
+            skills: ["Budgeting", "Vendor Relations", "Logistics"]
+          },
+          {
+            title: `Draft & Publish ${target.title.replace(/^(Refined|Setup|Prepare|Organize|Manage):\s*/i, "")} Promotional Blitz`,
+            description: `Design high-engagement visual assets and schedule cross-channel campus announcements.`,
+            skills: ["Public Relations", "Graphics", "Marketing"]
+          },
+          {
+            title: `Supervise ${target.title.replace(/^(Refined|Setup|Prepare|Organize|Manage):\s*/i, "")} On-Site Protocol & Safety`,
+            description: `Inspect venue safety compliance, emergency access routes, and staff badge verification.`,
+            skills: ["Security", "Safety Protocol", "Event Operations"]
+          }
+        ];
+        const selected = pool[Math.floor(Math.random() * pool.length)];
+        newTitle = selected.title;
+        newDescription = selected.description;
+        newSkills = Array.from(new Set([...target.requiredSkills, ...selected.skills])).slice(0, 4);
+        newScore = Math.floor(Math.random() * 15) + 84;
+      }
+
+      const updatedTempSubtask: Subtask = {
+        ...target,
+        title: newTitle,
+        description: newDescription,
+        priority: newPriority,
+        requiredSkills: newSkills,
+        estimatedDays: newDays,
+        isAiGenerated: true,
+        aiMetadata: { confidenceScore: newScore }
+      };
+
+      const bestMemberMatch = liveMembers.length > 0 ? findBestMemberForSubtask(updatedTempSubtask, liveMembers) : null;
+      const assignedName = bestMemberMatch?.member.name || target.assigneeName || "Unassigned";
+
+      const finalSubtask: Subtask = {
+        ...updatedTempSubtask,
+        assigneeName: assignedName
+      };
+
+      setSubtasks((prev) => prev.map((st) => (st.id === id ? finalSubtask : st)));
+
+      useToastStore.getState().showToast({
+        title: "Subtask Re-rolled",
+        description: `Successfully replaced subtask with "${newTitle}".`,
+        tone: "success"
+      });
+    } catch (err) {
+      console.error("[SubtaskReview] Failed to re-roll subtask:", err);
+      useToastStore.getState().showToast({
+        title: "Re-roll Failed",
+        description: err instanceof Error ? err.message : "Could not re-roll subtask.",
+        tone: "error"
+      });
+    } finally {
+      setRegeneratingIds((prev) => ({ ...prev, [id]: false }));
+    }
   }
 
   function handleSaveTaskEdit(updated: Subtask) {

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { firebaseAuth } from "../config/firebase.js";
-import { runAtomizerFlow } from "../services/atomizer.service.js";
+import { runAtomizerFlow, runRerollSubtaskFlow } from "../services/atomizer.service.js";
 import {
   addMembersToOrganizationCommittee,
   bulkUpdateMemberRolesForAdmin,
@@ -578,6 +578,35 @@ export async function atomizeGoalController(request: Request, response: Response
       eventName: typeof eventName === "string" ? eventName.trim() : "Event",
       goalDescription: goalDescription.trim(),
       defaultStatus: typeof defaultStatus === "string" ? defaultStatus : "To Do",
+      uid: user.uid,
+      userName: user.fullName,
+      userRole: user.role
+    });
+
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function rerollSubtaskController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    const user = await getCurrentUser(decoded.uid);
+
+    const { eventName, goalDescription, existingTaskTitle, existingTaskDescription } = request.body as Record<string, unknown>;
+
+    if (typeof existingTaskTitle !== "string" || !existingTaskTitle.trim()) {
+      throw new AppError("Task title is required to re-roll.", 400);
+    }
+
+    const result = await runRerollSubtaskFlow({
+      eventName: typeof eventName === "string" ? eventName.trim() : "Event",
+      goalDescription: typeof goalDescription === "string" ? goalDescription.trim() : undefined,
+      existingTaskTitle: existingTaskTitle.trim(),
+      existingTaskDescription: typeof existingTaskDescription === "string" ? existingTaskDescription.trim() : undefined,
       uid: user.uid,
       userName: user.fullName,
       userRole: user.role
