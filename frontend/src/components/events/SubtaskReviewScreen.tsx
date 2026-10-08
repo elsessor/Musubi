@@ -603,6 +603,25 @@ type OldTaskCardProps = {
   onToggleLeaderOnly: () => void;
 };
 
+function formatSubtaskDate(subtask: Subtask): string {
+  if (subtask.deadline) {
+    const parsed = new Date(subtask.deadline);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+  }
+  if (subtask.dueDate) {
+    const parsed = new Date(subtask.dueDate);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+  }
+  const days = typeof subtask.estimatedDays === "number" && subtask.estimatedDays > 0 ? subtask.estimatedDays : 7;
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + days);
+  return targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function OldTaskCard({
   subtask,
   customStatuses,
@@ -695,7 +714,7 @@ function OldTaskCard({
 
         <span className="flex items-center gap-1.5">
           <CalendarIcon size={13} className="text-slate-400" />
-          Aug 11, 2026
+          {formatSubtaskDate(subtask)}
         </span>
       </div>
 
