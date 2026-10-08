@@ -82,6 +82,7 @@ export function KanbanBoard({
 
   const realRoster = Array.isArray(members) && members.length > 0 ? members.map(mapOrgMemberToItem) : undefined;
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverColumnStatus, setDragOverColumnStatus] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [search, setSearch] = useState("");
@@ -444,10 +445,12 @@ export function KanbanBoard({
     const draggedTask = tasks.find((task) => task.id === draggedId);
     if (!draggedTask || !canEditTask(draggedTask)) {
       setDraggedId(null);
+      setDragOverColumnStatus(null);
       return;
     }
     handleUpdateTaskStatus(draggedId, targetStatus);
     setDraggedId(null);
+    setDragOverColumnStatus(null);
   }
 
   const fetchedNames = committees.map((c) => c.name);
@@ -813,7 +816,14 @@ export function KanbanBoard({
                 tasks={getColumnTasks(status)}
                 onAddTask={isLeader ? () => setShowAddTaskModal(true) : undefined}
                 onDragStart={(id) => setDraggedId(id)}
+                onDragEnd={() => {
+                  setDraggedId(null);
+                  setDragOverColumnStatus(null);
+                }}
                 onDrop={handleDrop}
+                onTaskDragOver={(st) => setDragOverColumnStatus(st)}
+                draggedTaskId={draggedId}
+                dragOverColumnStatus={dragOverColumnStatus}
                 onReassignTask={isLeader ? (task) => setReassignTaskTarget(task) : undefined}
                 onSelectTask={(task) => setSelectedDetailTask(task)}
                 onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}

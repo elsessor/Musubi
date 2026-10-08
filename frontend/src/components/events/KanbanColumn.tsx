@@ -10,6 +10,7 @@ type KanbanColumnProps = {
   tasks: Task[];
   onAddTask?: () => void;
   onDragStart?: (taskId: string) => void;
+  onDragEnd?: () => void;
   onDrop?: (status: TaskStatus) => void;
   onReassignTask?: (task: Task) => void;
   onSelectTask?: (task: Task) => void;
@@ -22,6 +23,9 @@ type KanbanColumnProps = {
   isColumnDragging?: boolean;
   isColumnDragOver?: boolean;
   draggedStatusPill?: string | null;
+  draggedTaskId?: string | null;
+  dragOverColumnStatus?: string | null;
+  onTaskDragOver?: (status: TaskStatus) => void;
 };
 
 export function KanbanColumn({
@@ -29,6 +33,7 @@ export function KanbanColumn({
   tasks,
   onAddTask,
   onDragStart,
+  onDragEnd,
   onDrop,
   onReassignTask,
   onSelectTask,
@@ -40,13 +45,20 @@ export function KanbanColumn({
   onColumnDrop,
   isColumnDragging = false,
   isColumnDragOver = false,
-  draggedStatusPill = null
+  draggedStatusPill = null,
+  draggedTaskId = null,
+  dragOverColumnStatus = null,
+  onTaskDragOver
 }: KanbanColumnProps) {
   const theme = getStatusTheme(status, customStatuses);
   const isDraggableColumn = Boolean(isLeader && onColumnDragStart);
+  const isTaskOverTarget = Boolean(draggedTaskId) && dragOverColumnStatus === status;
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    if (draggedTaskId) {
+      onTaskDragOver?.(status);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -58,7 +70,9 @@ export function KanbanColumn({
     <div
       className={`flex h-full min-w-[280px] max-w-[300px] flex-col rounded-2xl bg-[#f4f6f9] transition-all ${
         isColumnDragging ? "opacity-30 scale-95 border-2 border-dashed border-blue-400" : ""
-      } ${isColumnDragOver ? "ring-2 ring-blue-500 bg-blue-50/50" : ""}`}
+      } ${
+        isColumnDragOver || isTaskOverTarget ? "ring-2 ring-blue-500 bg-blue-50/60 shadow-inner" : ""
+      }`}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
@@ -98,15 +112,17 @@ export function KanbanColumn({
       {/* Scrollable task list */}
       <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-3 pb-3">
         {tasks.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-10 text-xs text-slate-400">
-            Drop tasks here
+          <div className="flex flex-1 items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-10 text-xs text-slate-400 font-medium transition-colors">
+            {isTaskOverTarget ? "Drop task here" : "Drop tasks here"}
           </div>
         ) : (
           tasks.map((task) => (
             <TaskCard
               key={task.id}
               task={task}
+              isDragging={draggedTaskId === task.id}
               onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
               onReassign={onReassignTask}
               onSelectTask={onSelectTask}
               onUpdatePriority={onUpdatePriority}
