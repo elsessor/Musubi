@@ -18,6 +18,27 @@ import { useAuthStore } from "@/store/authStore";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 
+export type EventStatusSettings = {
+  configured?: boolean;
+  customStatuses: import("../components/events/statusUtils").CustomStatusConfig[];
+  statusOrder: string[];
+};
+
+export async function eventStatusSettings(user: User | null, orgId: string | null | undefined, settings?: EventStatusSettings): Promise<EventStatusSettings> {
+  const token = await getValidToken(user);
+  if (!token) throw new Error("Sign in again to load status colors.");
+  const query = new URLSearchParams(orgId ? { orgId } : {});
+  const response = await fetch(`${API_BASE_URL}/auth/event-status-settings?${query}`, {
+    method: settings ? "PATCH" : "GET",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: settings ? JSON.stringify(settings) : undefined,
+    cache: "no-store"
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || "Status colors could not be saved.");
+  return data;
+}
+
 async function getValidToken(user: User | null): Promise<string> {
   const firebaseUser = user || useAuthStore.getState().firebaseUser;
   if (firebaseUser) {
@@ -35,9 +56,10 @@ export function normalizeEvent(id: string, data: Record<string, any>): Event {
     id,
     title: typeof data.title === "string" ? data.title : "Untitled Event",
     description: typeof data.description === "string" ? data.description : "",
-    status: (["Active", "Planning", "Completed", "Archived"].includes(data.status)
-      ? data.status
+    status: (typeof data.status === "string" && data.status.trim()
+      ? data.status.trim()
       : "Planning") as EventStatus,
+    eventCustomStatuses: Array.isArray(data.eventCustomStatuses) ? data.eventCustomStatuses : [],
     startDate: typeof data.startDate === "string" ? data.startDate : "TBD",
     endDate: typeof data.endDate === "string" ? data.endDate : "TBD",
     memberCount: typeof data.memberCount === "number" ? data.memberCount : 0,
@@ -59,7 +81,7 @@ export function normalizeEvent(id: string, data: Record<string, any>): Event {
   };
 }
 
-export async function fetchEvents(user: User | null, orgId?: string | null): Promise<Event[]> {
+export async function fetchEvents(user: User | null, orgId?: string | null, throwOnError = false): Promise<Event[]> {
   const token = await getValidToken(user);
   if (token) {
     try {
@@ -74,34 +96,43 @@ export async function fetchEvents(user: User | null, orgId?: string | null): Pro
           return data.events.map((e: any) => normalizeEvent(e.id, e));
         }
       }
+      if (throwOnError) throw new Error("Unable to load your tasks. Please try again.");
     } catch (err) {
+      if (throwOnError) throw err;
       console.warn("fetchEvents error:", err);
     }
   }
+  if (throwOnError) throw new Error("Sign in again to load your tasks.");
   return [];
 }
 
 export function subscribeEventsFirestore(
   user: User | null,
   orgId: string | null | undefined,
-  onData: (events: Event[]) => void
+  onData: (events: Event[]) => void,
+  onError?: (error: unknown) => void
 ): () => void {
   const targetOrgId = orgId && orgId.trim() ? orgId.trim() : null;
 
-  // 1. Initial immediate fetch via secure backend API
-  void fetchEvents(user, targetOrgId).then((events) => {
-    onData(events);
-  });
+  let cancelled = false;
+  const refresh = async () => {
+    try {
+      const events = await fetchEvents(user, targetOrgId, Boolean(onError));
+      if (!cancelled) onData(events);
+    } catch (error) {
+      if (!cancelled) onError?.(error);
+    }
+  };
+  void refresh();
 
   // 2. Poll every 25 seconds (and pause if tab is hidden) to preserve Firestore quota
   const interval = setInterval(() => {
     if (typeof document !== "undefined" && document.hidden) return;
-    void fetchEvents(user, targetOrgId).then((events) => {
-      onData(events);
-    });
+    void refresh();
   }, 25000);
 
   return () => {
+    cancelled = true;
     clearInterval(interval);
   };
 }
@@ -215,4 +246,39 @@ export async function clearMockEventsFirestore(user: User | null, orgId?: string
   } catch {
     // Ignore cleanup errors
   }
+}
+
+async function requestTask(user: User | null, eventId: string, taskId: string, path: string, init?: RequestInit): Promise<Response> {
+  const token = await getValidToken(user);
+  if (!token) throw new Error("Sign in again to update this subtask.");
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_BASE_URL}/auth/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}${path}`, { ...init, headers, cache: "no-store" });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(typeof error.message === "string" ? error.message : "Unable to update this subtask. Please try again.");
+  }
+  return response;
+}
+
+export async function updateTaskStatus(user: User | null, eventId: string, taskId: string, status: Task["status"]): Promise<Task> {
+  const response = await requestTask(user, eventId, taskId, "/status", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+  return (await response.json()).task;
+}
+
+export async function addTaskFileAttachment(user: User | null, eventId: string, taskId: string, file: File): Promise<Task> {
+  const response = await requestTask(user, eventId, taskId, "/attachments/files", {
+    method: "POST", headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(file.name), "X-File-Type": file.type || "application/octet-stream" }, body: file
+  });
+  return (await response.json()).task;
+}
+
+export async function addTaskLinkAttachment(user: User | null, eventId: string, taskId: string, input: { name: string; url: string }): Promise<Task> {
+  const response = await requestTask(user, eventId, taskId, "/attachments/links", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  return (await response.json()).task;
+}
+
+export async function downloadTaskAttachment(user: User | null, eventId: string, taskId: string, attachmentId: string): Promise<Blob> {
+  const response = await requestTask(user, eventId, taskId, `/attachments/${encodeURIComponent(attachmentId)}`);
+  return response.blob();
 }

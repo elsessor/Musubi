@@ -4,7 +4,7 @@ import { Plus, Shield, X } from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
-import type { CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import type { OrganizationMember } from "@/services/auth.service";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
@@ -70,6 +70,7 @@ type AddTaskModalProps = {
   roster?: OrgMemberItem[];
   committees?: { id: string; name: string }[];
   customStatuses?: CustomStatusConfig[];
+  statusOrder?: string[];
 };
 
 export function AddTaskModal({
@@ -78,7 +79,8 @@ export function AddTaskModal({
   onAddTask,
   roster,
   committees = [],
-  customStatuses = []
+  customStatuses = [],
+  statusOrder
 }: AddTaskModalProps) {
   const activeRoster = roster && roster.length > 0 ? roster : MOCK_ROSTER;
   const [title, setTitle] = useState("");
@@ -91,19 +93,18 @@ export function AddTaskModal({
   const [dueDate, setDueDate] = useState("");
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
 
-  const defaultStatuses: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
-  const allStatuses: TaskStatus[] = [
-    ...defaultStatuses,
-    ...customStatuses.map((cs) => cs.name as TaskStatus)
-  ];
+  const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses);
 
   const committeeOptions = committees.map((c) => c.name);
-  const statusOptions: CustomSelectOption[] = allStatuses.map((value) => ({ value, label: value }));
+  const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
+    const theme = getStatusTheme(value, customStatuses);
+    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
+  });
   const priorityOptions: CustomSelectOption[] = ALL_PRIORITIES.map((value) => ({
     value,
     label: value,
     indicatorClass: PRIORITY_CONFIG[value].dot,
-    labelClass: PRIORITY_CONFIG[value].classes
+    selectedClass: PRIORITY_CONFIG[value].classes
   }));
   const assigneeOptions: CustomSelectOption[] = activeRoster.map((member) => ({
     value: member.id,

@@ -5,6 +5,8 @@ import { firebaseAdmin, firebaseAuth, firestore } from "../config/firebase.js";
 import type { FirestoreUser, JwtPayload, LoginResponse, UserRole } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
 import { writeAuditLog } from "../utils/auditLog.js";
+import { recordTaskPerformance } from "../utils/taskPerformance.js";
+import { assertCanEditEvent, preserveTaskAttachments } from "../utils/taskPermissions.js";
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
 const validRoles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -37,6 +39,8 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
     birthdate: typeof data.birthdate === "string" ? data.birthdate : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
     skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
+    availability: typeof data.availability === "string" ? data.availability : null,
+    status: typeof data.status === "string" ? data.status : null,
     onboardingCompleted: data.onboardingCompleted === true,
     createdAt: data.createdAt ?? firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     lastLogin: data.lastLogin ?? firebaseAdmin.firestore.FieldValue.serverTimestamp()
@@ -168,6 +172,8 @@ export async function loginWithFirebaseToken(idToken: string, clientFullName?: s
       birthdate: user.birthdate,
       profilePicture: user.profilePicture,
       skills: user.skills,
+      availability: user.availability,
+      status: user.status,
       onboardingCompleted: user.onboardingCompleted
     }
   };
@@ -239,6 +245,8 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     birthdate: user.birthdate,
     profilePicture: user.profilePicture,
     skills: user.skills,
+    availability: user.availability,
+    status: user.status,
     onboardingCompleted: user.onboardingCompleted
   };
 }
@@ -1264,9 +1272,10 @@ export async function watchAuditLogs(
   return unsubscribe;
 }
 
-export async function createEventForUser(uid: string, input: { orgId?: string; title: string; description?: string; status?: string; startDate?: string; endDate?: string; memberCount?: number; progress?: number; committee?: string; tasks?: any[] }) {
+export async function createEventForUser(uid: string, input: { orgId?: string; title: string; description?: string; status?: string; startDate?: string; endDate?: string; memberCount?: number; progress?: number; committee?: string; tasks?: any[]; customStatuses?: any[]; statusOrder?: string[] }) {
   const user = await getCurrentUser(uid);
   const targetOrgId = input.orgId || user.organizationId || "default-org";
+  assertCanEditEvent(user, targetOrgId);
 
   const eventRef = await firestore.collection("events").add({
     title: input.title.trim(),
@@ -1277,7 +1286,9 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     memberCount: typeof input.memberCount === "number" ? input.memberCount : 1,
     progress: typeof input.progress === "number" ? input.progress : 0,
     committee: input.committee ?? "",
-    tasks: Array.isArray(input.tasks) ? input.tasks : [],
+    customStatuses: Array.isArray(input.customStatuses) ? input.customStatuses : [],
+    statusOrder: Array.isArray(input.statusOrder) ? input.statusOrder : [],
+    tasks: recordTaskPerformance(Array.isArray(input.tasks) ? input.tasks.map((task) => ({ ...task, performanceReview: null, attachments: [] })) : [], [], { uid, fullName: user.fullName, isLeader: false }),
     orgId: targetOrgId,
     createdBy: uid,
     createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
@@ -1305,74 +1316,23 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
 
   const beforeData = snap.data() ?? {};
   const eventOrgId = typeof beforeData.orgId === "string" ? beforeData.orgId : null;
-  const isLeader = user.role === "Student Leader" || user.role === "Admin";
-  if (user.role !== "Admin" && (!eventOrgId || user.organizationId !== eventOrgId)) {
-    throw new AppError("You do not have access to this event.", 403);
-  }
-
-  let updatePayload: Record<string, any>;
-  if (isLeader) {
-    updatePayload = { ...input };
-    delete updatePayload.id;
-  } else {
-    const allowedKeys = new Set(["tasks"]);
-    if (Object.keys(input).some((key) => !allowedKeys.has(key)) || !Array.isArray(input.tasks)) {
-      throw new AppError("Organization members can only update their assigned tasks.", 403);
-    }
-
-    const originalTasks: any[] = Array.isArray(beforeData.tasks) ? beforeData.tasks : [];
-    const submittedTasks: any[] = input.tasks;
-    const submittedById = new Map(submittedTasks.filter((task) => task && typeof task.id === "string").map((task) => [task.id, task]));
-    if (submittedTasks.length !== originalTasks.length || submittedById.size !== originalTasks.length) {
-      throw new AppError("Organization members cannot add or remove tasks.", 403);
-    }
-    let updatedOwnedTask = false;
-    const validPriorities = new Set(["Low", "Medium", "High", "Critical"]);
-    const updatedTasks = originalTasks.map((original) => {
-      const submitted = submittedById.get(original.id);
-      if (!submitted) throw new AppError("Task list does not match this event.", 400);
-      const assigneeName = typeof original.assignedMemberName === "string"
-        ? original.assignedMemberName
-        : typeof original.assignee?.name === "string" ? original.assignee.name : "";
-      const isAssignedToUser = original.assignedMemberUID === uid || (!original.assignedMemberUID && assigneeName.trim().toLowerCase() === user.fullName.trim().toLowerCase());
-      if (!isAssignedToUser) return original;
-
-      const updated = { ...original };
-      if (submitted.title !== original.title) {
-        if (typeof submitted.title !== "string" || !submitted.title.trim() || submitted.title.length > 200) throw new AppError("Enter a valid task title (up to 200 characters).", 400);
-        updated.title = submitted.title.trim();
-      }
-      if (submitted.description !== original.description) {
-        if (typeof submitted.description !== "string" || submitted.description.length > 5000) throw new AppError("Task description must be 5,000 characters or fewer.", 400);
-        updated.description = submitted.description.trim();
-      }
-      if (submitted.status !== original.status) {
-        if (typeof submitted.status !== "string" || !submitted.status.trim()) throw new AppError("Choose a valid task status.", 400);
-        updated.status = submitted.status;
-      }
-      if (submitted.priority !== original.priority) {
-        throw new AppError("Priority changes must be submitted as a request for leader approval.", 403);
-      }
-      const priorityRequest = submitted.priorityChangeRequest;
-      if (priorityRequest && priorityRequest.requestedPriority !== original.priorityChangeRequest?.requestedPriority) {
-        if (!validPriorities.has(priorityRequest.requestedPriority)) throw new AppError("Choose a valid priority to request.", 400);
-        updated.priorityChangeRequest = {
-          requestedPriority: priorityRequest.requestedPriority,
-          requestedByUID: uid,
-          requestedAt: new Date().toISOString()
-        };
-      }
-      if (updated.title !== original.title || updated.description !== original.description || updated.status !== original.status || updated.priorityChangeRequest !== original.priorityChangeRequest) updatedOwnedTask = true;
-      return updated;
-    });
-    if (!updatedOwnedTask) throw new AppError("You can only edit tasks assigned to you.", 403);
-    updatePayload = { tasks: updatedTasks };
-    const completedCount = updatedTasks.filter((task) => task.status === "Completed" || task.status === "Done").length;
-    updatePayload.progress = updatedTasks.length ? Math.round((completedCount / updatedTasks.length) * 100) : 0;
-  }
+  assertCanEditEvent(user, eventOrgId);
+  const updatePayload: Record<string, any> = { ...input };
+  delete updatePayload.id;
   updatePayload.updatedAt = firebaseAdmin.firestore.FieldValue.serverTimestamp();
 
-  await docRef.update(updatePayload);
+  await firestore.runTransaction(async (transaction) => {
+    const latestSnapshot = await transaction.get(docRef);
+    if (!latestSnapshot.exists) throw new AppError("Event not found.", 404);
+    const latest = latestSnapshot.data() || {};
+    assertCanEditEvent(user, latest.orgId);
+    const payload = { ...updatePayload };
+    if (Array.isArray(payload.tasks)) {
+      const originals = Array.isArray(latest.tasks) ? latest.tasks : [];
+      payload.tasks = recordTaskPerformance(preserveTaskAttachments(payload.tasks, originals), originals, { uid, fullName: user.fullName, isLeader: true });
+    }
+    transaction.update(docRef, payload);
+  });
 
   let actionMsg = `Updated event "${beforeData.title || "Event"}"`;
   if (Array.isArray(input.tasks) && Array.isArray(beforeData.tasks)) {
@@ -1391,7 +1351,7 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
     actorUID: uid,
     actorName: user.fullName,
     actorRole: user.role,
-    action: isLeader ? actionMsg : `Updated an assigned task in "${beforeData.title || "Event"}"`,
+    action: actionMsg,
     actionCategory: "Events & Tasks",
     targetType: "Event Goal",
     targetName: typeof beforeData.title === "string" ? beforeData.title : "Event",
@@ -1444,6 +1404,7 @@ export async function clearEventsForOrg(uid: string, organizationId: string) {
 export async function getEventsForUser(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
   const targetOrgId = orgId || user.organizationId || "default-org";
+  const organization = (await firestore.collection("organizations").doc(targetOrgId).get()).data();
   const snapshot = await firestore.collection("events").where("orgId", "==", targetOrgId).get();
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();
@@ -1451,9 +1412,10 @@ export async function getEventsForUser(uid: string, orgId?: string) {
       id: docSnap.id,
       title: typeof data.title === "string" ? data.title : "Untitled Event",
       description: typeof data.description === "string" ? data.description : "",
-      status: ["Active", "Planning", "Completed", "Archived"].includes(data.status)
-        ? data.status
+      status: typeof data.status === "string" && data.status.trim()
+        ? data.status.trim()
         : "Planning",
+      eventCustomStatuses: Array.isArray(organization?.eventCustomStatuses) ? organization.eventCustomStatuses : [],
       startDate: typeof data.startDate === "string" ? data.startDate : "TBD",
       endDate: typeof data.endDate === "string" ? data.endDate : "TBD",
       memberCount: typeof data.memberCount === "number" ? data.memberCount : 0,

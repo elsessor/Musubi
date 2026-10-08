@@ -11,7 +11,7 @@ type EventCardProps = {
 };
 
 export function EventCard({ event, onClick, customStatuses }: EventCardProps) {
-  const theme = getStatusTheme(event.status, customStatuses);
+  const theme = getStatusTheme(event.status, customStatuses ?? event.eventCustomStatuses);
   const taskCount = event.tasks.length;
 
   return (

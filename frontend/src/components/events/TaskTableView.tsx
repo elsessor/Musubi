@@ -4,17 +4,13 @@ import { AlertTriangle, Calendar, Check, CheckCircle, ChevronDown, ShieldAlert, 
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
+import { useAuthStore } from "@/store/authStore";
+import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
+import { TaskAssignee } from "./TaskAssignee";
 
-const priorityConfig: Record<TaskPriority, { label: string; classes: string; dot: string }> = {
-  Low: { label: "Low", classes: "bg-slate-100 text-slate-600 ring-slate-200", dot: "bg-slate-400" },
-  Medium: { label: "Medium", classes: "bg-blue-50 text-blue-600 ring-blue-200", dot: "bg-blue-500" },
-  High: { label: "High", classes: "bg-amber-50 text-amber-700 ring-amber-200", dot: "bg-amber-500" },
-  Critical: { label: "Critical", classes: "bg-rose-50 text-rose-600 ring-rose-200", dot: "bg-rose-500" }
-};
 
-const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
-const ALL_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Critical"];
 
 type TaskTableViewProps = {
   tasks: Task[];
@@ -22,9 +18,15 @@ type TaskTableViewProps = {
   onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
   onSelectTask?: (task: Task) => void;
   customStatuses?: CustomStatusConfig[];
+  statusOrder?: string[];
 };
 
-export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses }: TaskTableViewProps) {
+export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses, statusOrder }: TaskTableViewProps) {
+  const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
+  const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
+  const role = useAuthStore((state) => state.profile?.role);
+  function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
+  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority)); }
   // Status Dropdown State
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{
@@ -41,28 +43,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
     openUpward: boolean;
   } | null>(null);
 
-  const baseStatuses: TaskStatus[] = [
-    ...DEFAULT_STATUSES,
-    ...(customStatuses ? customStatuses.map((cs) => cs.name as TaskStatus) : [])
-  ];
-
-  const [allStatuses, setAllStatuses] = useState<TaskStatus[]>(baseStatuses);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("musubi_task_status_order");
-      if (saved) {
-        const order: string[] = JSON.parse(saved);
-        const ordered = [
-          ...order.filter((st) => baseStatuses.includes(st as TaskStatus)),
-          ...baseStatuses.filter((st) => !order.includes(st))
-        ] as TaskStatus[];
-        setAllStatuses(ordered);
-        return;
-      }
-    } catch { }
-    setAllStatuses(baseStatuses);
-  }, [customStatuses]);
+  const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, tasks.map((task) => task.status));
 
   // Close dropdown on scroll or resize outside the menus
   useEffect(() => {
@@ -87,6 +68,8 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
   }, [openDropdownId, openPriorityDropdownId]);
 
   function handleToggleDropdown(taskId: string, e: React.MouseEvent<HTMLButtonElement>) {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task || !canEditStatus(task)) return;
     if (openDropdownId === taskId) {
       setOpenDropdownId(null);
       setDropdownPos(null);
@@ -190,6 +173,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
 
                   {/* Status Dropdown Trigger */}
                   <td className="px-4 py-3.5">
+                    {canEditStatus(task) ? (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -203,11 +187,12 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
                       {task.status}
                       <ChevronDown size={12} className={`transition-transform opacity-60 ${isStatusOpen ? "rotate-180" : ""}`} />
                     </button>
+                    ) : <span onClick={(event) => event.stopPropagation()} className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold ${theme.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />{task.status}</span>}
                   </td>
 
                   {/* Priority Dropdown Trigger */}
                   <td className="px-4 py-3.5">
-                    {onUpdatePriority ? (
+                    {canEditPriority(task) ? (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -231,38 +216,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
 
                   {/* Assignee */}
                   <td className="px-4 py-3.5">
-                    {(() => {
-                      const displayAssigneeName =
-                        task.assignedMemberName ||
-                        task.assignee?.name ||
-                        (task as any).assigneeName ||
-                        "Unassigned";
-                      const displayInitials =
-                        task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
-                          ? task.assignee.initials
-                          : displayAssigneeName !== "Unassigned"
-                          ? displayAssigneeName
-                              .split(" ")
-                              .map((n: string) => n[0])
-                              .join("")
-                              .slice(0, 2)
-                              .toUpperCase()
-                          : "UA";
-
-                      return (
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
-                            title={displayAssigneeName}
-                          >
-                            {displayInitials}
-                          </span>
-                          <span className="font-medium text-slate-700 truncate max-w-[120px]">
-                            {displayAssigneeName}
-                          </span>
-                        </div>
-                      );
-                    })()}
+                    <TaskAssignee task={task} className="max-w-[210px]" />
                   </td>
 
                   {/* Due Date */}
@@ -299,21 +253,21 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
 
                   {/* Actions */}
                   <td className="px-4 py-3.5 text-right">
-                    {task.status !== "Completed" ? (
+                    {canEditStatus(task) && task.status !== "Completed" ? (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onUpdateStatus(task.id, "Completed");
+                          if (canEditStatus(task)) onUpdateStatus(task.id, "Completed");
                         }}
                         className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
                       >
                         <CheckCircle size={12} />
                         Complete
                       </button>
-                    ) : (
+                    ) : task.status === "Completed" ? (
                       <span className="text-xs font-medium text-emerald-600">Done</span>
-                    )}
+                    ) : null}
                   </td>
                 </tr>
               );
@@ -323,7 +277,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
       </div>
 
       {/* Floating Pop-up Status Dropdown Portal */}
-      {openDropdownId && dropdownPos && typeof document !== "undefined" &&
+      {openDropdownId && activeTask && canEditStatus(activeTask) && dropdownPos && typeof document !== "undefined" &&
         createPortal(
           <>
             {/* Invisible backdrop */}
@@ -357,20 +311,20 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
                       key={st}
                       type="button"
                       onClick={() => {
-                        onUpdateStatus(openDropdownId, st);
+                        if (activeTask && canEditStatus(activeTask)) onUpdateStatus(openDropdownId, st);
                         setOpenDropdownId(null);
                         setDropdownPos(null);
                       }}
                       className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium text-left transition-colors ${isSelected
-                          ? `${stTheme.active} font-bold ring-1 ring-inset`
+                          ? `${stTheme.badge} font-semibold ring-1 ring-inset`
                           : "text-slate-700 hover:bg-slate-50"
                         }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2 w-2 rounded-full ${stTheme.dot}`} />
-                        <span>{st}</span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${stTheme.dot}`} />
+                        <span className="min-w-0 break-words">{st}</span>
                       </div>
-                      {isSelected && <Check size={13} className="text-white" />}
+                      {isSelected && <Check size={13} className="ml-2 shrink-0 text-current" />}
                     </button>
                   );
                 })}
@@ -381,7 +335,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
         )}
 
       {/* Floating Pop-up Priority Dropdown Portal */}
-      {openPriorityDropdownId && priorityDropdownPos && typeof document !== "undefined" &&
+      {openPriorityDropdownId && activePriorityTask && canEditPriority(activePriorityTask) && priorityDropdownPos && typeof document !== "undefined" &&
         createPortal(
           <>
             {/* Invisible backdrop */}
@@ -415,12 +369,12 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
                       key={pr}
                       type="button"
                       onClick={() => {
-                        onUpdatePriority?.(openPriorityDropdownId, pr);
+                        if (activePriorityTask && canEditPriority(activePriorityTask)) onUpdatePriority?.(openPriorityDropdownId, pr);
                         setOpenPriorityDropdownId(null);
                         setPriorityDropdownPos(null);
                       }}
                       className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium text-left transition-colors ${isSelected
-                          ? "bg-slate-100 font-bold text-slate-900"
+                          ? `${cfg.classes} font-bold`
                           : "text-slate-700 hover:bg-slate-50"
                         }`}
                     >
@@ -428,7 +382,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
                         <span className={`h-2 w-2 rounded-full ${cfg.dot}`} />
                         <span>{cfg.label}</span>
                       </div>
-                      {isSelected && <Check size={13} className="text-slate-900" />}
+                      {isSelected && <Check size={13} className="text-current" />}
                     </button>
                   );
                 })}

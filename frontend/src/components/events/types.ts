@@ -17,6 +17,18 @@ export type Nudge = {
   sent: boolean;
 };
 
+export type TaskAttachment = {
+  id: string;
+  type: "file" | "link";
+  name: string;
+  url?: string;
+  contentType?: string;
+  size?: number;
+  uploadedByUID: string;
+  uploadedByName: string;
+  uploadedAt: string;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -38,8 +50,15 @@ export type Task = {
   assignedMemberName?: string | null;
   deadline?: string;
   matchPercentage?: number;
+  completedAt?: string | null;
+  performanceReview?: {
+    rating: number;
+    reviewerUID?: string;
+    reviewedAt?: string;
+  } | null;
   committee?: string;
   nudges?: Nudge[];
+  attachments?: TaskAttachment[];
   priorityChangeRequest?: {
     requestedPriority: TaskPriority;
     requestedByUID?: string;
@@ -59,6 +78,7 @@ export type Event = {
   committee?: string;
   tasks: Task[];
   customStatuses?: import("./statusUtils").CustomStatusConfig[];
+  eventCustomStatuses?: import("./statusUtils").CustomStatusConfig[];
   statusOrder?: string[];
 };
 

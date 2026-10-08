@@ -3,17 +3,13 @@
 import { Calendar, CheckCircle2, ShieldAlert, Sparkles, AlertTriangle, ChevronDown, Check } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { useState } from "react";
-import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
+import { useAuthStore } from "@/store/authStore";
+import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
+import { TaskAssignee } from "./TaskAssignee";
 
-const priorityConfig: Record<TaskPriority, { label: string; classes: string; dot: string }> = {
-  Low: { label: "Low", classes: "bg-slate-100 text-slate-600 ring-slate-200 hover:bg-slate-200", dot: "bg-slate-400" },
-  Medium: { label: "Medium", classes: "bg-blue-50 text-blue-600 ring-blue-200 hover:bg-blue-100", dot: "bg-blue-500" },
-  High: { label: "High", classes: "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100", dot: "bg-amber-500" },
-  Critical: { label: "Critical", classes: "bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100", dot: "bg-rose-500" }
-};
 
-const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
-const ALL_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Critical"];
 
 type TaskGridViewProps = {
   tasks: Task[];
@@ -21,16 +17,19 @@ type TaskGridViewProps = {
   onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
   onSelectTask?: (task: Task) => void;
   customStatuses?: CustomStatusConfig[];
+  statusOrder?: string[];
 };
 
-export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses }: TaskGridViewProps) {
+export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses, statusOrder }: TaskGridViewProps) {
+  const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
+  const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
+  const role = useAuthStore((state) => state.profile?.role);
+  function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
+  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority)); }
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [openPriorityDropdownId, setOpenPriorityDropdownId] = useState<string | null>(null);
 
-  const allStatuses: TaskStatus[] = [
-    ...DEFAULT_STATUSES,
-    ...(customStatuses ? customStatuses.map((cs) => cs.name as TaskStatus) : [])
-  ];
+  const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, tasks.map((task) => task.status));
 
   if (tasks.length === 0) {
     return (
@@ -42,7 +41,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {tasks.map((task) => {
         const pCfg = priorityConfig[task.priority || "Medium"];
         const theme = getStatusTheme(task.status, customStatuses);
@@ -52,15 +51,15 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
           <div
             key={task.id}
             onClick={() => onSelectTask?.(task)}
-            className="group relative flex cursor-pointer flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:border-blue-300 hover:shadow-md"
+            className="group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:border-blue-300 hover:shadow-md"
           >
             <div>
               {/* Header Badges & Status/Priority Dropdowns */}
-              <div className="flex items-center justify-between gap-2 pb-3">
-                <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex flex-wrap items-start justify-between gap-2 pb-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   {/* Priority Dropdown Trigger */}
                   <div className="relative">
-                    {onUpdatePriority ? (
+                    {canEditPriority(task) ? (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -82,7 +81,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                       </span>
                     )}
 
-                    {isPriorityOpen && onUpdatePriority && (
+                    {isPriorityOpen && canEditPriority(task) && onUpdatePriority && (
                       <div
                         className="absolute left-0 top-full z-30 mt-1 w-32 rounded-xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 animate-in fade-in duration-100"
                         onClick={(e) => e.stopPropagation()}
@@ -96,18 +95,18 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onUpdatePriority(task.id, pr);
+                                if (canEditPriority(task)) onUpdatePriority?.(task.id, pr);
                                 setOpenPriorityDropdownId(null);
                               }}
                               className={`flex w-full items-center justify-between px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 ${
-                                isSelected ? "font-bold text-blue-600" : "text-slate-700"
+                                isSelected ? `${cfg.classes} font-bold` : "text-slate-700"
                               }`}
                             >
                               <div className="flex items-center gap-2">
                                 <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
                                 {cfg.label}
                               </div>
-                              {isSelected && <Check size={12} className="text-blue-600" />}
+                              {isSelected && <Check size={12} className="text-current" />}
                             </button>
                           );
                         })}
@@ -116,7 +115,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                   </div>
 
                   {task.committee && (
-                    <span className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-inset ring-violet-200">
+                    <span className="inline-flex items-center max-w-full truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                       {task.committee}
                     </span>
                   )}
@@ -124,6 +123,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
 
                 {/* Status Dropdown */}
                 <div className="relative">
+                  {canEditStatus(task) ? (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -137,10 +137,11 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                     {task.status}
                     <ChevronDown size={12} className="opacity-60" />
                   </button>
+                  ) : <span onClick={(event) => event.stopPropagation()} className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold ${theme.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />{task.status}</span>}
 
-                  {openDropdownId === task.id && (
+                  {canEditStatus(task) && openDropdownId === task.id && (
                     <div
-                      className="absolute right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto w-36 rounded-xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 animate-in fade-in duration-100"
+                      className="absolute right-0 top-full z-30 mt-1.5 max-h-56 w-40 space-y-0.5 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 animate-in fade-in duration-100"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {allStatuses.map((st) => {
@@ -151,15 +152,16 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onUpdateStatus(task.id, st);
+                              if (canEditStatus(task)) onUpdateStatus(task.id, st);
                               setOpenDropdownId(null);
                             }}
-                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-left transition-colors hover:bg-slate-50 ${
-                              task.status === st ? `${stTheme.active} font-bold ring-1 ring-inset` : "text-slate-700"
+                            className={`flex min-w-0 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-left transition-colors ${
+                              task.status === st ? `${stTheme.badge} font-semibold ring-1 ring-inset` : "text-slate-700 hover:bg-slate-50"
                             }`}
                           >
-                            <span className={`h-1.5 w-1.5 rounded-full ${stTheme.dot}`} />
-                            {st}
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${stTheme.dot}`} />
+                            <span className="min-w-0 flex-1 break-words">{st}</span>
+                            {task.status === st && <Check size={12} className="shrink-0 text-current" />}
                           </button>
                         );
                       })}
@@ -169,12 +171,12 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
               </div>
 
               {/* Title & Description */}
-              <h3 className="text-sm font-bold leading-snug text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2">
+              <h3 className="min-h-10 break-words text-sm font-semibold leading-5 text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2">
                 {task.title || task.description}
               </h3>
 
               {task.description && task.title && task.description.trim() !== task.title.trim() && (
-                <p className="mt-1 text-xs text-slate-500 line-clamp-2">{task.description}</p>
+                <p className="mt-1 break-words text-xs leading-5 text-slate-500 line-clamp-2">{task.description}</p>
               )}
 
               {/* Badges / Nudges / Leader Only */}
@@ -201,64 +203,32 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
             </div>
 
             {/* Card Footer */}
-            {(() => {
-              const displayAssigneeName =
-                task.assignedMemberName ||
-                task.assignee?.name ||
-                (task as any).assigneeName ||
-                "Unassigned";
-              const displayInitials =
-                task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
-                  ? task.assignee.initials
-                  : displayAssigneeName !== "Unassigned"
-                  ? displayAssigneeName
-                      .split(" ")
-                      .map((n: string) => n[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()
-                  : "UA";
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+              <TaskAssignee task={task} className="max-w-[180px]" />
 
-              return (
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
-                      title={displayAssigneeName}
-                    >
-                      {displayInitials}
-                    </span>
-                    <span className="text-xs font-medium text-slate-600 truncate max-w-[100px]">
-                      {displayAssigneeName}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <Calendar size={12} />
-                      {task.dueDate}
-                    </span>
-                    {task.status !== "Completed" && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onUpdateStatus(task.id, "Completed");
-                        }}
-                        title="Mark Completed"
-                        className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                      >
-                        <CheckCircle2 size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span className="flex items-center gap-1">
+                  <Calendar size={12} className="shrink-0" />
+                  <span className="break-words">{task.dueDate || "No deadline"}</span>
+                </span>
+                {canEditStatus(task) && task.status !== "Completed" && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (canEditStatus(task)) onUpdateStatus(task.id, "Completed");
+                    }}
+                    title="Mark Completed"
+                    className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                  >
+                    <CheckCircle2 size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         );
       })}
     </div>
   );
 }
-

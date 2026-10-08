@@ -15,6 +15,8 @@ export type FirestoreUser = {
   birthdate: string | null;
   profilePicture: string | null;
   skills: string[];
+  availability?: string | null;
+  status?: string | null;
   onboardingCompleted: boolean;
   createdAt: FirebaseFirestore.Timestamp | FirebaseFirestore.FieldValue;
   lastLogin: FirebaseFirestore.Timestamp | FirebaseFirestore.FieldValue;

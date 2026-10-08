@@ -180,6 +180,8 @@ export async function exchangeFirebaseSession(user: User, fullName?: string): Pr
       birthdate: typeof backendUser.birthdate === "string" ? backendUser.birthdate : null,
       profilePicture: backendUser.profilePicture,
       skills,
+      availability: typeof backendUser.availability === "string" ? backendUser.availability : null,
+      status: typeof backendUser.status === "string" ? backendUser.status : null,
       onboardingCompleted
     }
   };

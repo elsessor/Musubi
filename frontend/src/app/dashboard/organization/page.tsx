@@ -1,5 +1,7 @@
 "use client";
 
+import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -82,7 +84,7 @@ function computeMemberStats(
   const lastName = parts[parts.length - 1] || "";
   const initials = parts.slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 
-  const allTasks = events.flatMap((e) => (e.tasks || []).map((t) => ({ ...t, eventTitle: e.title })));
+  const allTasks = events.flatMap((e) => (e.tasks || []).map((t) => ({ ...t, eventTitle: e.title, customStatuses: e.customStatuses })));
 
   const memberTasks = allTasks.filter((t) => {
     const assigneeUID = t.assignedMemberUID || "";
@@ -613,14 +615,14 @@ function Overview({
         {events.length > 0 ? (
           <div className="divide-y divide-[#e5eaf1]">
             {events.slice(0, 5).map((e) => {
-              const goalStatusLabel = e.status === "Completed" ? "Completed" : e.status === "Active" ? "In Progress" : "Pending";
+              const goalStatusLabel = e.status;
               return (
                 <div key={e.id} className="flex items-center justify-between px-4 py-3 text-xs">
                   <div>
                     <p className="font-semibold text-slate-800">{e.title}</p>
                     {e.description && <p className="text-[11px] text-slate-500 line-clamp-1">{e.description}</p>}
                   </div>
-                  <GoalStatus status={goalStatusLabel} />
+                  <GoalStatus status={goalStatusLabel} customStatuses={e.eventCustomStatuses} />
                 </div>
               );
             })}
@@ -906,4 +908,4 @@ function ConfigRow({ label, value, tone }: { label: string; value: string; tone:
 function Stat({ value, label, color }: { value: string; label: string; color: string }) { return <div className="py-3 text-center"><p className={`text-[15px] font-bold ${color}`}>{value}</p><p className="mt-1 text-[10px] text-slate-500">{label}</p></div>; }
 function Avatar({ initials, isYou }: { initials: string; isYou?: boolean }) { return <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${isYou ? "bg-[#2563eb] ring-2 ring-blue-300" : "bg-[#213f68]"}`}>{initials}</span>; }
 function Availability({ value }: { value: string }) { const tone = value === "Available" ? "bg-emerald-50 text-emerald-600" : value === "Busy" ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-500"; return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${tone}`}><i className="size-1 rounded-full bg-current" />{value}</span>; }
-function GoalStatus({ status }: { status: string }) { const tone = status === "Completed" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : status === "In Progress" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700"; return <span className={`rounded-full border px-2 py-0.5 text-[10px] ${tone}`}>{status}</span>; }
+function GoalStatus({ status, customStatuses }: { status: string; customStatuses?: CustomStatusConfig[] }) { const tone = getStatusTheme(status, customStatuses).badge; return <span className={`rounded-full border px-2 py-0.5 text-[10px] ${tone}`}>{status}</span>; }

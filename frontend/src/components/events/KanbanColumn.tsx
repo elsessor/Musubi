@@ -116,14 +116,14 @@ export function KanbanColumn({
       </div>
 
       {/* Add task button */}
-      <button
+      {isLeader && onAddTask ? <button
         type="button"
         onClick={onAddTask}
         className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
       >
         <Plus size={13} />
         Add task
-      </button>
+      </button> : null}
     </div>
   );
 }

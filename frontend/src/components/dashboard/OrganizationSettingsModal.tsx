@@ -4,7 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 
 export type OrganizationSettings = {
-  delegationMode: string;
+  delegationMode: "Heuristic" | "Manual";
   aiTaskAtomization: boolean;
   nudgeMonitoring: boolean;
 };
@@ -52,7 +52,7 @@ export function OrganizationSettingsModal({
           <label className="block text-sm font-semibold text-slate-700">
             Delegation mode
             <span className="mt-1 block text-xs font-normal text-slate-500">Choose how tasks are assigned to organization members.</span>
-            <select value={settings.delegationMode} onChange={(event) => setSettings((current) => ({ ...current, delegationMode: event.target.value }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15">
+            <select value={settings.delegationMode} onChange={(event) => setSettings((current) => ({ ...current, delegationMode: event.target.value === "Manual" ? "Manual" : "Heuristic" }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15">
               <option value="Heuristic">Heuristic matching</option>
               <option value="Manual">Leader assigns tasks</option>
             </select>

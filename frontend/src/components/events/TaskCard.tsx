@@ -3,15 +3,12 @@
 import { AlertTriangle, Calendar, ChevronDown, Lock, UserCheck, Zap } from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority } from "./types";
+import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
+import { useAuthStore } from "@/store/authStore";
+import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
+import { TaskAssignee } from "./TaskAssignee";
 
-const priorityConfig: Record<TaskPriority, { label: string; classes: string; dot: string }> = {
-  Low:      { label: "Low",      classes: "bg-slate-100 text-slate-600 ring-slate-200 hover:bg-slate-200", dot: "bg-slate-400" },
-  Medium:   { label: "Medium",   classes: "bg-blue-50 text-blue-600 ring-blue-200 hover:bg-blue-100", dot: "bg-blue-500" },
-  High:     { label: "High",     classes: "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100", dot: "bg-amber-500" },
-  Critical: { label: "Critical", classes: "bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100", dot: "bg-rose-500" }
-};
 
-const ALL_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Critical"];
 
 type TaskCardProps = {
   task: Task;
@@ -22,15 +19,20 @@ type TaskCardProps = {
 };
 
 export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdatePriority }: TaskCardProps) {
+  const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
+  const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
+  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority)); }
+  const role = useAuthStore((state) => state.profile?.role);
+  const canDrag = Boolean(onDragStart) && canUpdateTaskStatus(task, uid, fullName, role);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const pCfg = priorityConfig[task.priority || "Medium"];
 
   return (
     <div
-      draggable
-      onDragStart={() => onDragStart?.(task.id)}
+      draggable={canDrag}
+      onDragStart={(event) => { if (canDrag) onDragStart?.(task.id); else event.preventDefault(); }}
       onClick={() => onSelectTask?.(task)}
-      className="group flex cursor-pointer flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition-all hover:border-blue-300 hover:shadow-md active:cursor-grabbing"
+      className="group flex min-w-0 cursor-pointer flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:border-blue-300 hover:shadow-md active:cursor-grabbing"
     >
       {/* Blocker alert */}
       {task.blockedBy && task.blockedBy > 0 ? (
@@ -53,7 +55,7 @@ export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdate
           </span>
         )}
         {task.committee && (
-          <span className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-200">
+          <span className="inline-flex items-center rounded-full max-w-full truncate bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
             {task.committee}
           </span>
         )}
@@ -61,36 +63,42 @@ export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdate
 
       {/* Title & Description */}
       <div>
-        <p className="text-[13px] font-semibold leading-snug text-slate-800 group-hover:text-blue-600 transition-colors">
+        <p className="break-words text-[13px] font-semibold leading-5 text-slate-800 group-hover:text-blue-600 transition-colors line-clamp-2">
           {task.title}
         </p>
         {task.description && (
-          <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2 font-medium">{task.description}</p>
+          <p className="mt-1 break-words text-xs leading-5 text-slate-500 line-clamp-2">{task.description}</p>
         )}
       </div>
 
       {/* Priority + meta row */}
-      <div className="flex items-center gap-2 pt-1 relative">
+      <div className="relative flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
         {/* Interactive Priority Badge */}
         <div className="relative">
-          <button
+          {canEditPriority(task) ? <button
             type="button"
+            aria-haspopup="menu"
+            aria-expanded={showPriorityMenu}
             onClick={(e) => {
               e.stopPropagation();
-              if (onUpdatePriority) {
+              if (canEditPriority(task)) {
                 setShowPriorityMenu(!showPriorityMenu);
               }
             }}
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset transition ${pCfg.classes}`}
-            title="Click to modify priority level"
+            title="Change priority"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-current" />
             {pCfg.label}
-            {onUpdatePriority && <ChevronDown size={10} className="opacity-60" />}
-          </button>
+            <ChevronDown size={10} className="opacity-60" />
+          </button> : <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${pCfg.classes}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />{pCfg.label}
+          </span>}
 
-          {showPriorityMenu && onUpdatePriority && (
+          {showPriorityMenu && canEditPriority(task) && onUpdatePriority && (
             <div
+              role="menu"
+              aria-label="Task priority"
               className="absolute left-0 top-full z-30 mt-1 w-28 rounded-xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 animate-in fade-in duration-100"
               onClick={(e) => e.stopPropagation()}
             >
@@ -100,13 +108,15 @@ export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdate
                   <button
                     key={pr}
                     type="button"
+                    role="menuitemradio"
+                    aria-checked={task.priority === pr}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onUpdatePriority(task.id, pr);
+                      if (canEditPriority(task)) onUpdatePriority?.(task.id, pr);
                       setShowPriorityMenu(false);
                     }}
                     className={`flex w-full items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium transition hover:bg-slate-50 ${
-                      task.priority === pr ? "font-bold text-blue-600" : "text-slate-700"
+                      task.priority === pr ? `${cfg.classes} font-bold` : "text-slate-700"
                     }`}
                   >
                     <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
@@ -118,7 +128,7 @@ export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdate
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
           {onReassign && (
             <button
               type="button"
@@ -133,19 +143,13 @@ export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdate
             </button>
           )}
 
-          <span className="flex items-center gap-1 text-[11px] text-slate-400">
-            <Calendar size={11} />
-            {task.dueDate}
-          </span>
-          <span
-            className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`}
-            title={task.assignedMemberName || task.assignee?.name || task.assignee?.initials}
-          >
-            {task.assignee?.initials || "ME"}
+          <span className="flex min-w-0 items-start gap-1.5 text-[11px] leading-4 text-slate-500">
+            <Calendar size={12} className="mt-0.5 shrink-0" />
+            <span className="break-words">{task.dueDate || "No deadline"}</span>
           </span>
         </div>
       </div>
+      <TaskAssignee task={task} className="self-start" />
     </div>
   );
 }
-

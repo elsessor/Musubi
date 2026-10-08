@@ -1,5 +1,6 @@
 "use client";
 
+import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
 import { X } from "lucide-react";
 
 export type MemberProfile = {
@@ -16,6 +17,7 @@ export type MemberProfile = {
     id: string;
     title: string;
     eventTitle?: string;
+    customStatuses?: CustomStatusConfig[];
     status: string;
     matchPercentage?: number;
   }>;
@@ -149,11 +151,7 @@ export function MemberProfileModal({
                       <span className="text-slate-400 font-medium">• {task.eventTitle || "Campus Event"}</span>
                       <span
                         className={`font-bold rounded-full px-2 py-0.5 text-[10px] ${
-                          task.status === "Completed" || task.status === "Done"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : task.status === "In Progress"
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-amber-50 text-amber-700"
+                          getStatusTheme(task.status, task.customStatuses).badge
                         }`}
                       >
                         {task.status}

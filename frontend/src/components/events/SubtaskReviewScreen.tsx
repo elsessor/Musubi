@@ -42,16 +42,19 @@ import { cn } from "@/components/ui/utils";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+
 const PRIORITY_BADGES = PRIORITY_CONFIG;
 
 type SubtaskReviewScreenProps = {
   goalDraft: GoalDraft;
+  customStatuses?: CustomStatusConfig[];
   members?: OrganizationMember[];
   onPublishGoal?: (publishedGoal: GoalDraft) => void;
   onBack?: () => void;
 };
 
-export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack }: SubtaskReviewScreenProps) {
+export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack, customStatuses = [] }: SubtaskReviewScreenProps) {
   const [currentGoal, setCurrentGoal] = useState<GoalDraft>(goalDraft);
   const [subtasks, setSubtasks] = useState<Subtask[]>(goalDraft.subtasks);
   const [isEditingEventName, setIsEditingEventName] = useState(false);
@@ -444,6 +447,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack 
             <OldTaskCard
               key={st.id}
               subtask={st}
+              customStatuses={customStatuses}
               isRegenerating={!!regeneratingIds[st.id]}
               onConfirm={() => handleConfirmTask(st.id)}
               onEdit={() => setEditingSubtask(st)}
@@ -503,6 +507,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack 
 
 type OldTaskCardProps = {
   subtask: Subtask;
+  customStatuses: CustomStatusConfig[];
   isRegenerating: boolean;
   onConfirm: () => void;
   onEdit: () => void;
@@ -513,6 +518,7 @@ type OldTaskCardProps = {
 
 function OldTaskCard({
   subtask,
+  customStatuses,
   isRegenerating,
   onConfirm,
   onEdit,
@@ -633,7 +639,7 @@ function OldTaskCard({
       {/* Status Box */}
       <div className="mt-3.5 flex items-center justify-between rounded-xl bg-[#f1f5f9] px-4 py-2.5 text-xs">
         <span className="font-semibold text-slate-500">Status:</span>
-        <span className="font-bold text-slate-800">{subtask.status || "To Do"}</span>
+        <span className={`rounded-full px-2 py-0.5 font-bold ${getStatusTheme(subtask.status || "To Do", customStatuses).badge}`}>{subtask.status || "To Do"}</span>
       </div>
 
       {/* AI Match Score (only for AI tasks or if score exists) */}
@@ -990,7 +996,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
               <CustomSelect
                 value={priority}
                 onChange={(val) => setPriority(val as TaskPriority)}
-                options={ALL_PRIORITIES.map((value) => ({ value, label: value, indicatorClass: PRIORITY_CONFIG[value].dot, labelClass: PRIORITY_CONFIG[value].classes }))}
+                options={ALL_PRIORITIES.map((value) => ({ value, label: value, indicatorClass: PRIORITY_CONFIG[value].dot, selectedClass: PRIORITY_CONFIG[value].classes }))}
                 buttonClassName="py-2.5 text-xs font-semibold"
               />
             </div>
@@ -1198,7 +1204,7 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
               <CustomSelect
                 value={priority}
                 onChange={(val) => setPriority(val as TaskPriority)}
-                options={ALL_PRIORITIES.map((value) => ({ value, label: value, indicatorClass: PRIORITY_CONFIG[value].dot, labelClass: PRIORITY_CONFIG[value].classes }))}
+                options={ALL_PRIORITIES.map((value) => ({ value, label: value, indicatorClass: PRIORITY_CONFIG[value].dot, selectedClass: PRIORITY_CONFIG[value].classes }))}
                 buttonClassName="py-2 text-xs font-semibold"
               />
             </div>

@@ -1,19 +1,16 @@
 "use client";
 
-import { Calendar, CheckCircle, ChevronDown, ChevronUp, Clock, ShieldAlert, Sparkles, AlertTriangle, Bell, User, Check } from "lucide-react";
+import { Calendar, CheckCircle, ChevronDown, ChevronUp, Clock, ShieldAlert, Sparkles, AlertTriangle, Bell, Check } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { useState } from "react";
-import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
+import { useAuthStore } from "@/store/authStore";
+import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
+import { TaskAssignee } from "./TaskAssignee";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
-const priorityConfig: Record<TaskPriority, { label: string; classes: string; dot: string }> = {
-  Low: { label: "Low", classes: "bg-slate-100 text-slate-600 ring-slate-200 hover:bg-slate-200", dot: "bg-slate-400" },
-  Medium: { label: "Medium", classes: "bg-blue-50 text-blue-600 ring-blue-200 hover:bg-blue-100", dot: "bg-blue-500" },
-  High: { label: "High", classes: "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100", dot: "bg-amber-500" },
-  Critical: { label: "Critical", classes: "bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100", dot: "bg-rose-500" }
-};
 
-const DEFAULT_STATUS_ORDER: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
-const ALL_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Critical"];
 
 type TaskExpandedViewProps = {
   tasks: Task[];
@@ -21,16 +18,24 @@ type TaskExpandedViewProps = {
   onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
   onSelectTask?: (task: Task) => void;
   customStatuses?: CustomStatusConfig[];
+  statusOrder?: string[];
 };
 
-export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses }: TaskExpandedViewProps) {
+export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses, statusOrder }: TaskExpandedViewProps) {
+  const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
+  const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
+  const role = useAuthStore((state) => state.profile?.role);
+  function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
+  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority)); }
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<string, boolean>>({});
   const [openPriorityDropdownId, setOpenPriorityDropdownId] = useState<string | null>(null);
 
-  const allStatuses: TaskStatus[] = [
-    ...DEFAULT_STATUS_ORDER,
-    ...(customStatuses ? customStatuses.map((cs) => cs.name as TaskStatus) : [])
-  ];
+  const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, tasks.map((task) => task.status));
+
+  const statusOptions = allStatuses.map((value) => {
+    const theme = getStatusTheme(value, customStatuses);
+    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
+  });
 
   function toggleTask(id: string) {
     setExpandedTaskIds((prev) => ({ ...prev, [id]: prev[id] === undefined ? false : !prev[id] }));
@@ -51,34 +56,16 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
         const isExpanded = expandedTaskIds[task.id] !== false;
         const pCfg = priorityConfig[task.priority || "Medium"];
         const theme = getStatusTheme(task.status, customStatuses);
-        const currentStatusIndex = allStatuses.indexOf(task.status);
         const isPriorityOpen = openPriorityDropdownId === task.id;
-
-        const displayAssigneeName =
-          task.assignedMemberName ||
-          task.assignee?.name ||
-          (task as any).assigneeName ||
-          "Unassigned";
-        const displayInitials =
-          task.assignee?.initials && task.assignee.initials !== "ME" && task.assignee.initials !== "UA"
-            ? task.assignee.initials
-            : displayAssigneeName !== "Unassigned"
-            ? displayAssigneeName
-                .split(" ")
-                .map((n: string) => n[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase()
-            : "UA";
 
         return (
           <div
             key={task.id}
-            className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 ${theme.border} bg-white shadow-xs transition-all hover:border-slate-300 hover:shadow-md`}
+            className={`min-w-0 rounded-2xl border border-slate-200 border-l-4 ${theme.border} bg-white shadow-xs transition-all hover:border-slate-300 hover:shadow-md`}
           >
             {/* Main Header / Summary Row */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-              <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
                 <button
                   type="button"
                   onClick={() => toggleTask(task.id)}
@@ -87,18 +74,18 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                   {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
 
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3
                       onClick={() => onSelectTask?.(task)}
-                      className="text-base font-bold text-slate-900 hover:text-blue-600 transition-colors cursor-pointer"
+                      className="break-words text-sm font-semibold text-slate-900 hover:text-blue-600 transition-colors cursor-pointer"
                     >
                       {task.title || task.description}
                     </h3>
 
                     {/* Interactive Priority Badge */}
                     <div className="relative">
-                      {onUpdatePriority ? (
+                      {canEditPriority(task) ? (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -119,7 +106,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                         </span>
                       )}
 
-                      {isPriorityOpen && onUpdatePriority && (
+                      {isPriorityOpen && canEditPriority(task) && onUpdatePriority && (
                         <div
                           className="absolute left-0 top-full z-30 mt-1 w-32 rounded-xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 animate-in fade-in duration-100"
                           onClick={(e) => e.stopPropagation()}
@@ -133,18 +120,18 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  onUpdatePriority(task.id, pr);
+                                  if (canEditPriority(task)) onUpdatePriority?.(task.id, pr);
                                   setOpenPriorityDropdownId(null);
                                 }}
                                 className={`flex w-full items-center justify-between px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 ${
-                                  isSelected ? "font-bold text-blue-600" : "text-slate-700"
+                                  isSelected ? `${cfg.classes} font-bold` : "text-slate-700"
                                 }`}
                               >
                                 <div className="flex items-center gap-2">
                                   <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
                                   {cfg.label}
                                 </div>
-                                {isSelected && <Check size={12} className="text-blue-600" />}
+                                {isSelected && <Check size={12} className="text-current" />}
                               </button>
                             );
                           })}
@@ -162,10 +149,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                     </span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <User size={12} className="text-slate-400" />
-                      {displayAssigneeName}
-                    </span>
+                    <TaskAssignee task={task} showAvatar={false} className="max-w-[240px]" />
                     <span className="flex items-center gap-1">
                       <Calendar size={12} className="text-slate-400" />
                       Due {task.dueDate}
@@ -174,31 +158,20 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                 </div>
               </div>
 
-              {/* Status stepper & Actions */}
-              <div className="flex items-center gap-3">
-                {/* Status stepper pills */}
-                <div className="hidden sm:flex items-center gap-1 rounded-xl bg-slate-50 p-1 border border-slate-200 flex-wrap">
-                  {allStatuses.map((st, idx) => {
-                    const isActive = task.status === st;
-                    const isPassed = idx <= currentStatusIndex;
-                    const stTheme = getStatusTheme(st, customStatuses);
-                    return (
-                      <button
-                        key={st}
-                        type="button"
-                        onClick={() => onUpdateStatus(task.id, st)}
-                        className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${isActive
-                          ? `${stTheme.active} ring-1 ring-inset shadow-2xs`
-                          : isPassed
-                            ? "text-slate-700 hover:bg-slate-200/60"
-                            : "text-slate-400 hover:bg-slate-200/40"
-                          }`}
-                      >
-                        <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${isActive ? "bg-white" : stTheme.dot}`} />{st}
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Status dropdown & Actions */}
+              <div className="flex max-w-full flex-wrap items-center gap-3">
+                {/* Status dropdown */}
+                {canEditStatus(task) ? (
+                  <div className="w-44 max-w-full">
+                    <CustomSelect
+                      value={task.status}
+                      options={statusOptions}
+                      onChange={(value) => { if (canEditStatus(task)) onUpdateStatus(task.id, value as TaskStatus); }}
+                      buttonClassName="rounded-xl px-2.5 py-2"
+                      dropdownClassName="rounded-xl"
+                    />
+                  </div>
+                ) : <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${theme.badge}`}>{task.status}</span>}
 
                 {onSelectTask && (
                   <button
@@ -210,10 +183,10 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                   </button>
                 )}
 
-                {task.status !== "Completed" && (
+                {canEditStatus(task) && task.status !== "Completed" && (
                   <button
                     type="button"
-                    onClick={() => onUpdateStatus(task.id, "Completed")}
+                    onClick={() => { if (canEditStatus(task)) onUpdateStatus(task.id, "Completed"); }}
                     className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 transition-colors"
                   >
                     <CheckCircle size={14} />
@@ -225,7 +198,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
 
             {/* Expanded Content Drawer */}
             {isExpanded && (
-              <div className="border-t border-slate-100 bg-slate-50/50 p-5 space-y-4">
+              <div className="rounded-b-2xl border-t border-slate-100 bg-slate-50/50 p-5 space-y-4">
                 {/* Description block */}
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Description & Details</h4>
@@ -235,16 +208,11 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
                 </div>
 
                 {/* Metadata & Badges Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                <div className="grid min-w-0 grid-cols-1 gap-3 pt-2 sm:grid-cols-2 2xl:grid-cols-4">
                   <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
                     <span className="text-[11px] font-semibold text-slate-400">Assignee</span>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${task.assignee?.color || "bg-blue-600"}`} title={displayAssigneeName}>
-                        {displayInitials}
-                      </span>
-                      <span className="text-xs font-bold text-slate-800 truncate">
-                        {displayAssigneeName}
-                      </span>
+                      <TaskAssignee task={task} />
                     </div>
                   </div>
 
@@ -289,4 +257,3 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSe
     </div>
   );
 }
-

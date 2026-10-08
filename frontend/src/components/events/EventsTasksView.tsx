@@ -7,6 +7,7 @@ import { AtomizerForm } from "./AtomizerForm";
 import { EventsDashboard } from "./EventsDashboard";
 import { KanbanBoard } from "./KanbanBoard";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
+import type { CustomStatusConfig } from "./statusUtils";
 import type { Event, Task } from "./types";
 
 import { getFirebaseDb } from "@/firebase/config";
@@ -116,7 +117,8 @@ export function EventsTasksView() {
   async function handlePublishGoalTasks(
     targetEventId: string,
     publishedTasks: Task[],
-    newEventDetails?: { title: string; description: string }
+    newEventDetails?: { title: string; description: string },
+    workflow?: { customStatuses: CustomStatusConfig[]; statusOrder: string[] }
   ) {
     if (targetEventId === "CREATE_NEW" || newEventDetails) {
       const startFormatted = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -131,7 +133,9 @@ export function EventsTasksView() {
           endDate: endFormatted,
           memberCount: 1,
           progress: 0,
-          tasks: publishedTasks
+          tasks: publishedTasks,
+          customStatuses: workflow?.customStatuses || [],
+          statusOrder: workflow?.statusOrder || []
         });
         showToast({
           title: "Event created",
@@ -154,10 +158,12 @@ export function EventsTasksView() {
     const progress = tasks.length
       ? Math.round((tasks.filter((task) => task.status === "Completed").length / tasks.length) * 100)
       : 0;
-    const updatedEvent = { ...targetEvent, tasks, progress };
+    const customStatuses = Array.from(new Map([...(targetEvent.customStatuses || []), ...(workflow?.customStatuses || [])].map((status) => [status.name.trim().toLowerCase(), status])).values());
+    const statusOrder = Array.from(new Set([...(workflow?.statusOrder || targetEvent.statusOrder || []), ...customStatuses.map((status) => status.name)]));
+    const updatedEvent = { ...targetEvent, tasks, progress, customStatuses, statusOrder };
 
     handleUpdateEvent(updatedEvent);
-    void updateEventFirestore(firebaseUser, targetEvent.id, { tasks, progress })
+    void updateEventFirestore(firebaseUser, targetEvent.id, { tasks, progress, customStatuses, statusOrder })
       .then(() => showToast({ title: "Tasks added", description: `Your ${publishedTasks.length === 1 ? "task is" : "tasks are"} ready to manage in ${targetEvent.title}.`, tone: "success" }))
       .catch((error) => console.error("Failed to publish atomized tasks:", error));
     setActiveTab("events");
@@ -244,6 +250,7 @@ export function EventsTasksView() {
           />
         ) : (
           <EventsDashboard
+            organizationId={effectiveOrgId}
             events={events}
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}

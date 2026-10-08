@@ -97,7 +97,7 @@ export function CustomSelect({
           <span className="truncate">
           {selectedOption ? (
               <span className={cn(selectedOption.labelClass)}>
-                {selectedOption.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", selectedOption.selectedClass ? "bg-white" : selectedOption.indicatorClass)} />}
+                {selectedOption.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", selectedOption.indicatorClass)} />}
                 {selectedOption.label}
                 {selectedOption.sublabel ? (
                   <span className="text-slate-400 font-normal"> — {selectedOption.sublabel}</span>
@@ -159,14 +159,14 @@ export function CustomSelect({
                       </span>
                     )}
                     <div className="truncate">
-                      {opt.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", isSelected && opt.selectedClass ? "bg-white" : opt.indicatorClass)} />}
+                      {opt.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", opt.indicatorClass)} />}
                       <span className={cn(opt.labelClass)}>{opt.label}</span>
                       {opt.sublabel && (
                         <span className="text-slate-400 font-normal ml-1"> — {opt.sublabel}</span>
                       )}
                     </div>
                   </div>
-                  {isSelected && <Check size={14} className="text-blue-600 shrink-0 ml-2" />}
+                  {isSelected && <Check size={14} className="text-current shrink-0 ml-2" />}
                 </button>
               );
             })
