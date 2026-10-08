@@ -12,6 +12,7 @@ import { renameCommitteeReferences } from "../utils/committeeReferences.js";
 import { assertCanPostAnnouncement, canViewAnnouncement } from "../utils/announcementAccess.js";
 import { getDateRangeError } from "../utils/dateRange.js";
 import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
+import { getAdminAccountStatus, type AdminAccountStatus } from "../utils/adminAccountStatus.js";
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
 const validRoles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -920,8 +921,18 @@ export const recordAuditLog = writeAuditLog;
 
 export async function getMembersForAdmin(uid: string) {
   await requireAdmin(uid);
-  const usersSnapshot = await firestore.collection("users").get();
-  const orgsSnapshot = await firestore.collection("organizations").get();
+  const [usersSnapshot, orgsSnapshot, joinRequestsSnapshot] = await Promise.all([
+    firestore.collection("users").get(),
+    firestore.collection("organizations").get(),
+    firestore.collection("organization_join_requests").where("status", "==", "pending").get()
+  ]);
+  const pendingJoinByUser = new Map<string, string>();
+  for (const request of joinRequestsSnapshot.docs) {
+    const data = request.data();
+    if (typeof data.requestedByUID === "string" && typeof data.organizationId === "string") {
+      pendingJoinByUser.set(data.requestedByUID, data.organizationId);
+    }
+  }
 
   const orgMap = new Map<string, string>();
   orgsSnapshot.docs.forEach((docSnap) => {
@@ -938,9 +949,10 @@ export async function getMembersForAdmin(uid: string) {
     const email = typeof data.email === "string" ? data.email : "";
     const position = typeof data.position === "string" && data.position.trim() ? data.position : (role === "Admin" ? "System Administrator" : role);
     const orgId = typeof data.organizationId === "string" ? data.organizationId : null;
-    const organizationName = (orgId && orgMap.get(orgId)) || (typeof data.organizationName === "string" ? data.organizationName : "University Campus");
+    const requestedOrgId = pendingJoinByUser.get(docSnap.id);
+    const organizationName = (orgId && orgMap.get(orgId)) || (requestedOrgId && orgMap.get(requestedOrgId)) || (typeof data.organizationName === "string" ? data.organizationName : "University Campus");
     const committee = typeof data.committee === "string" && data.committee.trim() ? data.committee : "Executive Committee";
-    const inviteStatus = typeof data.inviteStatus === "string" ? data.inviteStatus : (data.onboardingCompleted ? "Active" : "Pending Invite");
+    const accountStatus = getAdminAccountStatus(data, pendingJoinByUser.has(docSnap.id));
     const joinedDate = data.createdAt && typeof (data.createdAt as { toDate?: () => Date }).toDate === "function"
       ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format((data.createdAt as { toDate: () => Date }).toDate())
       : "Jan 15, 2025";
@@ -953,7 +965,7 @@ export async function getMembersForAdmin(uid: string) {
       position,
       organization: organizationName,
       committee,
-      inviteStatus,
+      accountStatus,
       joinedDate
     };
   });
@@ -1021,7 +1033,7 @@ type AdminMemberEntry = {
   organization: string;
   committeeId: string | null;
   committee: string;
-  inviteStatus: "Active" | "Pending Invite" | "Inactive";
+  accountStatus: AdminAccountStatus;
   joinedDate: string | null;
 };
 
@@ -1038,10 +1050,18 @@ function asIsoString(value: unknown): string | null {
 }
 
 async function buildAdminMemberDirectory(): Promise<AdminMemberDirectory> {
-  const [usersSnap, orgsSnap] = await Promise.all([
+  const [usersSnap, orgsSnap, joinRequestsSnap] = await Promise.all([
     firestore.collection("users").get(),
-    firestore.collection("organizations").where("status", "==", "active").get()
+    firestore.collection("organizations").where("status", "==", "active").get(),
+    firestore.collection("organization_join_requests").where("status", "==", "pending").get()
   ]);
+  const pendingJoinByUser = new Map<string, string>();
+  for (const request of joinRequestsSnap.docs) {
+    const data = request.data();
+    if (typeof data.requestedByUID === "string" && typeof data.organizationId === "string") {
+      pendingJoinByUser.set(data.requestedByUID, data.organizationId);
+    }
+  }
 
   const orgMap = new Map<string, string>();
   const organizations: { id: string; name: string }[] = [];
@@ -1069,6 +1089,7 @@ async function buildAdminMemberDirectory(): Promise<AdminMemberDirectory> {
     const role = isUserRole(data.role) ? data.role : DEFAULT_ROLE;
     const orgId = typeof data.organizationId === "string" ? data.organizationId : null;
     const committeeId = typeof data.committeeId === "string" ? data.committeeId : null;
+    const requestedOrgId = pendingJoinByUser.get(doc.id);
     return {
       id: doc.id,
       name: typeof data.fullName === "string" ? data.fullName : "Campus Member",
@@ -1076,10 +1097,10 @@ async function buildAdminMemberDirectory(): Promise<AdminMemberDirectory> {
       role,
       position: typeof data.position === "string" ? data.position : role,
       organizationId: orgId,
-      organization: orgId && orgMap.has(orgId) ? orgMap.get(orgId)! : "University Campus",
+      organization: (orgId && orgMap.get(orgId)) || (requestedOrgId && orgMap.get(requestedOrgId)) || "University Campus",
       committeeId,
       committee: committeeId && committeeMap.has(committeeId) ? committeeMap.get(committeeId)!.name : "Unassigned",
-      inviteStatus: data.onboardingCompleted === true ? "Active" : "Pending Invite",
+      accountStatus: getAdminAccountStatus(data, pendingJoinByUser.has(doc.id)),
       joinedDate: asIsoString(data.createdAt)
     };
   });
@@ -1099,19 +1120,26 @@ export async function watchAdminMemberDirectory(
 ): Promise<() => void> {
   await requireAdmin(uid);
 
-  const unsubscribe = firestore.collection("users").onSnapshot(
-    async () => {
-      try {
-        const directory = await buildAdminMemberDirectory();
-        onData(directory);
-      } catch (error) {
-        onError(error instanceof Error ? error : new Error(String(error)));
-      }
-    },
-    (error) => onError(error)
-  );
+  let active = true;
+  let generation = 0;
+  const refresh = async () => {
+    const currentGeneration = ++generation;
+    try {
+      const directory = await buildAdminMemberDirectory();
+      if (active && currentGeneration === generation) onData(directory);
+    } catch (error) {
+      if (active && currentGeneration === generation) onError(error instanceof Error ? error : new Error(String(error)));
+    }
+  };
+  const reportError = (error: Error) => { if (active) onError(error); };
+  const unsubscribeUsers = firestore.collection("users").onSnapshot(refresh, reportError);
+  const unsubscribeJoinRequests = firestore.collection("organization_join_requests").onSnapshot(refresh, reportError);
 
-  return unsubscribe;
+  return () => {
+    active = false;
+    unsubscribeUsers();
+    unsubscribeJoinRequests();
+  };
 }
 
 // ─── Admin member update helpers ─────────────────────────────────────────────

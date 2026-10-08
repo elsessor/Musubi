@@ -111,7 +111,7 @@ export type AdminMemberRecord = {
   organization: string;
   committeeId: string | null;
   committee: string;
-  inviteStatus: "Active" | "Pending Invite" | "Inactive";
+  accountStatus: "Active" | "Pending Join Request" | "Onboarding" | "Inactive";
   joinedDate: string | null;
 };
 
@@ -121,8 +121,8 @@ export type AdminMemberDirectory = {
   committees: { id: string; name: string; organizationId: string | null }[];
 };
 
-function normalizeAdminInviteStatus(value: unknown): AdminMemberRecord["inviteStatus"] {
-  return value === "Active" || value === "Pending Invite" || value === "Inactive" ? value : "Active";
+function normalizeAdminAccountStatus(value: unknown): AdminMemberRecord["accountStatus"] {
+  return value === "Active" || value === "Pending Join Request" || value === "Onboarding" || value === "Inactive" ? value : "Onboarding";
 }
 
 // ── Session / auth ────────────────────────────────────────────────────────────
@@ -621,7 +621,7 @@ function normalizeAdminMemberDirectory(value: unknown): AdminMemberDirectory {
         organization: typeof item.organization === "string" ? item.organization : "Unassigned",
         committeeId: typeof item.committeeId === "string" ? item.committeeId : null,
         committee: typeof item.committee === "string" ? item.committee : "Unassigned",
-        inviteStatus: normalizeAdminInviteStatus(item.inviteStatus),
+        accountStatus: normalizeAdminAccountStatus(item.accountStatus),
         joinedDate: typeof item.joinedDate === "string" ? item.joinedDate : null
       };
     })

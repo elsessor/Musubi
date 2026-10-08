@@ -141,7 +141,7 @@ export default function AdminMembersPage() {
       const matchesRole = roleFilter === "all" || member.role === roleFilter;
       const matchesOrg = orgFilter === "all" || member.organization === orgFilter;
       const matchesCommittee = committeeFilter === "all" || member.committee === committeeFilter;
-      const matchesStatus = statusFilter === "all" || member.inviteStatus === statusFilter;
+      const matchesStatus = statusFilter === "all" || member.accountStatus === statusFilter;
 
       return matchesSearch && matchesRole && matchesOrg && matchesCommittee && matchesStatus;
     });
@@ -270,8 +270,8 @@ export default function AdminMembersPage() {
   };
 
   const totalMembers = members.length;
-  const activeCount = members.filter((m) => m.inviteStatus === "Active").length;
-  const pendingCount = members.filter((m) => m.inviteStatus === "Pending Invite").length;
+  const activeCount = members.filter((m) => m.accountStatus === "Active").length;
+  const pendingCount = members.filter((m) => m.accountStatus === "Pending Join Request").length;
   const leaderCount = members.filter((m) => m.role === "Student Leader" || m.role === "Admin").length;
 
   return (
@@ -336,7 +336,7 @@ export default function AdminMembersPage() {
               </span>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Pending Invites
+                  Pending Join Requests
                 </p>
                 <p className="text-2xl font-black text-slate-900">{pendingCount}</p>
               </div>
@@ -427,7 +427,8 @@ export default function AdminMembersPage() {
               >
                 <option value="all">All Statuses</option>
                 <option value="Active">Active</option>
-                <option value="Pending Invite">Pending Invite</option>
+                <option value="Pending Join Request">Pending Join Request</option>
+                <option value="Onboarding">Onboarding</option>
                 <option value="Inactive">Inactive</option>
               </select>
             </div>
@@ -558,9 +559,9 @@ export default function AdminMembersPage() {
                           </span>
                         </td>
 
-                        {/* Invite Status */}
+                        {/* Account Status */}
                         <td className="px-4 py-4">
-                          <StatusPill status={member.inviteStatus} />
+                          <StatusPill status={member.accountStatus} />
                         </td>
 
                         {/* Actions */}
@@ -671,10 +672,11 @@ function RolePill({ role }: { role: UserRole }) {
 }
 
 /* Status Pill Component */
-function StatusPill({ status }: { status: MemberRecord["inviteStatus"] }) {
-  const styles: Record<MemberRecord["inviteStatus"], string> = {
+function StatusPill({ status }: { status: MemberRecord["accountStatus"] }) {
+  const styles: Record<MemberRecord["accountStatus"], string> = {
     Active: "bg-emerald-50 text-emerald-700 ring-emerald-200/80",
-    "Pending Invite": "bg-amber-50 text-amber-700 ring-amber-200/80",
+    "Pending Join Request": "bg-amber-50 text-amber-700 ring-amber-200/80",
+    Onboarding: "bg-blue-50 text-blue-700 ring-blue-200/80",
     Inactive: "bg-slate-100 text-slate-600 ring-slate-200/80"
   };
 
