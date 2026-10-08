@@ -719,3 +719,18 @@ export async function atomizeGoal(
   });
 }
 
+export async function updateUserProfile(
+  user: User,
+  input: { fullName?: string; position?: string; yearLevel?: string; program?: string; birthdate?: string; skills?: string[] }
+): Promise<AuthUserProfile> {
+  const data = await organizationRequest<{ user?: AuthUserProfile }>(user, "/auth/profile", {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+  if (!data?.user) {
+    throw new Error("Failed to update user profile.");
+  }
+  return data.user;
+}
+
+

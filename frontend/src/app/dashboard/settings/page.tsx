@@ -12,7 +12,7 @@ import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { subscribeNotificationsFirestore } from "@/services/notifications.service";
-import { updateOrganizationDetails } from "@/services/auth.service";
+import { updateOrganizationDetails, updateUserProfile } from "@/services/auth.service";
 
 function greetingDate() {
   return new Intl.DateTimeFormat("en-US", {
@@ -283,12 +283,13 @@ export default function DashboardSettingsPage() {
         setFullName(editValue);
         if (firebaseUser) {
           try {
-            await updateProfile(firebaseUser, { displayName: editValue });
-          } catch { }
+            await updateUserProfile(firebaseUser, { fullName: editValue });
+          } catch (err) {
+            console.warn("[Settings] API profile update fallback:", err);
+            try { await updateProfile(firebaseUser, { displayName: editValue }); } catch { }
+            try { await updateDoc(userRef, { fullName: editValue }); } catch { }
+          }
         }
-        try {
-          await updateDoc(userRef, { fullName: editValue });
-        } catch { }
         if (profile) setProfile({ ...profile, fullName: editValue });
       } else if (editingField === "email") {
         setEmail(editValue);
@@ -298,9 +299,13 @@ export default function DashboardSettingsPage() {
         if (profile) setProfile({ ...profile, email: editValue });
       } else if (editingField === "position") {
         setPosition(editValue);
-        try {
-          await updateDoc(userRef, { position: editValue });
-        } catch { }
+        if (firebaseUser) {
+          try {
+            await updateUserProfile(firebaseUser, { position: editValue });
+          } catch {
+            try { await updateDoc(userRef, { position: editValue }); } catch { }
+          }
+        }
         if (profile) setProfile({ ...profile, position: editValue });
       }
 

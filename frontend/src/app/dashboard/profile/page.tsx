@@ -17,6 +17,21 @@ import { getMyProfile, updateMyProfile } from "@/services/auth.service";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import { SkillsPicker } from "@/components/ui/SkillsPicker";
 import { subscribeEventsFirestore } from "@/services/events.service";
+import { updateUserProfile } from "@/services/auth.service";
+import type { Event, Task } from "@/components/events/types";
+
+type UserProfileData = {
+  fullName: string;
+  email: string;
+  role: string;
+  position: string;
+  organizationName: string;
+  yearLevel: string;
+  program: string;
+  birthdate: string;
+  skills: string[];
+  status: string;
+};
 import type { Event } from "@/components/events/types";
 import { getAssignedProfileTasks } from "@/utils/profileMetrics";
 import { getDashboardNavItems } from "@/utils/routes";
@@ -220,8 +235,15 @@ export default function DashboardProfilePage() {
 
       if (firebaseUser) {
         try {
-          await updateProfile(firebaseUser, { displayName: updatedData.fullName });
-        } catch {}
+          await updateUserProfile(firebaseUser, updatedData);
+        } catch (apiErr) {
+          console.warn("[ProfilePage] API update fallback to client doc:", apiErr);
+          const userRef = doc(getFirebaseDb(), "users", firebaseUser.uid);
+          await updateDoc(userRef, updatedData);
+          try {
+            await updateProfile(firebaseUser, { displayName: updatedData.fullName });
+          } catch { }
+        }
       }
 
       setUserData((prev) => ({ ...prev, ...updatedData }));
@@ -241,8 +263,8 @@ export default function DashboardProfilePage() {
         errorCode === "permission-denied"
           ? "You don’t have permission to update this profile. Please contact your administrator."
           : err instanceof Error
-          ? err.message
-          : "Unable to save your profile. Check your connection and try again."
+            ? err.message
+            : "Unable to save your profile. Check your connection and try again."
       );
     } finally {
       setIsSaving(false);
@@ -277,142 +299,142 @@ export default function DashboardProfilePage() {
       notificationCount={0}
       onLogout={logout}
     >
-    <section>
-      <div className="mx-auto mb-5 max-w-7xl">
-        <button type="button" onClick={handleBack} className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-blue-600 transition hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-          <ArrowLeft size={16} />Back
-        </button>
-      </div>
-      <ProfileOverview user={userData} tasks={userSubtasks} loading={loading || authLoading} tasksLoading={tasksLoading} profileError={profileError} tasksError={tasksError} onEdit={openEditModal} />
+      <section>
+        <div className="mx-auto mb-5 max-w-7xl">
+          <button type="button" onClick={handleBack} className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-blue-600 transition hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+            <ArrowLeft size={16} />Back
+          </button>
+        </div>
+        <ProfileOverview user={userData} tasks={userSubtasks} loading={loading || authLoading} tasksLoading={tasksLoading} profileError={profileError} tasksError={tasksError} onEdit={openEditModal} />
 
-      {/* Edit Profile Modal */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-2 backdrop-blur-xs sm:p-4">
-          <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl">
-            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                  <User size={18} />
+        {/* Edit Profile Modal */}
+        {isEditModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-2 backdrop-blur-xs sm:p-4">
+            <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                    <User size={18} />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Profile</h3>
                 </div>
-                <h3 className="text-base font-bold text-slate-900">Edit Profile</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsEditModalOpen(false)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveProfile} className="flex min-h-0 flex-1 flex-col">
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
-                {profileSaveError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{profileSaveError}</p> : null}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-                    Position / Role
-                  </label>
-                  <input
-                    type="text"
-                    value={editPosition}
-                    onChange={(e) => setEditPosition(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-                    Year Level
-                  </label>
-                  <select
-                    value={editYearLevel}
-                    onChange={(event) => setEditYearLevel(event.target.value)}
-                    className="h-10 w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
-                  >
-                    <option value="" disabled>Choose year level</option>
-                    {YEAR_LEVEL_OPTIONS.map((yearLevel) => <option key={yearLevel} value={yearLevel}>{yearLevel}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-                  Program
-                </label>
-                <SearchableCombobox
-                  value={editProgram}
-                  onChange={setEditProgram}
-                  options={PROGRAM_OPTIONS}
-                  placeholder="Choose or type your program"
-                  className="h-10 w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-                  Birthdate
-                </label>
-                <input
-                  type="date"
-                  value={editBirthdate}
-                  max={getLatestAllowedBirthdate()}
-                  onChange={(event) => {
-                    setEditBirthdate(event.target.value);
-                    setProfileSaveError("");
-                  }}
-                  className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-                />
-                <p className="mt-1.5 text-xs text-slate-500">You must be at least 17 years old.</p>
-              </div>
-
-              {/* Skill Keywords */}
-              <SkillsPicker selectedSkills={editSkills} onChange={setEditSkills} />
-
-              </div>
-
-              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:gap-3 sm:px-6 sm:py-4">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="rounded-2xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                  className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
                 >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#2563eb] px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" /> Saving...
-                    </>
-                  ) : (
-                    "Save Changes"
-                  )}
+                  <X size={18} />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleSaveProfile} className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+                  {profileSaveError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{profileSaveError}</p> : null}
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                        Position / Role
+                      </label>
+                      <input
+                        type="text"
+                        value={editPosition}
+                        onChange={(e) => setEditPosition(e.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                        Year Level
+                      </label>
+                      <select
+                        value={editYearLevel}
+                        onChange={(event) => setEditYearLevel(event.target.value)}
+                        className="h-10 w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
+                      >
+                        <option value="" disabled>Choose year level</option>
+                        {YEAR_LEVEL_OPTIONS.map((yearLevel) => <option key={yearLevel} value={yearLevel}>{yearLevel}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                      Program
+                    </label>
+                    <SearchableCombobox
+                      value={editProgram}
+                      onChange={setEditProgram}
+                      options={PROGRAM_OPTIONS}
+                      placeholder="Choose or type your program"
+                      className="h-10 w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                      Birthdate
+                    </label>
+                    <input
+                      type="date"
+                      value={editBirthdate}
+                      max={getLatestAllowedBirthdate()}
+                      onChange={(event) => {
+                        setEditBirthdate(event.target.value);
+                        setProfileSaveError("");
+                      }}
+                      className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+                    />
+                    <p className="mt-1.5 text-xs text-slate-500">You must be at least 17 years old.</p>
+                  </div>
+
+                  {/* Skill Keywords */}
+                  <SkillsPicker selectedSkills={editSkills} onChange={setEditSkills} />
+
+                </div>
+
+                <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:gap-3 sm:px-6 sm:py-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="rounded-2xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#2563eb] px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" /> Saving...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
-    </section>
+        )}
+      </section>
     </DashboardLayout>
   );
 }
