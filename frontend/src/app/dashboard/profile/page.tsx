@@ -17,21 +17,6 @@ import { getMyProfile, updateMyProfile } from "@/services/auth.service";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import { SkillsPicker } from "@/components/ui/SkillsPicker";
 import { subscribeEventsFirestore } from "@/services/events.service";
-import { updateUserProfile } from "@/services/auth.service";
-import type { Event, Task } from "@/components/events/types";
-
-type UserProfileData = {
-  fullName: string;
-  email: string;
-  role: string;
-  position: string;
-  organizationName: string;
-  yearLevel: string;
-  program: string;
-  birthdate: string;
-  skills: string[];
-  status: string;
-};
 import type { Event } from "@/components/events/types";
 import { getAssignedProfileTasks } from "@/utils/profileMetrics";
 import { getDashboardNavItems } from "@/utils/routes";
@@ -235,15 +220,8 @@ export default function DashboardProfilePage() {
 
       if (firebaseUser) {
         try {
-          await updateUserProfile(firebaseUser, updatedData);
-        } catch (apiErr) {
-          console.warn("[ProfilePage] API update fallback to client doc:", apiErr);
-          const userRef = doc(getFirebaseDb(), "users", firebaseUser.uid);
-          await updateDoc(userRef, updatedData);
-          try {
-            await updateProfile(firebaseUser, { displayName: updatedData.fullName });
-          } catch { }
-        }
+          await updateProfile(firebaseUser, { displayName: updatedData.fullName });
+        } catch { }
       }
 
       setUserData((prev) => ({ ...prev, ...updatedData }));
