@@ -1,5 +1,7 @@
 "use client";
 
+import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
+
 import { Plus, Shield, X } from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
@@ -66,7 +68,7 @@ type AddTaskModalProps = {
   eventName: string;
   members?: OrganizationMember[];
   onClose: () => void;
-  onAddTask: (newTask: Task) => void;
+  onAddTask: (newTask: Task) => void | Promise<void>;
   roster?: OrgMemberItem[];
   committees?: { id: string; name: string }[];
   customStatuses?: CustomStatusConfig[];
@@ -91,6 +93,8 @@ export function AddTaskModal({
   const [committee, setCommittee] = useState(committees[0]?.name || "");
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [dateError, setDateError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
 
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses);
@@ -114,13 +118,16 @@ export function AddTaskModal({
     color: member.color
   }));
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || saving) return;
 
     const selectedMember = activeRoster.find((m) => m.id === assigneeId) || activeRoster[0];
 
     const nowStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const error = getDateRangeError(startDate.trim() || nowStr, dueDate.trim() || nowStr, "Task");
+    setDateError(error || "");
+    if (error) return;
     const newTask: Task = {
       id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: title.trim(),
@@ -141,8 +148,13 @@ export function AddTaskModal({
       requiredSkills: ["Event Coordination"]
     };
 
-    onAddTask(newTask);
-    onClose();
+    setSaving(true);
+    try {
+      await onAddTask(newTask);
+      onClose();
+    } catch (cause) {
+      setDateError(cause instanceof Error ? cause.message : "Unable to create the task. Please try again.");
+    } finally { setSaving(false); }
   }
 
   return (
@@ -249,8 +261,9 @@ export function AddTaskModal({
               </label>
               <MiniCalendarPicker
                 value={startDate}
-                onChange={setStartDate}
+                onChange={(value) => { setStartDate(value); setDateError(""); }}
                 minDate={new Date()}
+                maxDate={parseScheduleDate(dueDate) || undefined}
                 placeholder="Select start date & time"
                 includeTime={true}
               />
@@ -261,8 +274,8 @@ export function AddTaskModal({
               </label>
               <MiniCalendarPicker
                 value={dueDate}
-                onChange={setDueDate}
-                minDate={new Date()}
+                onChange={(value) => { setDueDate(value); setDateError(""); }}
+                minDate={parseScheduleDate(startDate) || new Date()}
                 placeholder="Select due date & time"
                 includeTime={true}
               />
@@ -270,6 +283,7 @@ export function AddTaskModal({
           </div>
 
           {/* Leader Only Restriction */}
+          {(dateError || getDateRangeError(startDate, dueDate, "Task")) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{getDateRangeError(startDate, dueDate, "Task") || dateError}</p>}
           <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">
             <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer select-none">
               <input
@@ -293,9 +307,10 @@ export function AddTaskModal({
             </button>
             <button
               type="submit"
-              className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md"
+              disabled={saving}
+              className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md disabled:opacity-60"
             >
-              Add Task
+              {saving ? "Saving..." : "Add Task"}
             </button>
           </div>
         </form>

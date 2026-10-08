@@ -13,6 +13,7 @@ type MiniCalendarPickerProps = {
   format?: "medium" | "iso"; // "medium" => "Sep 23, 2026", "iso" => "2026-09-23"
   includeTime?: boolean; // If true, adds time selector (e.g., 09:00 AM)
   minDate?: Date;
+  maxDate?: Date;
 };
 
 const MONTH_NAMES = [
@@ -30,7 +31,8 @@ export function MiniCalendarPicker({
   buttonClassName = "",
   format = "medium",
   includeTime = false,
-  minDate
+  minDate,
+  maxDate
 }: MiniCalendarPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -40,7 +42,8 @@ export function MiniCalendarPicker({
 
   const now = new Date();
   const earliestDate = minDate ? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()) : null;
-  const isBeforeMinDate = (date: Date) => !!earliestDate && date < earliestDate;
+  const latestDate = maxDate ? new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate()) : null;
+  const isOutsideRange = (date: Date) => Boolean((earliestDate && date < earliestDate) || (latestDate && date > latestDate));
 
   // Helper to parse string into Date & Time components
   const parseDate = (val: string): { date: Date; hour: number; minute: number; ampm: "AM" | "PM" } => {
@@ -197,6 +200,8 @@ export function MiniCalendarPicker({
   }
 
   function nextMonth() {
+    const next = new Date(viewYear, viewMonth + 1, 1);
+    if (latestDate && next > new Date(latestDate.getFullYear(), latestDate.getMonth(), 1)) return;
     if (viewMonth === 11) {
       setViewMonth(0);
       setViewYear((y) => y + 1);
@@ -205,8 +210,9 @@ export function MiniCalendarPicker({
     }
   }
 
-  function formatAndEmit(day: number, h = selectedHour, m = selectedMinute, period = selectedAmPm) {
-    const selectedDate = new Date(viewYear, viewMonth, day);
+  function formatAndEmit(day: number, h = selectedHour, m = selectedMinute, period = selectedAmPm, dateOverride?: Date) {
+    const selectedDate = dateOverride || new Date(viewYear, viewMonth, day);
+    if (isOutsideRange(selectedDate)) return;
     let formatted = "";
 
     if (format === "iso") {
@@ -229,7 +235,7 @@ export function MiniCalendarPicker({
   }
 
   function handleSelectDay(day: number) {
-    if (isBeforeMinDate(new Date(viewYear, viewMonth, day))) return;
+    if (isOutsideRange(new Date(viewYear, viewMonth, day))) return;
     setSelectedDay(day);
     formatAndEmit(day);
     if (!includeTime) {
@@ -239,10 +245,11 @@ export function MiniCalendarPicker({
 
   function handleSelectToday() {
     const today = new Date();
+    if (isOutsideRange(new Date(today.getFullYear(), today.getMonth(), today.getDate()))) return;
     setViewYear(today.getFullYear());
     setViewMonth(today.getMonth());
     setSelectedDay(today.getDate());
-    formatAndEmit(today.getDate());
+    formatAndEmit(today.getDate(), selectedHour, selectedMinute, selectedAmPm, today);
     if (!includeTime) {
       setIsOpen(false);
     }
@@ -334,7 +341,7 @@ export function MiniCalendarPicker({
                   cell.day === now.getDate() &&
                   viewMonth === now.getMonth() &&
                   viewYear === now.getFullYear();
-                const isDisabled = isBeforeMinDate(new Date(viewYear, viewMonth, cell.day));
+                const isDisabled = isOutsideRange(new Date(viewYear, viewMonth, cell.day));
 
                 return (
                   <button
@@ -432,7 +439,8 @@ export function MiniCalendarPicker({
               <button
                 type="button"
                 onClick={handleSelectToday}
-                className="font-bold text-blue-600 hover:underline"
+                disabled={isOutsideRange(new Date(now.getFullYear(), now.getMonth(), now.getDate()))}
+                className="font-bold text-blue-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300"
               >
                 Set Today ({now.toLocaleDateString("en-US", { month: "short", day: "numeric" })})
               </button>

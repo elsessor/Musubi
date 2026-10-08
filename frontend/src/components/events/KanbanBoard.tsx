@@ -243,7 +243,7 @@ export function KanbanBoard({
     setDragOverStatusPill(null);
   }
 
-  function syncEvent(updatedTasks: Task[], statusOverride?: EventStatus, progressOverride?: number) {
+  function syncEvent(updatedTasks: Task[], statusOverride?: EventStatus, progressOverride?: number, successMessage?: { title: string; description: string }) {
     if (!isLeader) return;
     const completedTasks = updatedTasks.filter((t) => t.status === "Completed").length;
     const computedProgress = updatedTasks.length > 0
@@ -269,7 +269,7 @@ export function KanbanBoard({
       ? { status: finalStatus, progress: finalProgress, tasks: updatedTasks }
       : { tasks: updatedTasks };
     void updateEventFirestore(firebaseUser, event.id, update).then(() => {
-      showToast({ title: "Changes saved", description: "Your changes have been saved successfully.", tone: "success" });
+      showToast({ ...(successMessage || { title: "Changes saved", description: "Your changes have been saved successfully." }), tone: "success" });
     }).catch((error) => {
       console.error("Failed to update event:", error);
       setCurrentEvent(currentEvent);
@@ -294,6 +294,7 @@ export function KanbanBoard({
     } catch (error) {
       console.error("Failed to create task:", error);
       showToast({ title: "Task not saved", description: "We couldn’t save the task. Please try again.", tone: "error" });
+      throw error;
     }
     setShowAddTaskModal(false);
   }
@@ -401,11 +402,13 @@ export function KanbanBoard({
 
   function handleDeleteTask(taskId: string) {
     if (!isLeader) return;
+    const deletedTask = tasks.find((task) => task.id === taskId);
+    if (!deletedTask) return;
     const updatedTasks = tasks.filter((task) => task.id !== taskId);
     const updatedProgress = updatedTasks.length
       ? Math.round((updatedTasks.filter((task) => task.status === "Completed").length / updatedTasks.length) * 100)
       : 0;
-    syncEvent(updatedTasks, undefined, updatedProgress);
+    syncEvent(updatedTasks, undefined, updatedProgress, { title: "Subtask deleted", description: `${deletedTask.title || "The subtask"} has been deleted successfully.` });
     setSelectedDetailTask(null);
   }
 

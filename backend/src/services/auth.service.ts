@@ -10,6 +10,7 @@ import { memberForViewer, taskForViewer } from "../utils/profileAccess.js";
 import { assertCanUpdateOrganization } from "../utils/organizationPermissions.js";
 import { renameCommitteeReferences } from "../utils/committeeReferences.js";
 import { assertCanPostAnnouncement, canViewAnnouncement } from "../utils/announcementAccess.js";
+import { getDateRangeError } from "../utils/dateRange.js";
 import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
@@ -1285,13 +1286,21 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
   const user = await getCurrentUser(uid);
   const targetOrgId = input.orgId || user.organizationId || "default-org";
   assertCanEditEvent(user, targetOrgId);
+  const startDate = input.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const endDate = input.endDate || new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const dateError = getDateRangeError(startDate, endDate);
+  if (dateError) throw new AppError(dateError, 400);
+  for (const task of input.tasks || []) {
+    const error = getDateRangeError(task.startDate, task.dueDate || task.deadline, "Task");
+    if (error) throw new AppError(`${task.title || "Subtask"}: ${error}`, 400);
+  }
 
   const eventRef = await firestore.collection("events").add({
     title: input.title.trim(),
     description: (input.description || "").trim(),
     status: input.status || "Active",
-    startDate: input.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    endDate: input.endDate || new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    startDate,
+    endDate,
     memberCount: typeof input.memberCount === "number" ? input.memberCount : 1,
     progress: typeof input.progress === "number" ? input.progress : 0,
     committee: input.committee ?? "",
@@ -1336,8 +1345,19 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
     const latest = latestSnapshot.data() || {};
     assertCanEditEvent(user, latest.orgId);
     const payload = { ...updatePayload };
+    if ("startDate" in payload || "endDate" in payload) {
+      const error = getDateRangeError("startDate" in payload ? payload.startDate : latest.startDate, "endDate" in payload ? payload.endDate : latest.endDate);
+      if (error) throw new AppError(error, 400);
+    }
     if (Array.isArray(payload.tasks)) {
       const originals = Array.isArray(latest.tasks) ? latest.tasks : [];
+      for (const task of payload.tasks) {
+        const original = originals.find((item: any) => item.id === task.id);
+        if (!original || task.startDate !== original.startDate || task.dueDate !== original.dueDate || task.deadline !== original.deadline) {
+          const error = getDateRangeError(task.startDate, task.dueDate || task.deadline, "Task");
+          if (error) throw new AppError(`${task.title || "Subtask"}: ${error}`, 400);
+        }
+      }
       payload.tasks = recordTaskPerformance(preserveTaskAttachments(payload.tasks, originals), originals, { uid, fullName: user.fullName, isLeader: true });
     }
     transaction.update(docRef, payload);

@@ -15,6 +15,7 @@ import {
 import { getFirebaseDb } from "../firebase/config";
 import type { Event, EventStatus, Task } from "../components/events/types";
 import { useAuthStore } from "@/store/authStore";
+import { getDateRangeError } from "@/utils/dateRange";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 
@@ -142,6 +143,12 @@ export async function createEventFirestore(
   orgId: string,
   event: Partial<Event>
 ): Promise<string> {
+  const error = getDateRangeError(event.startDate, event.endDate);
+  if (error) throw new Error(error);
+  for (const task of event.tasks || []) {
+    const taskError = getDateRangeError(task.startDate, task.dueDate || task.deadline, "Task");
+    if (taskError) throw new Error(`${task.title || "Subtask"}: ${taskError}`);
+  }
   const token = await getValidToken(user);
   if (token) {
     const res = await fetch(`${API_BASE_URL}/auth/events`, {

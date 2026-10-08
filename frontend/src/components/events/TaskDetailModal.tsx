@@ -1,5 +1,7 @@
 "use client";
 
+import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
+
 import {
   AlertTriangle,
   Check,
@@ -70,7 +72,8 @@ export function TaskDetailModal({
   const [priority, setPriority] = useState<TaskPriority>(task.priority || "Medium");
   const [committee, setCommittee] = useState<string>(task.committee || committees[0]?.name || "");
   const [startDate, setStartDate] = useState<string>(task.startDate || "");
-  const [dueDate, setDueDate] = useState<string>(task.dueDate || "");
+  const [dueDate, setDueDate] = useState<string>(task.dueDate || task.deadline || "");
+  const [dateError, setDateError] = useState("");
   const [isLeaderOnly, setIsLeaderOnly] = useState<boolean>(Boolean(task.isLeaderOnly));
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -119,6 +122,9 @@ export function TaskDetailModal({
       return;
     }
     if (!title.trim()) return;
+    const error = getDateRangeError(startDate, dueDate, "Task");
+    setDateError(error || "");
+    if (error) return;
 
     const selectedMember = isLeader ? selectedAssignee : null;
 
@@ -273,8 +279,9 @@ export function TaskDetailModal({
               </label>
               <MiniCalendarPicker
                 value={startDate}
-                onChange={setStartDate}
+                onChange={(value) => { setStartDate(value); setDateError(""); }}
                 minDate={new Date()}
+                maxDate={parseScheduleDate(dueDate) || undefined}
                 placeholder="Select start date & time"
                 includeTime={true}
               />
@@ -285,13 +292,14 @@ export function TaskDetailModal({
               </label>
               <MiniCalendarPicker
                 value={dueDate}
-                onChange={setDueDate}
-                minDate={new Date()}
+                onChange={(value) => { setDueDate(value); setDateError(""); }}
+                minDate={parseScheduleDate(startDate) || new Date()}
                 placeholder="Select due date & time"
                 includeTime={true}
               />
             </div>
           </div>
+          {(dateError || getDateRangeError(startDate, dueDate, "Task")) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{getDateRangeError(startDate, dueDate, "Task") || dateError}</p>}
           </section> : <section aria-label="Task schedule" className="space-y-3 border-t border-slate-100 pt-5">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Schedule</h4>
             <dl className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2">

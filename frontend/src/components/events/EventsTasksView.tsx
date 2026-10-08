@@ -12,6 +12,7 @@ import type { CustomStatusConfig } from "./statusUtils";
 import type { Event, Task } from "./types";
 
 import { getFirebaseDb } from "@/firebase/config";
+import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { createEventFirestore, deleteEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
@@ -40,6 +41,7 @@ export function EventsTasksView() {
   const [endDate, setEndDate] = useState("");
   const [committee, setCommittee] = useState("");
   const [creating, setCreating] = useState(false);
+  const [dateError, setDateError] = useState("");
 
   useEffect(() => {
     if (profile?.organizationId) {
@@ -172,22 +174,25 @@ export function EventsTasksView() {
 
   function handleNewEvent() {
     setCommittee("");
+    setDateError("");
     setIsModalOpen(true);
   }
 
   async function handleCreateEventSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    setCreating(true);
-
     const startFormatted = startDate
-      ? (!isNaN(new Date(startDate).getTime()) ? new Date(startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : startDate)
+      ? startDate.trim()
       : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
     const endFormatted = endDate
-      ? (!isNaN(new Date(endDate).getTime()) ? new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : endDate)
+      ? endDate.trim()
       : new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
+    const error = getDateRangeError(startFormatted, endFormatted);
+    setDateError(error || "");
+    if (error) return;
+    setCreating(true);
     try {
       await createEventFirestore(firebaseUser, effectiveOrgId || profile?.organizationId || "default-org", {
         title: title.trim(),
@@ -208,7 +213,7 @@ export function EventsTasksView() {
       setEndDate("");
       setCommittee("");
     } catch (err) {
-      console.error("Failed to create event:", err);
+      setDateError(err instanceof Error ? err.message : "Unable to create the event. Please try again.");
     } finally {
       setCreating(false);
     }
@@ -335,8 +340,9 @@ export function EventsTasksView() {
                   </label>
                   <MiniCalendarPicker
                     value={startDate}
-                    onChange={setStartDate}
+                    onChange={(value) => { setStartDate(value); setDateError(""); }}
                     minDate={new Date()}
+                    maxDate={parseScheduleDate(endDate) || undefined}
                     placeholder="Select start date & time"
                     includeTime={true}
                   />
@@ -347,8 +353,8 @@ export function EventsTasksView() {
                   </label>
                   <MiniCalendarPicker
                     value={endDate}
-                    onChange={setEndDate}
-                    minDate={new Date()}
+                    onChange={(value) => { setEndDate(value); setDateError(""); }}
+                    minDate={parseScheduleDate(startDate) || new Date()}
                     placeholder="Select end date & time"
                     includeTime={true}
                   />
@@ -356,6 +362,7 @@ export function EventsTasksView() {
               </div>
 
               {/* BUTTONS */}
+              {(dateError || getDateRangeError(startDate, endDate)) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{getDateRangeError(startDate, endDate) || dateError}</p>}
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
                   type="button"

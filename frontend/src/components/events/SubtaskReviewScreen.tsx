@@ -41,6 +41,7 @@ import {
 import { cn } from "@/components/ui/utils";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
+import { useToastStore } from "@/store/toastStore";
 
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
@@ -107,7 +108,10 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
   }
 
   function handleDeleteSubtask(id: string) {
+    const deleted = subtasks.find((subtask) => subtask.id === id);
+    if (!deleted) return;
     setSubtasks((prev) => prev.filter((st) => st.id !== id));
+    useToastStore.getState().showToast({ title: "Subtask deleted", description: `${deleted.title} was removed from the event draft.`, tone: "success" });
   }
 
   function handleToggleLeaderOnly(id: string) {
