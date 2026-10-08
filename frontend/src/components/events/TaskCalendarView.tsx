@@ -9,6 +9,7 @@ import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
+import { isSameCalendarDay, isTaskScheduledOnDay } from "@/utils/calendarSchedule";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -26,8 +27,8 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
   const role = useAuthStore((state) => state.profile?.role);
   function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
-  // Default to August 2026 (matching event timelines in mock data)
-  const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
+  const today = new Date();
   const [selectedTaskSnapshot, setSelectedTask] = useState<Task | null>(null);
   const selectedTask = tasks.find((task) => task.id === selectedTaskSnapshot?.id) || null;
 
@@ -49,40 +50,12 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
   }
 
   function resetToday() {
-    setCurrentDate(new Date(2026, 7, 1));
+    setCurrentDate(new Date());
   }
 
-  // Parse task due date and match with day number
   function getTasksForDay(dayNum: number): Task[] {
-    const targetCellTime = new Date(year, month, dayNum, 0, 0, 0, 0).getTime();
-
-    return tasks.filter((t, idx) => {
-      if (!t.dueDate) {
-        // Fallback placement for tasks without explicit due date
-        const fallbackDays = [5, 12, 18, 24];
-        return dayNum === fallbackDays[idx % fallbackDays.length];
-      }
-      const lower = t.dueDate.toLowerCase();
-
-      // Standard Date parsing
-      const parsed = new Date(t.dueDate);
-      if (!isNaN(parsed.getTime())) {
-        const tTime = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime();
-        if (tTime === targetCellTime) return true;
-      }
-
-      // Parsing with implicit year
-      const parsedWithYear = new Date(`${t.dueDate}, ${year}`);
-      if (!isNaN(parsedWithYear.getTime())) {
-        const tTime = new Date(parsedWithYear.getFullYear(), parsedWithYear.getMonth(), parsedWithYear.getDate()).getTime();
-        if (tTime === targetCellTime) return true;
-      }
-
-      // Day number match substring (e.g. "Aug 15", "15", "2026-08-15")
-      if (lower.includes(String(dayNum))) return true;
-
-      return false;
-    });
+    const day = new Date(year, month, dayNum);
+    return tasks.filter((task) => isTaskScheduledOnDay(task, day));
   }
 
   // Build grid slots (leading blanks + days of month)
@@ -111,7 +84,7 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
             onClick={resetToday}
             className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
           >
-            Aug 2026
+            Today
           </button>
           <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-2xs">
             <button
@@ -161,7 +134,7 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
           }
 
           const dayTasks = getTasksForDay(cell.dayNum);
-          const isToday = cell.dayNum === 15; // Highlight 15th as demo current day
+          const isToday = isSameCalendarDay(new Date(year, month, cell.dayNum), today);
 
           return (
             <div

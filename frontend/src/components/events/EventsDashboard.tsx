@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Event, EventStatus } from "./types";
+import { isEventScheduledOnDay } from "@/utils/calendarSchedule";
 import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
@@ -35,43 +36,6 @@ const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ s
   { mode: "kanban", title: "Kanban Columns", icon: Columns3 },
   { mode: "calendar", title: "Calendar View", icon: Calendar }
 ];
-
-function parseEventDateRange(evt: Event): { start: Date | null; end: Date | null } {
-  if (!evt.startDate || evt.startDate === "TBD") {
-    return { start: null, end: null };
-  }
-
-  let startStr = evt.startDate.trim();
-  let endStr = evt.endDate ? evt.endDate.trim() : "";
-
-  if (startStr.includes(" - ")) {
-    const parts = startStr.split(" - ");
-    startStr = parts[0].trim();
-    if (!endStr || endStr === "TBD") {
-      endStr = parts[1].trim();
-    }
-  }
-
-  function parseDateString(str: string): Date | null {
-    if (!str || str === "TBD") return null;
-
-    let d = new Date(str);
-    if (!isNaN(d.getTime())) return d;
-
-    const hasYear = /\b(20\d\d)\b/.test(str);
-    if (!hasYear) {
-      d = new Date(`${str}, 2026`);
-      if (!isNaN(d.getTime())) return d;
-    }
-
-    return null;
-  }
-
-  const start = parseDateString(startStr);
-  const end = parseDateString(endStr) || start;
-
-  return { start, end };
-}
 
 function buildCalendarDays(currentDate: Date, events: Event[]) {
   const year = currentDate.getFullYear();
@@ -102,27 +66,8 @@ function buildCalendarDays(currentDate: Date, events: Event[]) {
       today.getMonth() === month &&
       today.getDate() === d;
 
-    const cellTime = new Date(year, month, d, 0, 0, 0, 0).getTime();
-
-    const matchingEvents = events.filter((e, evtIdx) => {
-      const { start, end } = parseEventDateRange(e);
-      if (start) {
-        const startTime = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
-        const endTime = end
-          ? new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime()
-          : startTime;
-        if (cellTime >= startTime && cellTime <= endTime) {
-          return true;
-        }
-      } else {
-        // Fallback placement for TBD or unparseable dates: distribute evenly across calendar
-        const fallbackDays = [5, 15, 25, 1, 10, 20];
-        const assignedDay = fallbackDays[evtIdx % fallbackDays.length];
-        if (d === assignedDay) return true;
-      }
-
-      return false;
-    });
+    const cellDate = new Date(year, month, d);
+    const matchingEvents = events.filter((event) => isEventScheduledOnDay(event, cellDate));
 
     days.push({
       dayNumber: d,
@@ -164,25 +109,7 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date(2026, 7, 1)); // Default Aug 2026
-
-  useEffect(() => {
-    if (events.length > 0) {
-      for (const evt of events) {
-        const { start } = parseEventDateRange(evt);
-        if (start) {
-          setCalendarDate((prev) => {
-            const hasMatches = buildCalendarDays(prev, events).some((d) => d.matchingEvents.length > 0);
-            if (!hasMatches) {
-              return new Date(start.getFullYear(), start.getMonth(), 1);
-            }
-            return prev;
-          });
-          break;
-        }
-      }
-    }
-  }, [events]);
+  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date());
 
   // Organization status settings are shared with every event panel.
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
@@ -718,19 +645,26 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       {/* 5. Calendar View */}
       {viewMode === "calendar" && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-4">
             <button
               type="button"
+              aria-label="Previous month"
               onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}
               className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
             >
               <ChevronLeft size={16} />
             </button>
-            <h3 className="text-base font-bold text-slate-900">
-              {calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" })}
-            </h3>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <h3 className="text-base font-bold text-slate-900">
+                {calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" })}
+              </h3>
+              <button type="button" onClick={() => setCalendarDate(new Date())} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">
+                Today
+              </button>
+            </div>
             <button
               type="button"
+              aria-label="Next month"
               onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}
               className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
             >
