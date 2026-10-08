@@ -170,11 +170,11 @@ export function findBestMemberForSubtask(
 
     let explanation = "";
     if (matchedSkills.length > 0) {
-      explanation = `Jaccard Skill Similarity S_m = ${Sm.toFixed(2)} (${matchedSkills.join(", ")})`;
+      explanation = `Matched skills: ${matchedSkills.join(", ")}`;
     } else if (Sm >= 0.7) {
-      explanation = `Matched role/name: ${member.name} (${member.position || member.role})`;
+      explanation = `Role alignment: ${member.position || member.role}`;
     } else {
-      explanation = `Assigned by capacity: W_m = ${Wm.toFixed(2)} (${Am}/${maxThreshold} tasks), R_m = ${Rm.toFixed(2)}`;
+      explanation = `Available workload capacity (${Am}/${maxThreshold} active tasks)`;
     }
 
     return {
