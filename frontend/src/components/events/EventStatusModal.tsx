@@ -7,28 +7,38 @@ import type { EventStatus } from "./types";
 type EventStatusModalProps = {
   eventTitle: string;
   targetStatus: "Completed" | "Cancelled";
+  unfinishedTaskCount?: number;
   onClose: () => void;
-  onConfirm: (targetStatus: EventStatus, notes?: string) => void;
+  onConfirm: (targetStatus: EventStatus) => void | Promise<void>;
 };
 
 export function EventStatusModal({
   eventTitle,
   targetStatus,
+  unfinishedTaskCount = 0,
   onClose,
   onConfirm
 }: EventStatusModalProps) {
-  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const isComplete = targetStatus === "Completed";
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onConfirm(targetStatus, notes.trim());
-    onClose();
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onConfirm(targetStatus);
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to save the event status.");
+    } finally { setSaving(false); }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-4">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="event-status-confirm-title" className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4">
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span
@@ -39,60 +49,47 @@ export function EventStatusModal({
             {isComplete ? <CheckCircle2 size={22} /> : <AlertOctagon size={22} />}
           </span>
           <div className="flex-1">
-            <h3 className="text-base font-extrabold text-slate-900">
+            <h3 id="event-status-confirm-title" className="text-base font-extrabold text-slate-900">
               {isComplete ? "Mark Event as Completed" : "Cancel Event Confirmation"}
             </h3>
             <p className="text-xs text-slate-500 font-medium">
               Updating event state for &quot;{eventTitle}&quot;
             </p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button type="button" onClick={onClose} disabled={saving} aria-label="Close confirmation" className="text-slate-400 hover:text-slate-600 disabled:opacity-50">
             <X size={18} />
           </button>
         </div>
 
         <p className="text-xs text-slate-600 leading-relaxed font-medium">
           {isComplete
-            ? "Are you sure you want to mark this event as Completed? Event progress will be set to 100% and all subtasks archived into council records."
-            : "Are you sure you want to cancel this event? The event status will be updated to Cancelled and recorded in the audit log."}
+            ? `Mark this event as Completed? Progress will be set to 100%. ${unfinishedTaskCount > 0 ? `${unfinishedTaskCount} unfinished subtask${unfinishedTaskCount === 1 ? "" : "s"} will also be marked Completed.` : "All subtasks are already completed."}`
+            : `Cancel this event? ${unfinishedTaskCount > 0 ? `${unfinishedTaskCount} unfinished subtask${unfinishedTaskCount === 1 ? "" : "s"} will keep their current statuses.` : "Subtask statuses will stay the same."}`}
         </p>
 
-        {/* Notes form */}
+        {/* Confirmation actions */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-              {isComplete ? "Completion Summary (Optional)" : "Cancellation Reason (Optional)"}
-            </label>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder={
-                isComplete
-                  ? "e.g. All event activities successfully concluded and reported."
-                  : "e.g. Cancelled due to venue scheduling conflicts."
-              }
-              className="w-full resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] p-3 text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none"
-            />
-          </div>
+          {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
 
           <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
             <button
               type="button"
               onClick={onClose}
+              disabled={saving}
               className="rounded-2xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
             >
               Back
             </button>
             <button
               type="submit"
+              disabled={saving}
               className={`rounded-2xl py-2.5 text-xs font-bold text-white shadow-md transition ${
                 isComplete
                   ? "bg-emerald-600 hover:bg-emerald-700"
                   : "bg-rose-600 hover:bg-rose-700"
               }`}
             >
-              {isComplete ? "Confirm Completed" : "Confirm Cancellation"}
+              {saving ? "Saving..." : isComplete ? "Confirm Completed" : "Confirm Cancellation"}
             </button>
           </div>
         </form>

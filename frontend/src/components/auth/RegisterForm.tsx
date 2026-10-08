@@ -53,8 +53,8 @@ export function RegisterForm() {
     setSuccessRoute(getPostAuthenticationRoute(session.user));
   }
 
-  async function completeEmailRegistration(user: Awaited<ReturnType<typeof registerWithEmail>>) {
-    const session = await exchangeFirebaseSession(user);
+  async function completeEmailRegistration(user: Awaited<ReturnType<typeof registerWithEmail>>, fullName?: string) {
+    const session = await exchangeFirebaseSession(user, fullName);
     authStore.setFirebaseUser(user);
     authStore.setProfile(session.user);
 
@@ -65,7 +65,7 @@ export function RegisterForm() {
     authStore.setLoading(true);
     try {
       const user = await registerWithEmail(values);
-      await completeEmailRegistration(user);
+      await completeEmailRegistration(user, values.fullName);
     } catch (error) {
       showToast({
         title: "Unable to create account",

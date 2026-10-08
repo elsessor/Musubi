@@ -14,11 +14,15 @@ import {
   Table,
   Users
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Event, EventStatus } from "./types";
+import { isEventScheduledOnDay } from "@/utils/calendarSchedule";
 import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+
+import { useAuthStore } from "@/store/authStore";
+import { eventStatusSettings, type EventStatusSettings } from "@/services/events.service";
 
 type StatusFilter = EventStatus | "All";
 type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
@@ -32,43 +36,6 @@ const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ s
   { mode: "kanban", title: "Kanban Columns", icon: Columns3 },
   { mode: "calendar", title: "Calendar View", icon: Calendar }
 ];
-
-function parseEventDateRange(evt: Event): { start: Date | null; end: Date | null } {
-  if (!evt.startDate || evt.startDate === "TBD") {
-    return { start: null, end: null };
-  }
-
-  let startStr = evt.startDate.trim();
-  let endStr = evt.endDate ? evt.endDate.trim() : "";
-
-  if (startStr.includes(" - ")) {
-    const parts = startStr.split(" - ");
-    startStr = parts[0].trim();
-    if (!endStr || endStr === "TBD") {
-      endStr = parts[1].trim();
-    }
-  }
-
-  function parseDateString(str: string): Date | null {
-    if (!str || str === "TBD") return null;
-
-    let d = new Date(str);
-    if (!isNaN(d.getTime())) return d;
-
-    const hasYear = /\b(20\d\d)\b/.test(str);
-    if (!hasYear) {
-      d = new Date(`${str}, 2026`);
-      if (!isNaN(d.getTime())) return d;
-    }
-
-    return null;
-  }
-
-  const start = parseDateString(startStr);
-  const end = parseDateString(endStr) || start;
-
-  return { start, end };
-}
 
 function buildCalendarDays(currentDate: Date, events: Event[]) {
   const year = currentDate.getFullYear();
@@ -99,27 +66,8 @@ function buildCalendarDays(currentDate: Date, events: Event[]) {
       today.getMonth() === month &&
       today.getDate() === d;
 
-    const cellTime = new Date(year, month, d, 0, 0, 0, 0).getTime();
-
-    const matchingEvents = events.filter((e, evtIdx) => {
-      const { start, end } = parseEventDateRange(e);
-      if (start) {
-        const startTime = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
-        const endTime = end
-          ? new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime()
-          : startTime;
-        if (cellTime >= startTime && cellTime <= endTime) {
-          return true;
-        }
-      } else {
-        // Fallback placement for TBD or unparseable dates: distribute evenly across calendar
-        const fallbackDays = [5, 15, 25, 1, 10, 20];
-        const assignedDay = fallbackDays[evtIdx % fallbackDays.length];
-        if (d === assignedDay) return true;
-      }
-
-      return false;
-    });
+    const cellDate = new Date(year, month, d);
+    const matchingEvents = events.filter((event) => isEventScheduledOnDay(event, cellDate));
 
     days.push({
       dayNumber: d,
@@ -144,94 +92,112 @@ function buildCalendarDays(currentDate: Date, events: Event[]) {
 
 type EventsDashboardProps = {
   events: Event[];
+  organizationId?: string | null;
   isLeader?: boolean;
   onSelectEvent: (event: Event) => void;
   onNewEvent: () => void;
   committees?: { id: string; name: string }[];
 };
 
-export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewEvent, committees = [] }: EventsDashboardProps) {
+export function EventsDashboard({ events, organizationId, isLeader = true, onSelectEvent: selectEvent, onNewEvent, committees = [] }: EventsDashboardProps) {
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsReady, setSettingsReady] = useState(false);
+  const saveQueue = useRef(Promise.resolve());
+  const pendingSaves = useRef(0);
+  function onSelectEvent(event: Event) { selectEvent({ ...event, eventCustomStatuses: customStatuses }); }
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date(2026, 7, 1)); // Default Aug 2026
+  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date());
 
-  useEffect(() => {
-    if (events.length > 0) {
-      for (const evt of events) {
-        const { start } = parseEventDateRange(evt);
-        if (start) {
-          setCalendarDate((prev) => {
-            const hasMatches = buildCalendarDays(prev, events).some((d) => d.matchingEvents.length > 0);
-            if (!hasMatches) {
-              return new Date(start.getFullYear(), start.getMonth(), 1);
-            }
-            return prev;
-          });
-          break;
-        }
-      }
-    }
-  }, [events]);
-
-  // Custom event statuses stored in state & localStorage
+  // Organization status settings are shared with every event panel.
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
   const [isAddStatusModalOpen, setIsAddStatusModalOpen] = useState(false);
   const [draggedStatusPill, setDraggedStatusPill] = useState<string | null>(null);
   const [dragOverStatusPill, setDragOverStatusPill] = useState<string | null>(null);
 
-  const [statusOrder, setStatusOrder] = useState<string[]>(() => {
-    return DEFAULT_EVENT_STATUSES;
-  });
-
-  // Read browser-persisted preferences after hydration so the server and
-  // client render the same status pills on the first pass.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("musubi_event_status_order");
-      if (saved) setStatusOrder(JSON.parse(saved));
-    } catch {}
-  }, []);
+  const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_EVENT_STATUSES);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("musubi_custom_event_statuses");
-      if (saved) {
-        setCustomStatuses(JSON.parse(saved));
+    let cancelled = false;
+    setSettingsReady(false);
+    setCustomStatuses([]);
+    setStatusOrder(DEFAULT_EVENT_STATUSES);
+    async function refresh() {
+      if (!firebaseUser || pendingSaves.current) return;
+      try {
+        let saved = await eventStatusSettings(firebaseUser, organizationId);
+        if (!saved.configured && isLeader && !cancelled) {
+          // Preserve status colors saved by the earlier browser-only version.
+          let legacy: CustomStatusConfig[] = [];
+          try {
+            const parsed = JSON.parse(localStorage.getItem("musubi_custom_event_statuses") || "[]");
+            if (Array.isArray(parsed)) legacy = parsed;
+          } catch {}
+          if (legacy.length) {
+            const known = [...DEFAULT_EVENT_STATUSES, ...legacy.map((status) => status.name)];
+            let order = known;
+            try {
+              const storedOrder = JSON.parse(localStorage.getItem("musubi_event_status_order") || "[]");
+              if (Array.isArray(storedOrder)) order = Array.from(new Set([...storedOrder.filter((status) => known.includes(status)), ...known]));
+            } catch {}
+            saved = await eventStatusSettings(firebaseUser, organizationId, { customStatuses: legacy, statusOrder: order });
+            try {
+              localStorage.removeItem("musubi_custom_event_statuses");
+              localStorage.removeItem("musubi_event_status_order");
+            } catch {}
+          }
+        }
+        if (!cancelled && !pendingSaves.current) {
+          setCustomStatuses(saved.customStatuses);
+          setStatusOrder(saved.statusOrder);
+          setSettingsReady(true);
+          setSettingsError("");
+        }
+      } catch (error) {
+        if (!cancelled) setSettingsError(error instanceof Error ? error.message : "Unable to load status colors.");
       }
-    } catch {}
-  }, []);
+    }
+    void refresh();
+    const interval = window.setInterval(() => { if (!document.hidden) void refresh(); }, 25000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [firebaseUser, organizationId, isLeader]);
+
+  function persistSettings(custom: CustomStatusConfig[], order: string[]) {
+    if (!isLeader || !settingsReady) return;
+    pendingSaves.current += 1;
+    const configured = new Set([...DEFAULT_EVENT_STATUSES, ...custom.map((status) => status.name)]);
+    const settings: EventStatusSettings = { customStatuses: custom, statusOrder: order.filter((status) => configured.has(status)) };
+    saveQueue.current = saveQueue.current.then(async () => {
+      try {
+        await eventStatusSettings(firebaseUser, organizationId, settings);
+        setSettingsError("");
+      } catch (error) {
+        setSettingsError(error instanceof Error ? error.message : "Status colors could not be saved. Please try again.");
+      } finally { pendingSaves.current -= 1; }
+    });
+  }
 
   // Synchronize statusOrder with customStatuses and defaultStatuses
   useEffect(() => {
     setStatusOrder((prev) => {
-      const existing = new Set(prev);
-      const missingDefaults = DEFAULT_EVENT_STATUSES.filter((st) => !existing.has(st));
-      const missingCustom = customStatuses.filter((cs) => !existing.has(cs.name)).map((cs) => cs.name);
-      const validCustomNames = new Set(customStatuses.map((cs) => cs.name));
-      const filtered = prev.filter(
-        (st) => DEFAULT_EVENT_STATUSES.includes(st as EventStatus) || validCustomNames.has(st)
-      );
-
-      if (missingDefaults.length === 0 && missingCustom.length === 0 && filtered.length === prev.length) {
-        return prev;
-      }
-      const updated = [...filtered, ...missingDefaults, ...missingCustom];
-      try {
-        localStorage.setItem("musubi_event_status_order", JSON.stringify(updated));
-      } catch {}
+      const known = Array.from(new Set([...DEFAULT_EVENT_STATUSES, ...customStatuses.map((status) => status.name), ...events.map((event) => event.status)]));
+      const filtered = prev.filter((status) => known.includes(status));
+      const updated = [...filtered, ...known.filter((status) => !filtered.includes(status))];
+      if (updated.length === prev.length && updated.every((status, index) => status === prev[index])) return prev;
       return updated;
     });
-  }, [customStatuses]);
+  }, [customStatuses, events]);
 
   function handleReorderStatusOrder(newOrder: string[]) {
+    if (!isLeader || !settingsReady) return;
     setStatusOrder(newOrder);
-    try {
-      localStorage.setItem("musubi_event_status_order", JSON.stringify(newOrder));
-    } catch {}
+    persistSettings(customStatuses, newOrder);
   }
 
   function handleAddCustomStatus(statusName: string, color: StatusThemeColor, insertIndex?: number) {
+    if (!isLeader || !settingsReady) return;
     if (
       customStatuses.some((cs) => cs.name.toLowerCase() === statusName.toLowerCase()) ||
       DEFAULT_EVENT_STATUSES.some((ds) => ds.toLowerCase() === statusName.toLowerCase())
@@ -244,21 +210,16 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
     const idx = typeof insertIndex === "number" ? insertIndex : updatedOrder.length;
     updatedOrder.splice(idx, 0, statusName);
     setStatusOrder(updatedOrder);
-    try {
-      localStorage.setItem("musubi_custom_event_statuses", JSON.stringify(updated));
-      localStorage.setItem("musubi_event_status_order", JSON.stringify(updatedOrder));
-    } catch {}
+    persistSettings(updated, updatedOrder);
   }
 
   function handleDeleteCustomStatus(statusName: string) {
+    if (!isLeader || !settingsReady) return;
     const updated = customStatuses.filter((cs) => cs.name.toLowerCase() !== statusName.toLowerCase());
     const updatedOrder = statusOrder.filter((st) => st.toLowerCase() !== statusName.toLowerCase());
     setCustomStatuses(updated);
     setStatusOrder(updatedOrder);
-    try {
-      localStorage.setItem("musubi_custom_event_statuses", JSON.stringify(updated));
-      localStorage.setItem("musubi_event_status_order", JSON.stringify(updatedOrder));
-    } catch {}
+    persistSettings(updated, updatedOrder);
     if (filter === statusName) {
       setFilter("All");
     }
@@ -305,6 +266,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
 
   return (
     <div className="flex flex-col gap-4">
+      {settingsError ? <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{settingsError}</p> : null}
       {/* Summary bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm">
         <div className="flex flex-wrap items-center gap-5 text-sm">
@@ -313,12 +275,12 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
             <span className="text-slate-500">Total</span>
           </span>
           {[
-            { label: "Active",    count: activeCount,    dot: "bg-blue-500" },
-            { label: "Planning",  count: planningCount,  dot: "bg-amber-400" },
-            { label: "Completed", count: completedCount, dot: "bg-emerald-500" }
-          ].map(({ label, count, dot }) => (
+            { label: "Active",    count: activeCount },
+            { label: "Planning",  count: planningCount },
+            { label: "Completed", count: completedCount }
+          ].map(({ label, count }) => (
             <span key={label} className="flex items-center gap-1.5 text-sm text-slate-600">
-              <span className={`h-2 w-2 rounded-full ${dot}`} />
+              <span className={`h-2 w-2 rounded-full ${getStatusTheme(label, customStatuses).dot}`} />
               <span className="font-semibold text-slate-900">{count}</span>
               {label}
             </span>
@@ -364,7 +326,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
               const count = key === "All" ? events.length : events.filter((e) => e.status === key).length;
               const isActive = filter === key;
               const theme = getStatusTheme(key, customStatuses);
-              const isPillDraggable = isLeader && key !== "All";
+              const isPillDraggable = isLeader && settingsReady && key !== "All";
               const isDraggingThis = draggedStatusPill === key;
               const isDragOverThis = dragOverStatusPill === key;
 
@@ -423,6 +385,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
             {isLeader && (
               <button
                 type="button"
+                disabled={!settingsReady}
                 onClick={() => setIsAddStatusModalOpen(true)}
                 className="flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
                 title="Add or rearrange custom event statuses"
@@ -594,7 +557,7 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
           {statusOrder.map((status) => {
             const statusEvents = visible.filter((e) => e.status === status);
             const theme = getStatusTheme(status, customStatuses);
-            const isColDraggable = isLeader;
+            const isColDraggable = isLeader && settingsReady;
             const isDraggingCol = draggedStatusPill === status;
             const isDragOverCol = dragOverStatusPill === status;
 
@@ -682,19 +645,26 @@ export function EventsDashboard({ events, isLeader = true, onSelectEvent, onNewE
       {/* 5. Calendar View */}
       {viewMode === "calendar" && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-4">
             <button
               type="button"
+              aria-label="Previous month"
               onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}
               className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
             >
               <ChevronLeft size={16} />
             </button>
-            <h3 className="text-base font-bold text-slate-900">
-              {calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" })}
-            </h3>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <h3 className="text-base font-bold text-slate-900">
+                {calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" })}
+              </h3>
+              <button type="button" onClick={() => setCalendarDate(new Date())} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">
+                Today
+              </button>
+            </div>
             <button
               type="button"
+              aria-label="Next month"
               onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}
               className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
             >

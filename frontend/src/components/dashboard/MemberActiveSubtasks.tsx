@@ -2,10 +2,12 @@
 
 import { Calendar, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
 import type { Task } from "@/components/events/types";
 
 type MemberActiveSubtaskItem = Task & {
   eventTitle?: string;
+  customStatuses?: CustomStatusConfig[];
 };
 
 type MemberActiveSubtasksProps = {
@@ -38,18 +40,7 @@ export function MemberActiveSubtasks({ subtasks }: MemberActiveSubtasksProps) {
       ) : (
         <div className="divide-y divide-slate-100">
           {subtasks.map((task) => {
-            const statusLower = (task.status || "to do").toLowerCase();
-            const isInProgress = statusLower.includes("progress");
-            const isCompleted = statusLower.includes("completed") || statusLower.includes("done");
-            const isInReview = statusLower.includes("review");
-
-            const statusBadgeClasses = isCompleted
-              ? "bg-emerald-50 text-emerald-600 ring-emerald-200/80"
-              : isInProgress
-              ? "bg-blue-50 text-blue-600 ring-blue-200/80"
-              : isInReview
-              ? "bg-indigo-50 text-indigo-600 ring-indigo-200/80"
-              : "bg-amber-50 text-amber-600 ring-amber-200/80";
+            const statusBadgeClasses = getStatusTheme(task.status || "Pending", task.customStatuses).badge;
 
             return (
               <div

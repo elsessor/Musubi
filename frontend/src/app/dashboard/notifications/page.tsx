@@ -274,8 +274,8 @@ export default function NotificationsPage() {
                                 <span>📌</span> Pinned
                               </span>
                             )}
-                            <span className="inline-flex items-center rounded-full bg-blue-50 border border-blue-200/80 px-2.5 py-0.5 text-[11px] font-bold text-blue-700">
-                              {notif.targetAudience || "All Members"}
+                            <span className={`inline-flex max-w-full items-center break-words rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${notif.targetAudience === "Leaders Only" ? "bg-violet-50 text-violet-700 border-violet-200/80" : "bg-blue-50 text-blue-700 border-blue-200/80"}`}>
+                              {notif.targetAudience === "Committee" ? notif.committeeName || "Committee" : notif.targetAudience || "All Members"}
                             </span>
                             {notif.unread && (
                               <span className="size-2 rounded-full bg-blue-600 shrink-0" title="Unread" />
@@ -384,8 +384,8 @@ export default function NotificationsPage() {
                                 <span>📌</span> Pinned
                               </span>
                             )}
-                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600 border border-slate-200/60">
-                              {notif.targetAudience || "All Members"}
+                            <span className={`inline-flex max-w-full items-center break-words rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${notif.targetAudience === "Leaders Only" ? "bg-violet-50 text-violet-700 border-violet-200/80" : "bg-blue-50 text-blue-700 border-blue-200/80"}`}>
+                              {notif.targetAudience === "Committee" ? notif.committeeName || "Committee" : notif.targetAudience || "All Members"}
                             </span>
                           </>
                         ) : isDeadlineAlert ? (
@@ -482,6 +482,11 @@ export default function NotificationsPage() {
                   <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-700 border border-violet-200">
                     {selectedNotif.type === "announcement" ? "Announcement" : "System Alert"}
                   </span>
+                  {selectedNotif.type === "announcement" && selectedNotif.targetAudience === "Committee" && (
+                    <span className="inline-flex max-w-full break-words rounded-full border border-blue-200/80 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700">
+                      {selectedNotif.committeeName || "Committee"}
+                    </span>
+                  )}
                 </div>
                 <h2 className="text-lg font-bold text-slate-900 leading-snug">
                   {selectedNotif.title}

@@ -56,6 +56,14 @@ export type OrganizationMember = {
   skills: string[];
   committeeId?: string | null;
   committeeName?: string | null;
+  activeTasksCount?: number;
+  completedOnTime?: number;
+  completedTotal?: number;
+  availability?: string;
+  profilePicture?: string | null;
+  workload?: number;
+  reliability?: string;
+  assignedTasks?: import("@/components/dashboard/MemberProfileModal").MemberProfile["assignedTasks"];
 };
 
 export type OrganizationJoinRequest = {
@@ -81,6 +89,7 @@ export type OrganizationCommitteeRecord = {
   /** @deprecated Compatibility alias for existing committee-card rendering. */
   headMemberId?: string | null;
   description: string;
+  createdAt?: string | null;
   /** Members are stored on user documents, not committee documents. */
   memberIds?: string[];
 };
@@ -118,8 +127,9 @@ function normalizeAdminInviteStatus(value: unknown): AdminMemberRecord["inviteSt
 
 // ── Session / auth ────────────────────────────────────────────────────────────
 
-export async function exchangeFirebaseSession(user: User): Promise<BackendLoginResponse> {
+export async function exchangeFirebaseSession(user: User, fullName?: string): Promise<BackendLoginResponse> {
   const idToken = await user.getIdToken();
+  const displayName = (fullName && fullName.trim()) || user.displayName || undefined;
 
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
@@ -127,7 +137,7 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
       "Content-Type": "application/json",
       Authorization: `Bearer ${idToken}`
     },
-    body: JSON.stringify({ idToken })
+    body: JSON.stringify({ idToken, fullName: displayName })
   });
 
   if (!response.ok) {
@@ -176,6 +186,8 @@ export async function exchangeFirebaseSession(user: User): Promise<BackendLoginR
       birthdate: typeof backendUser.birthdate === "string" ? backendUser.birthdate : null,
       profilePicture: backendUser.profilePicture,
       skills,
+      availability: typeof backendUser.availability === "string" ? backendUser.availability : null,
+      status: typeof backendUser.status === "string" ? backendUser.status : null,
       onboardingCompleted
     }
   };
@@ -218,7 +230,7 @@ async function organizationRequest<T>(user: User, path: string, init?: RequestIn
       if (errJson && typeof errJson.message === "string") {
         serverMessage = errJson.message;
       }
-    } catch {}
+    } catch { }
 
     throw new Error(serverMessage || "Unable to load organization data.");
   }
@@ -341,18 +353,18 @@ export async function getOrganizations(user: User): Promise<OrganizationDirector
   const data = await organizationRequest<{ organizations?: unknown[] }>(user, "/auth/organizations");
   return Array.isArray(data.organizations)
     ? data.organizations
-        .map((organization) => {
-          const normalized = normalizeOrganization(organization);
-          if (!normalized) return null;
+      .map((organization) => {
+        const normalized = normalizeOrganization(organization);
+        if (!normalized) return null;
 
-          const record = organization as Record<string, unknown>;
-          return {
-            ...normalized,
-            memberCount: typeof record.memberCount === "number" ? record.memberCount : 0,
-            committeeCount: typeof record.committeeCount === "number" ? record.committeeCount : 0
-          };
-        })
-        .filter((organization): organization is OrganizationDirectoryRecord => organization !== null)
+        const record = organization as Record<string, unknown>;
+        return {
+          ...normalized,
+          memberCount: typeof record.memberCount === "number" ? record.memberCount : 0,
+          committeeCount: typeof record.committeeCount === "number" ? record.committeeCount : 0
+        };
+      })
+      .filter((organization): organization is OrganizationDirectoryRecord => organization !== null)
     : [];
 }
 
@@ -370,7 +382,7 @@ export async function getOrganization(user: User, organizationId: string): Promi
 export async function updateOrganizationDetails(
   user: User,
   organizationId: string,
-  input: { name?: string; type?: string; description?: string; setupStatus?: string; organizationConfig?: { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } }
+  input: { name?: string; type?: string; description?: string; organizationConfig?: { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } }
 ): Promise<OrganizationRecord> {
   const token = await user.getIdToken();
   const res = await fetch(`${API_BASE_URL}/auth/organizations/${organizationId}`, {
@@ -395,17 +407,22 @@ export async function getOrganizationMembers(user: User, organizationId: string)
   const data = await organizationRequest<{ members?: unknown[] }>(user, `/auth/organizations/${organizationId}/members`);
   return Array.isArray(data.members)
     ? data.members.map((member) => {
-        const record = isRecord(member) ? member : {};
-        return {
-          id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
-          name: typeof record.name === "string" ? record.name : "Unnamed member",
-          role: typeof record.role === "string" ? record.role : "Organization Member",
-          position: typeof record.position === "string" ? record.position : "Organization Member",
-          skills: normalizeStringArray(record.skills),
-          committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
-          committeeName: typeof record.committeeName === "string" ? record.committeeName : null
-        };
-      })
+      const record = isRecord(member) ? member : {};
+      return {
+        id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
+        name: typeof record.name === "string" ? record.name : "Unnamed member",
+        role: typeof record.role === "string" ? record.role : "Organization Member",
+        position: typeof record.position === "string" ? record.position : "Organization Member",
+        skills: normalizeStringArray(record.skills),
+        committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
+        committeeName: typeof record.committeeName === "string" ? record.committeeName : null,
+        availability: typeof record.availability === "string" ? record.availability : undefined,
+        profilePicture: typeof record.profilePicture === "string" ? record.profilePicture : null,
+        workload: typeof record.workload === "number" ? record.workload : undefined,
+        reliability: typeof record.reliability === "string" ? record.reliability : undefined,
+        assignedTasks: Array.isArray(record.assignedTasks) ? record.assignedTasks as OrganizationMember["assignedTasks"] : undefined
+      };
+    })
     : [];
 }
 
@@ -417,7 +434,7 @@ export function subscribeOrganizationMembersFirestore(
   const targetOrgId = organizationId && organizationId.trim() ? organizationId.trim() : null;
   if (!targetOrgId) {
     onData([]);
-    return () => {};
+    return () => { };
   }
 
   let isMounted = true;
@@ -448,15 +465,15 @@ export async function getOrganizationJoinRequests(user: User, organizationId: st
   const data = await organizationRequest<{ requests?: unknown[] }>(user, `/auth/organizations/${organizationId}/join-requests`);
   return Array.isArray(data.requests)
     ? data.requests.map((request) => {
-        const record = isRecord(request) ? request : {};
-        return {
-          id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
-          name: typeof record.name === "string" ? record.name : "Unnamed member",
-          email: typeof record.email === "string" ? record.email : "",
-          position: typeof record.position === "string" ? record.position : "Organization Member",
-          skills: normalizeStringArray(record.skills)
-        };
-      })
+      const record = isRecord(request) ? request : {};
+      return {
+        id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
+        name: typeof record.name === "string" ? record.name : "Unnamed member",
+        email: typeof record.email === "string" ? record.email : "",
+        position: typeof record.position === "string" ? record.position : "Organization Member",
+        skills: normalizeStringArray(record.skills)
+      };
+    })
     : [];
 }
 
@@ -491,7 +508,7 @@ export async function getOrganizationCommittees(user: User, organizationId: stri
   return Array.isArray(data.committees) ? data.committees.map((item) => {
     const record = isRecord(item) ? item : {};
     const headMemberUID = typeof record.headMemberUID === "string" ? record.headMemberUID : null;
-    return { id: typeof record.id === "string" ? record.id : crypto.randomUUID(), name: typeof record.name === "string" ? record.name : "Untitled committee", description: typeof record.description === "string" ? record.description : "", headMemberUID, headMemberId: headMemberUID };
+    return { id: typeof record.id === "string" ? record.id : crypto.randomUUID(), name: typeof record.name === "string" ? record.name : "Untitled committee", description: typeof record.description === "string" ? record.description : "", headMemberUID, headMemberId: headMemberUID, createdAt: typeof record.createdAt === "string" ? record.createdAt : null };
   }) : [];
 }
 
@@ -592,43 +609,43 @@ function normalizeAdminMemberDirectory(value: unknown): AdminMemberDirectory {
   const record = isRecord(value) ? value : {};
   const members = Array.isArray(record.members)
     ? record.members.map((member) => {
-        const item = isRecord(member) ? member : {};
-        const role = isUserRole(item.role) ? item.role : "Organization Member";
-        return {
-          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
-          name: typeof item.name === "string" ? item.name : "Campus Member",
-          email: typeof item.email === "string" ? item.email : "",
-          role,
-          position: typeof item.position === "string" ? item.position : role,
-          organizationId: typeof item.organizationId === "string" ? item.organizationId : null,
-          organization: typeof item.organization === "string" ? item.organization : "Unassigned",
-          committeeId: typeof item.committeeId === "string" ? item.committeeId : null,
-          committee: typeof item.committee === "string" ? item.committee : "Unassigned",
-          inviteStatus: normalizeAdminInviteStatus(item.inviteStatus),
-          joinedDate: typeof item.joinedDate === "string" ? item.joinedDate : null
-        };
-      })
+      const item = isRecord(member) ? member : {};
+      const role = isUserRole(item.role) ? item.role : "Organization Member";
+      return {
+        id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+        name: typeof item.name === "string" ? item.name : "Campus Member",
+        email: typeof item.email === "string" ? item.email : "",
+        role,
+        position: typeof item.position === "string" ? item.position : role,
+        organizationId: typeof item.organizationId === "string" ? item.organizationId : null,
+        organization: typeof item.organization === "string" ? item.organization : "Unassigned",
+        committeeId: typeof item.committeeId === "string" ? item.committeeId : null,
+        committee: typeof item.committee === "string" ? item.committee : "Unassigned",
+        inviteStatus: normalizeAdminInviteStatus(item.inviteStatus),
+        joinedDate: typeof item.joinedDate === "string" ? item.joinedDate : null
+      };
+    })
     : [];
 
   const organizations = Array.isArray(record.organizations)
     ? record.organizations.map((organization) => {
-        const item = isRecord(organization) ? organization : {};
-        return {
-          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
-          name: typeof item.name === "string" ? item.name : "Untitled organization"
-        };
-      })
+      const item = isRecord(organization) ? organization : {};
+      return {
+        id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+        name: typeof item.name === "string" ? item.name : "Untitled organization"
+      };
+    })
     : [];
 
   const committees = Array.isArray(record.committees)
     ? record.committees.map((committee) => {
-        const item = isRecord(committee) ? committee : {};
-        return {
-          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
-          name: typeof item.name === "string" ? item.name : "Untitled committee",
-          organizationId: typeof item.organizationId === "string" ? item.organizationId : null
-        };
-      })
+      const item = isRecord(committee) ? committee : {};
+      return {
+        id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+        name: typeof item.name === "string" ? item.name : "Untitled committee",
+        organizationId: typeof item.organizationId === "string" ? item.organizationId : null
+      };
+    })
     : [];
 
   return { members, organizations, committees };

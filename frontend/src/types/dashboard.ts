@@ -13,7 +13,7 @@ export type DashboardKPI = {
   accent: "blue" | "purple" | "green" | "orange" | "amber";
 };
 
-export type DashboardGoalStatus = "In Progress" | "Completed" | "Pending";
+export type DashboardGoalStatus = string;
 
 export type DashboardGoal = {
   id: string;
@@ -21,6 +21,7 @@ export type DashboardGoal = {
   dueDate: string;
   progress: number;
   status: DashboardGoalStatus;
+  customStatuses?: import("@/components/events/statusUtils").CustomStatusConfig[];
 };
 
 export type DashboardActivity = {

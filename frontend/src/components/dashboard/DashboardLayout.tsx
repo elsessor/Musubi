@@ -18,6 +18,9 @@ import type {
 } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
 import { useAuthStore } from "@/store/authStore";
+import { useDashboardUIStore } from "@/store/dashboardUIStore";
+import { useNavigationLoading } from "@/app/navigationLoading";
+import { DashboardContentSkeleton } from "@/components/ui/RouteSkeleton";
 
 type DashboardLayoutProps = {
   user: DashboardUser;
@@ -52,9 +55,11 @@ export function DashboardLayout({
   children
 }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarCollapsed = useDashboardUIStore((state) => state.sidebarCollapsed);
+  const toggleSidebar = useDashboardUIStore((state) => state.toggleSidebar);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const profilePicture = useAuthStore((state) => state.profile?.profilePicture ?? null);
+  const { navigating } = useNavigationLoading();
 
   useEffect(() => {
     if (!logoutConfirmOpen) return;
@@ -80,7 +85,7 @@ export function DashboardLayout({
         collapsed={sidebarCollapsed}
         onLogout={requestLogoutConfirmation}
         onNavigate={() => setMobileSidebarOpen(false)}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onToggleCollapse={toggleSidebar}
         navItems={navItems}
         role={user.role}
         roleLabel={user.roleLabel}
@@ -88,7 +93,7 @@ export function DashboardLayout({
         profilePicture={profilePicture}
       />
 
-      <div className={cn("flex h-full min-w-0 flex-col overflow-hidden transition-all duration-300", sidebarCollapsed ? "md:ml-20" : "md:ml-[354px]")}>
+      <div className={cn("flex h-full min-w-0 flex-col overflow-hidden transition-all duration-300", sidebarCollapsed ? "md:ml-20" : "md:ml-64")}>
         <TopHeader
           academicYear={user.academicYear}
           greetingDate={user.greetingDate}
@@ -102,7 +107,7 @@ export function DashboardLayout({
         />
 
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-          {children ?? <>
+          {navigating ? <DashboardContentSkeleton /> : children ?? <>
           {kpis.length > 0 ? (
             <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
               {kpis.map((kpi) => (

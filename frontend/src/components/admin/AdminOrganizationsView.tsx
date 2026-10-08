@@ -10,57 +10,27 @@ import {
   getOrganizations,
   type OrganizationDirectoryRecord
 } from "@/services/auth.service";
-
-const DEFAULT_ORGANIZATIONS = [
-  {
-    id: "org-1",
-    name: "University Student Council",
-    type: "Governing",
-    description: "The highest governing student body of the university.",
-    memberCount: 7,
-    goalCount: 5,
-    status: "active",
-    code: "ORG-001"
-  },
-  {
-    id: "org-2",
-    name: "Computer Science Society",
-    type: "Academic",
-    description: "Org for CS majors focused on tech and innovation.",
-    memberCount: 24,
-    goalCount: 3,
-    status: "active",
-    code: "ORG-002"
-  },
-  {
-    id: "org-3",
-    name: "Socio-Civic Action Group",
-    type: "Socio-Civic",
-    description: "Community outreach and civic engagement programs.",
-    memberCount: 12,
-    goalCount: 1,
-    status: "active",
-    code: "ORG-003"
-  },
-  {
-    id: "org-4",
-    name: "Campus Media Network",
-    type: "Media",
-    description: "Handles campus publications and broadcast.",
-    memberCount: 18,
-    goalCount: 2,
-    status: "active",
-    code: "ORG-004"
-  }
-];
+import { AdminOrganizationDetailView } from "./AdminOrganizationDetailView";
 
 export function AdminOrganizationsView() {
   const router = useRouter();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
 
   const [organizations, setOrganizations] = useState<OrganizationDirectoryRecord[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Check URL query parameters for initial orgId selection
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const initialOrgId = params.get("orgId");
+      if (initialOrgId) {
+        setSelectedOrgId(initialOrgId);
+      }
+    }
+  }, []);
 
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -88,20 +58,16 @@ export function AdminOrganizationsView() {
   }, [firebaseUser]);
 
   const displayOrganizations = useMemo(() => {
-    let source = DEFAULT_ORGANIZATIONS;
-
-    if (organizations.length > 0) {
-      source = organizations.map((org, idx) => ({
-        id: org.id,
-        name: org.name,
-        type: org.type || "Academic",
-        description: org.description || "Campus student organization.",
-        memberCount: org.memberCount || (DEFAULT_ORGANIZATIONS[idx % DEFAULT_ORGANIZATIONS.length] || {}).memberCount || 10,
-        goalCount: (DEFAULT_ORGANIZATIONS[idx % DEFAULT_ORGANIZATIONS.length] || {}).goalCount || 3,
-        status: org.status || "active",
-        code: `ORG-${String(idx + 1).padStart(3, "0")}`
-      }));
-    }
+    const source = organizations.map((org, idx) => ({
+      id: org.id,
+      name: org.name,
+      type: org.type || "Academic",
+      description: org.description || "Campus student organization.",
+      memberCount: org.memberCount || 0,
+      goalCount: org.committeeCount || 0,
+      status: org.status || "active",
+      code: `ORG-${String(idx + 1).padStart(3, "0")}`
+    }));
 
     if (!searchQuery.trim()) return source;
 
@@ -137,6 +103,20 @@ export function AdminOrganizationsView() {
     }
   };
 
+  if (selectedOrgId) {
+    return (
+      <AdminOrganizationDetailView
+        organizationId={selectedOrgId}
+        onBack={() => {
+          setSelectedOrgId(null);
+          if (typeof window !== "undefined") {
+            window.history.pushState(null, "", "/admin/organizations");
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       {/* Top Header Row */}
@@ -164,44 +144,59 @@ export function AdminOrganizationsView() {
       </div>
 
       {/* Organization Grid (2 Columns) */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {displayOrganizations.map((org) => (
-          <div
-            key={org.id}
-            onClick={() => router.push(`/admin/organizations/${org.id}`)}
-            className="group flex flex-col justify-between rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/80 hover:shadow-md transition-all cursor-pointer"
-          >
-            <div>
-              {/* Top Row: Name & Complete Badge */}
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                    {org.name}
-                  </h2>
-                  <p className="text-xs font-medium text-slate-400 mt-0.5">{org.type}</p>
+      {loading ? (
+        <div className="rounded-2xl bg-white p-12 text-center text-sm font-semibold text-slate-500 shadow-sm ring-1 ring-slate-200/80">
+          Loading organizations...
+        </div>
+      ) : displayOrganizations.length === 0 ? (
+        <div className="rounded-2xl bg-white p-12 text-center text-sm font-semibold text-slate-500 shadow-sm ring-1 ring-slate-200/80">
+          No organizations found. Click &quot;Add Organization&quot; to create one.
+        </div>
+      ) : (
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {displayOrganizations.map((org) => (
+            <div
+              key={org.id}
+              onClick={() => {
+                setSelectedOrgId(org.id);
+                if (typeof window !== "undefined") {
+                  window.history.pushState(null, "", `/admin/organizations?orgId=${org.id}`);
+                }
+              }}
+              className="group flex flex-col justify-between rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/80 hover:shadow-md transition-all cursor-pointer"
+            >
+              <div>
+                {/* Top Row: Name & Complete Badge */}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                      {org.name}
+                    </h2>
+                    <p className="text-xs font-medium text-slate-400 mt-0.5">{org.type}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-600/10">
+                    Complete
+                  </span>
                 </div>
-                <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-600/10">
-                  Complete
-                </span>
+
+                {/* Middle Row: Description */}
+                <p className="mt-3 text-sm font-normal text-slate-500 line-clamp-2 leading-relaxed min-h-[2.5rem]">
+                  {org.description}
+                </p>
               </div>
 
-              {/* Middle Row: Description */}
-              <p className="mt-3 text-sm font-normal text-slate-500 line-clamp-2 leading-relaxed min-h-[2.5rem]">
-                {org.description}
-              </p>
-            </div>
-
-            {/* Bottom Row: Members / Goals and Code */}
-            <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-              <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
-                <span>{org.memberCount} members</span>
-                <span>{org.goalCount} goals</span>
+              {/* Bottom Row: Members / Committees and Code */}
+              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+                <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
+                  <span>{org.memberCount} members</span>
+                  <span>{org.goalCount} committees</span>
+                </div>
+                <span className="font-mono text-xs font-medium text-slate-400">{org.code}</span>
               </div>
-              <span className="font-mono text-xs font-medium text-slate-400">{org.code}</span>
             </div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      )}
 
       {/* Add Organization Modal */}
       {isAddModalOpen ? (

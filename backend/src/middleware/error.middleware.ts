@@ -8,11 +8,20 @@ export function notFoundMiddleware(request: Request, _response: Response, next: 
 
 export function errorMiddleware(
   error: unknown,
-  _request: Request,
+  request: Request,
   response: Response,
   _next: NextFunction
 ) {
   console.error("[ServerError]:", error);
+
+  if (typeof error === "object" && error !== null && "status" in error && error.status === 413) {
+    response.status(413).json({
+      message: request.path.endsWith("/attachments/files")
+        ? "Each attachment must be 5 MB or smaller."
+        : "This request is too large."
+    });
+    return;
+  }
 
   if (error instanceof AppError) {
     response.status(error.statusCode).json({

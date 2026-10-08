@@ -1,6 +1,9 @@
 "use client";
 
+import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
+
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -14,11 +17,12 @@ import {
   Pencil,
   Save,
   Search,
-  UserRoundX,
   UsersRound
 } from "lucide-react";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { OrganizationMemberTable } from "@/components/dashboard/OrganizationMemberTable";
+import { OrganizationTypeSelect } from "@/components/dashboard/OrganizationTypeSelect";
 import { useLogout } from "@/hooks/useLogout";
 import { OrganizationAccessModal } from "@/components/dashboard/OrganizationAccessModal";
 import { CreateCommitteeModal } from "@/components/dashboard/CreateCommitteeModal";
@@ -44,7 +48,9 @@ import {
 } from "@/services/auth.service";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
+import { AvailabilityBadge } from "@/components/dashboard/AvailabilityBadge";
 import { useAuthStore } from "@/store/authStore";
+import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
 import { useToastStore } from "@/store/toastStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { AnnouncementsView, PostAnnouncementModal } from "@/components/dashboard/AnnouncementsView";
@@ -56,7 +62,7 @@ import {
 
 type OrganizationTab = "overview" | "members" | "committees" | "announcements";
 
-type MemberRow = { id: string; initials: string; name: string; role: string; committee: string; skills: string[]; workload: number; reliability: string; availability: string };
+type MemberRow = { profilePicture?: string | null; id: string; initials: string; name: string; role: string; committee: string; skills: string[]; workload: number; reliability: string; availability: string };
 type GoalRow = { title: string; progress: number; due: string; status: string };
 
 function greetingDate() {
@@ -67,77 +73,6 @@ function formatDate(value: string | null) {
   if (!value) return "Aug 12, 2024";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Aug 12, 2024" : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
-}
-
-function computeMemberStats(
-  memberName: string,
-  memberId: string,
-  events: Event[],
-  explicitStatus?: string
-) {
-  const nameTrimmed = memberName.trim().toLowerCase();
-  const parts = nameTrimmed.split(/\s+/).filter(Boolean);
-  const firstName = parts[0] || "";
-  const lastName = parts[parts.length - 1] || "";
-  const initials = parts.slice(0, 2).map((p) => p[0]).join("").toUpperCase();
-
-  const allTasks = events.flatMap((e) => (e.tasks || []).map((t) => ({ ...t, eventTitle: e.title })));
-
-  const memberTasks = allTasks.filter((t) => {
-    const assigneeUID = t.assignedMemberUID || "";
-    if (memberId && assigneeUID === memberId) return true;
-
-    const assigneeName = (t.assignee?.name || t.assignedMemberName || "").trim().toLowerCase();
-    const assigneeInitials = (t.assignee?.initials || "").trim().toUpperCase();
-
-    if (!assigneeName && !assigneeInitials) return false;
-
-    if (assigneeName === nameTrimmed || assigneeName.includes(nameTrimmed) || nameTrimmed.includes(assigneeName)) {
-      return true;
-    }
-    if (firstName && firstName.length > 2 && assigneeName.includes(firstName)) {
-      return true;
-    }
-    if (lastName && lastName.length > 2 && assigneeName.includes(lastName)) {
-      return true;
-    }
-    if (assigneeInitials && (assigneeInitials === initials || initials.includes(assigneeInitials))) {
-      return true;
-    }
-    return false;
-  });
-
-  const activeTasks = memberTasks.filter(
-    (t) => t.status === "In Progress" || t.status === "To Do" || t.status === "In Review" || t.status === "Pending"
-  );
-  const completedTasks = memberTasks.filter(
-    (t) => t.status === "Completed" || t.status === "Done"
-  );
-
-  const workload = Math.min(100, activeTasks.length * 25);
-
-  let reliability = "95%";
-  if (memberTasks.length > 0) {
-    const relScore = Math.round((completedTasks.length / memberTasks.length) * 100);
-    reliability = `${relScore}%`;
-  } else if (completedTasks.length > 0) {
-    reliability = "100%";
-  }
-
-  const availability =
-    explicitStatus && (explicitStatus === "Available" || explicitStatus === "Busy" || explicitStatus === "On Leave")
-      ? explicitStatus
-      : activeTasks.length >= 4
-      ? "Busy"
-      : "Available";
-
-  return {
-    memberTasks,
-    activeTasks,
-    workload,
-    reliability,
-    availability
-  };
 }
 
 export default function OrganizationPage() {
@@ -176,15 +111,27 @@ export default function OrganizationPage() {
   }, [profile?.organizationId, profile?.role]);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("tab") === "committees") {
-      setActiveTab("committees");
+    function restoreTab() {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      setActiveTab(tab === "members" || tab === "committees" || tab === "announcements" ? tab : "overview");
     }
+    restoreTab();
+    window.addEventListener("popstate", restoreTab);
+    return () => window.removeEventListener("popstate", restoreTab);
   }, []);
+
+  function handleChangeTab(tab: OrganizationTab) {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState(window.history.state, "", url);
+  }
 
   async function handlePostAnnouncement(data: {
     title: string;
     content: string;
     targetAudience: string;
+    committeeId?: string;
     isPinned: boolean;
   }) {
     const orgId = profile?.organizationId || "default-org";
@@ -326,12 +273,6 @@ export default function OrganizationPage() {
   const memberRows = useMemo<MemberRow[]>(
     () =>
       members.map((member) => {
-        const stats = computeMemberStats(
-          member.name,
-          member.id,
-          events,
-          (member as any).availability || (member as any).status
-        );
         return {
           id: member.id,
           initials:
@@ -343,19 +284,20 @@ export default function OrganizationPage() {
               .join("")
               .toUpperCase() || "?",
           name: member.name,
+          profilePicture: member.profilePicture,
           role: member.position || member.role,
           committee:
             member.committeeName ||
             committees.find((committee) => committee.id === member.committeeId)?.name ||
             (member.committeeId ? "Assigned committee" : "Not assigned"),
           skills: member.skills,
-          workload: stats.workload,
-          reliability: stats.reliability,
-          availability: stats.availability,
-          assignedTasks: stats.activeTasks
+          workload: member.workload ?? 0,
+          reliability: member.reliability ?? "?",
+          availability: member.availability || "Available",
+          assignedTasks: member.assignedTasks
         } as any;
       }),
-    [committees, members, events]
+    [committees, members]
   );
 
   const filteredMembers = useMemo(() => {
@@ -383,10 +325,10 @@ export default function OrganizationPage() {
       <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
         <div className="flex items-center justify-between gap-4"><h1 className="text-[21px] font-bold tracking-[-0.02em]">Organization</h1>{profile.role !== "Admin" && firebaseUser ? <button type="button" onClick={() => setAccessModalOpen(true)} className="flex h-9 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4" />{profile.role === "Student Leader" ? "Create or join" : "Join organization"}</button> : null}</div>
         <div className="mt-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-[#e8eef7] p-1.5">
-          <TabButton active={activeTab === "overview"} icon={BriefcaseBusiness} label="Overview" onClick={() => setActiveTab("overview")} />
-          <TabButton active={activeTab === "members"} icon={UsersRound} label="Members" onClick={() => setActiveTab("members")} />
-          <TabButton active={activeTab === "committees"} icon={ClipboardList} label="Committees" onClick={() => setActiveTab("committees")} />
-          <TabButton active={activeTab === "announcements"} icon={Bell} label="Announcements" onClick={() => setActiveTab("announcements")} />
+          <TabButton active={activeTab === "overview"} icon={BriefcaseBusiness} label="Overview" onClick={() => handleChangeTab("overview")} />
+          <TabButton active={activeTab === "members"} icon={UsersRound} label="Members" onClick={() => handleChangeTab("members")} />
+          <TabButton active={activeTab === "committees"} icon={ClipboardList} label="Committees" onClick={() => handleChangeTab("committees")} />
+          <TabButton active={activeTab === "announcements"} icon={Bell} label="Announcements" onClick={() => handleChangeTab("announcements")} />
         </div>
 
         {loading ? (
@@ -409,7 +351,7 @@ export default function OrganizationPage() {
             isLeader={profile.role === "Student Leader"}
             onUpdate={setOrganization}
             onSaveSettings={saveOrganizationSettings}
-            onNavigateMembers={() => setActiveTab("members")}
+            onNavigateMembers={() => handleChangeTab("members")}
           />
         ) : activeTab === "members" ? (
           <Members
@@ -467,6 +409,7 @@ export default function OrganizationPage() {
       {profileMember ? <MemberProfileModal member={profileMember} onClose={() => setProfileMember(null)} /> : null}
       {memberToRemove ? <ConfirmRemoveCommitteeMemberModal memberName={memberToRemove.name} committeeName="" organizationRemoval isRemoving={isRemovingMember} onCancel={() => setMemberToRemove(null)} onConfirm={() => void removeMemberFromOrganization()} /> : null}
       <PostAnnouncementModal
+        committees={committees}
         isOpen={isPostAnnouncementOpen}
         onClose={() => setIsPostAnnouncementOpen(false)}
         onSubmit={handlePostAnnouncement}
@@ -533,7 +476,7 @@ function Overview({
         </div>
         <div className={`grid grid-cols-2 divide-x divide-y divide-[#dce3ed] ${isLeader ? "lg:grid-cols-4 lg:divide-y-0" : "lg:grid-cols-2 lg:divide-y-0"}`}>
           <Stat value={String(memberCount)} label="Total Members" color="text-[#2868ed]" />
-          <Stat value={String(activeGoalsCount)} label="Active Goals" color="text-[#7c3aed]" />
+          <Stat value={String(activeGoalsCount)} label="Active Events" color="text-[#7c3aed]" />
           {isLeader ? (
             <>
               <Stat value={organizationSettings.delegationMode} label="Delegation" color="text-amber-500" />
@@ -581,8 +524,9 @@ function Overview({
                       key={m.id || m.name}
                       initials={initials}
                       name={m.name}
+                      profilePicture={m.profilePicture}
                       role={m.position || m.role}
-                      status="Available"
+                      status={m.availability || "Available"}
                       isYou={isYou}
                     />
                   );
@@ -600,8 +544,8 @@ function Overview({
       <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white">
         <div className="flex min-h-12 items-center justify-between gap-3 px-4 py-3 border-b border-[#e5eaf1]">
           <div>
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">GOALS</h3>
-            <p className="mt-0.5 text-[11px] text-slate-500">Organizational goals - managed in Goals &amp; Tasks</p>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">EVENTS</h3>
+            <p className="mt-0.5 text-[11px] text-slate-500">Organizational events - managed in Events &amp; Tasks</p>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-bold">
             <span className="text-emerald-600">{doneGoalsCount} done</span>
@@ -612,21 +556,21 @@ function Overview({
         {events.length > 0 ? (
           <div className="divide-y divide-[#e5eaf1]">
             {events.slice(0, 5).map((e) => {
-              const goalStatusLabel = e.status === "Completed" ? "Completed" : e.status === "Active" ? "In Progress" : "Pending";
+              const goalStatusLabel = e.status;
               return (
                 <div key={e.id} className="flex items-center justify-between px-4 py-3 text-xs">
                   <div>
                     <p className="font-semibold text-slate-800">{e.title}</p>
                     {e.description && <p className="text-[11px] text-slate-500 line-clamp-1">{e.description}</p>}
                   </div>
-                  <GoalStatus status={goalStatusLabel} />
+                  <GoalStatus status={goalStatusLabel} customStatuses={e.eventCustomStatuses} />
                 </div>
               );
             })}
           </div>
         ) : (
           <div className="px-4 py-6 text-center text-xs font-medium text-slate-500">
-            No organizational goals set yet. Goals will appear here once created in Goals &amp; Tasks.
+            No organizational events yet. Events will appear here once created in Events &amp; Tasks.
           </div>
         )}
       </article>
@@ -654,7 +598,9 @@ function OrganizationDetailsCard({
   const [name, setName] = useState(organization.name);
   const [type, setType] = useState(organization.type);
   const [description, setDescription] = useState(organization.description || "");
-  const [setupStatus, setSetupStatus] = useState(organization.status === "active" ? "Complete" : organization.status || "Complete");
+  const setupStatus = organization.status === "active" ? "Complete" : organization.status || "Not set";
+  const viewerRole = useAuthStore((state) => state.profile?.role);
+  const canEditDetails = viewerRole === "Student Leader" || viewerRole === "Admin";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -665,9 +611,8 @@ function OrganizationDetailsCard({
 
   function handleStartEdit() {
     setName(organization.name || "University Student Council");
-    setType(organization.type || "Governing");
+    setType(organization.type || "");
     setDescription(organization.description || defaultDescription);
-    setSetupStatus(organization.status === "active" ? "Complete" : organization.status || "Complete");
     setError("");
     setIsEditing(true);
   }
@@ -678,18 +623,18 @@ function OrganizationDetailsCard({
   }
 
   async function handleSave() {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canEditDetails) return;
     setSaving(true);
     setError("");
     try {
       const updated = await updateOrganizationDetails(firebaseUser, organization.id, {
         name: name.trim(),
         type: type.trim(),
-        description: description.trim(),
-        setupStatus: setupStatus.trim().toLowerCase() === "complete" ? "active" : setupStatus.trim()
+        description: description.trim()
       });
       onUpdate(updated);
       setIsEditing(false);
+      useToastStore.getState().showToast({ title: "Organization updated", description: "Your changes have been saved successfully.", tone: "success" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update organization details.");
     } finally {
@@ -699,7 +644,7 @@ function OrganizationDetailsCard({
 
   if (isEditing) {
     return (
-      <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white shadow-sm">
+      <article className="rounded-2xl border border-[#dce3ed] bg-white shadow-sm">
         <div className="flex min-h-12 items-center justify-between gap-3 px-5 py-3 border-b border-[#e5eaf1]">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             ORGANIZATION DETAILS
@@ -748,12 +693,9 @@ function OrganizationDetailsCard({
             <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">
               TYPE
             </label>
-            <input
-              type="text"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-[13px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 transition"
-            />
+            <div className="mt-1.5">
+              <OrganizationTypeSelect value={type} onChange={setType} disabled={saving} buttonClassName="rounded-xl text-[13px] font-medium" />
+            </div>
           </div>
 
           <div>
@@ -772,12 +714,7 @@ function OrganizationDetailsCard({
             <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">
               SETUP STATUS
             </label>
-            <input
-              type="text"
-              value={setupStatus}
-              onChange={(e) => setSetupStatus(e.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-[13px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 transition"
-            />
+            <p className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-[13px] font-medium text-slate-600">{setupStatus}</p>
           </div>
         </div>
       </article>
@@ -790,14 +727,14 @@ function OrganizationDetailsCard({
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           ORGANIZATION DETAILS
         </h3>
-        <button
+        {canEditDetails && <button
           onClick={handleStartEdit}
           className="flex items-center gap-1.5 text-[11px] font-semibold text-[#2868ed] hover:text-blue-700 transition"
           type="button"
         >
           <Pencil className="size-3" />
           Edit
-        </button>
+        </button>}
       </div>
 
       <div className="p-5">
@@ -809,19 +746,17 @@ function OrganizationDetailsCard({
 
       <DetailRow label="Org UID" value={organization.id} />
       <DetailRow label="Type" value={organization.type || "Governing"} />
-      <DetailRow label="Setup status" value={organization.status === "active" ? "Complete" : organization.status || "Complete"} />
+      <DetailRow label="Setup status" value={setupStatus} />
       <DetailRow label="Created at" value={formatDate(organization.createdAt)} />
     </article>
   );
 }
 
-function MemberPreviewRow({ initials, name, role, status, isYou }: { initials: string; name: string; role: string; status: "Available" | "Busy"; isYou?: boolean }) {
+function MemberPreviewRow({ name, profilePicture, role, status, isYou }: { profilePicture?: string | null; initials: string; name: string; role: string; status: string; isYou?: boolean }) {
   return (
     <div className={`flex items-center justify-between px-4 py-3 text-[12px] transition ${isYou ? "bg-blue-50/60 font-medium" : ""}`}>
       <div className="flex items-center gap-3">
-        <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${isYou ? "bg-[#2563eb] ring-2 ring-blue-300" : "bg-[#213f68]"}`}>
-          {initials}
-        </span>
+        <MemberAvatar member={{ name, profilePicture }} className={`size-7 ${isYou ? "ring-2 ring-blue-300" : ""}`} fallbackClassName={isYou ? "bg-[#2563eb] text-[9px]" : "text-[9px]"} />
         <div>
           <div className="flex items-center gap-1.5">
             <p className={`font-semibold leading-tight ${isYou ? "text-[#1d4ed8]" : "text-slate-900"}`}>{name}</p>
@@ -834,13 +769,13 @@ function MemberPreviewRow({ initials, name, role, status, isYou }: { initials: s
           <p className="text-[11px] text-slate-500 leading-tight">{role}</p>
         </div>
       </div>
-      <Availability value={status} />
+      <AvailabilityBadge value={status} />
     </div>
   );
 }
 
 function Members({ search, members: visibleMembers, onSearch, joinRequests, isLeader, reviewingRequestId, onReview, onViewProfile, onRemoveMember, currentUserId, currentUserName }: { search: string; members: MemberRow[]; onSearch: (value: string) => void; joinRequests: OrganizationJoinRequest[]; isLeader: boolean; reviewingRequestId: string; onReview: (id: string, status: "accepted" | "rejected") => void; onViewProfile: (member: MemberRow) => void; onRemoveMember: (member: MemberRow) => void; currentUserId?: string; currentUserName?: string }) {
-  return <div className="mt-6">{isLeader && joinRequests.length > 0 && <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 className="text-sm font-bold text-amber-950">Pending join requests ({joinRequests.length})</h3><div className="mt-3 space-y-3">{joinRequests.map((request) => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"><div><p className="text-sm font-bold text-slate-900">{request.name}</p><p className="text-xs text-slate-500">{request.position} · {request.email}</p></div><div className="flex gap-2"><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "rejected")} className="h-8 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600">Decline</button><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "accepted")} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">Accept</button></div></div>)}</div></div>}<div className="flex items-center justify-between gap-4"><h2 className="text-[21px] font-bold">Member Management</h2></div><label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3"><Search className="size-4 text-slate-500" /><input className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} /></label><div className="mt-5 overflow-x-auto rounded-2xl border border-[#dce3ed] bg-white"><table className="min-w-[1180px] w-full border-collapse text-left"><thead className="bg-[#e8eef7] text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold">Member Name</th><th className="px-3 py-3 font-semibold">Role</th><th className="px-3 py-3 font-semibold">Committee</th><th className="px-3 py-3 font-semibold">Skills</th><th className="px-3 py-3 font-semibold">Workload</th><th className="px-3 py-3 font-semibold">Reliability</th><th className="px-3 py-3 font-semibold">Availability</th><th className="px-4 py-3" /></tr></thead><tbody>{visibleMembers.map((member) => { const isYou = Boolean((currentUserId && member.id === currentUserId) || (currentUserName && member.name.trim().toLowerCase() === currentUserName.trim().toLowerCase())); return <tr className={`border-t border-[#dfe5ee] text-[13px] transition ${isYou ? "bg-blue-50/70 hover:bg-blue-50/90 font-medium" : "hover:bg-slate-50/60"}`} key={member.id || member.name}><td className="px-4 py-3"><div className="flex items-center gap-3"><Avatar initials={member.initials} isYou={isYou} /><span className={isYou ? "font-extrabold text-[#1d4ed8]" : "font-medium text-slate-900"}>{member.name}</span>{isYou ? <span className="rounded-full bg-[#2563eb] px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">You</span> : null}</div></td><td className="px-3 py-3 text-slate-500">{member.role}</td><td className="px-3 py-3"><span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] text-violet-700">{member.committee}</span></td><td className="px-3 py-3"><div className="flex max-w-[410px] flex-wrap gap-1">{member.skills.slice(0, 4).map((skill) => <span className="rounded bg-[#e8eef7] px-2 py-0.5 text-[11px] text-[#214574]" key={skill}>{skill}</span>)}{member.skills.length > 4 ? <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">+{member.skills.length - 4}</span> : null}</div></td><td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded bg-slate-100"><div className={`h-full rounded ${member.workload >= 80 ? "bg-rose-500" : member.workload >= 60 ? "bg-amber-400" : "bg-emerald-500"}`} style={{ width: `${member.workload}%` }} /></div><span className="text-[11px] text-slate-500">{member.workload}%</span></div></td><td className="px-3 py-3 text-[11px] font-semibold">{member.reliability}</td><td className="px-3 py-3"><Availability value={member.availability} /></td><td className="px-4 py-3 text-right"><div className="flex items-center justify-end gap-3"><button type="button" onClick={() => onViewProfile(member)} className="text-[12px] font-medium text-[#2868ed] hover:text-blue-700">View Profile</button>{isLeader && !isYou ? <button type="button" onClick={() => onRemoveMember(member)} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-[12px] font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800"><UserRoundX className="size-3.5" />Remove</button> : null}</div></td></tr>; })}</tbody></table>{visibleMembers.length === 0 && <p className="p-8 text-center text-sm text-slate-500">No members match your search.</p>}</div></div>;
+  return <div className="mt-6">{isLeader && joinRequests.length > 0 && <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 className="text-sm font-bold text-amber-950">Pending join requests ({joinRequests.length})</h3><div className="mt-3 space-y-3">{joinRequests.map((request) => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"><div><p className="text-sm font-bold text-slate-900">{request.name}</p><p className="text-xs text-slate-500">{request.position} · {request.email}</p></div><div className="flex gap-2"><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "rejected")} className="h-8 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600">Decline</button><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "accepted")} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">Accept</button></div></div>)}</div></div>}<div className="flex items-center justify-between gap-4"><h2 className="text-[21px] font-bold">Member Management</h2></div><label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3"><Search className="size-4 text-slate-500" /><input className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} /></label><OrganizationMemberTable members={visibleMembers} onViewProfile={onViewProfile} onRemoveMember={onRemoveMember} isLeader={isLeader} currentUserId={currentUserId} currentUserName={currentUserName} /></div>;
 }
 function Committees({ committees, members, canCreate, onCreate, currentUserId, currentUserName }: {
   committees: OrganizationCommitteeRecord[];
@@ -877,22 +812,27 @@ function CommitteeCard({ committee, members, currentUserId, currentUserName }: {
   currentUserId?: string;
   currentUserName?: string;
 }) {
+  const [selected, setSelected] = useState(false);
   const committeeMembers = members.filter((member) => member.committeeId === committee.id);
   const head = members.find((member) => member.id === committee.headMemberUID);
   return (
-    <article className="rounded-2xl border border-[#dce3ed] bg-white p-5 shadow-sm">
+    <Link
+      href={"/dashboard/organization/committees?committeeId=" + encodeURIComponent(committee.id)}
+      onClick={() => setSelected(true)}
+      className={`group block min-w-0 cursor-pointer rounded-2xl border p-5 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50/60 focus-visible:border-blue-500 focus-visible:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:border-blue-500 active:bg-blue-100/60 ${selected ? "border-blue-500 bg-blue-50 ring-1 ring-blue-300" : "border-[#dce3ed] bg-white"}`}
+    >
       <div className="min-w-0">
-        <a href={"/dashboard/organization/committees/" + committee.id} className="text-sm font-bold text-slate-900 hover:text-blue-700">{committee.name}</a>
+        <h3 className="break-words text-sm font-bold text-slate-900 group-hover:text-blue-700 group-focus-visible:text-blue-700">{committee.name}</h3>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">{committee.description || "No description provided."}</p>
       </div>
       <div className="my-3 border-t border-slate-100" />
-      <p className="text-xs text-slate-700">Head: <span className="font-semibold">{head?.name || "Not assigned"}</span></p>
+      <p className="flex items-center gap-2 text-xs text-slate-700"><MemberAvatar member={head} className="size-6" />Head: <span className="font-semibold">{head?.name || "Not assigned"}</span></p>
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Members ({committeeMembers.length})</p>
       <div className="mt-2 flex flex-wrap gap-2">{committeeMembers.length ? committeeMembers.map((member) => {
         const isYou = Boolean((currentUserId && member.id === currentUserId) || (currentUserName && member.name.trim().toLowerCase() === currentUserName.trim().toLowerCase()));
-        return <span key={member.id} className={"flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium " + (isYou ? "bg-blue-100 font-bold text-[#1d4ed8] ring-1 ring-blue-300" : "bg-[#e8eef7] text-[#213f68]")}><span className={"flex size-4 items-center justify-center rounded-full text-[7px] text-white " + (isYou ? "bg-[#2563eb]" : "bg-[#213f68]")}>{member.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("")}</span>{member.name.split(" ")[0]}{isYou ? " (You)" : ""}</span>;
+        return <span key={member.id} className={"flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium " + (isYou ? "bg-blue-100 font-bold text-[#1d4ed8] ring-1 ring-blue-300" : "bg-[#e8eef7] text-[#213f68]")}><MemberAvatar member={member} className="size-4" fallbackClassName={isYou ? "bg-[#2563eb] text-[7px]" : "text-[7px]"} />{member.name.split(" ")[0]}{isYou ? " (You)" : ""}</span>;
       }) : <span className="text-xs text-slate-400">No members assigned.</span>}</div>
-    </article>
+    </Link>
   );
 }
 function EmptyPanel({ tab }: { tab: Exclude<OrganizationTab, "overview" | "members"> }) { const label = tab === "committees" ? "Committees" : "Announcements"; const Icon = tab === "committees" ? ClipboardList : Megaphone; return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-center"><Icon className="size-7 text-slate-400" /><h2 className="mt-3 text-lg font-bold">{label}</h2><p className="mt-1 text-sm text-slate-500">{label} will appear here once they are added to your organization.</p></div>; }
@@ -903,6 +843,4 @@ function CardTitle({ title, subtitle, action, onActionClick }: { title: string; 
 function DetailRow({ label, value }: { label: string; value: string }) { return <div className="flex min-h-9 items-center justify-between gap-6 border-t border-[#e5eaf1] px-4 py-2.5 text-[11px]"><span className="uppercase font-semibold text-slate-500">{label}</span><span className="max-w-[65%] truncate font-medium text-slate-700">{value}</span></div>; }
 function ConfigRow({ label, value, tone }: { label: string; value: string; tone: "purple" | "green" | "gray" }) { return <div className="flex items-center justify-between border-t border-[#e5eaf1] px-4 py-4 text-[12px]"><span className="font-medium text-slate-800">{label}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${tone === "purple" ? "bg-violet-100 text-violet-700" : tone === "green" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{value}</span></div>; }
 function Stat({ value, label, color }: { value: string; label: string; color: string }) { return <div className="py-3 text-center"><p className={`text-[15px] font-bold ${color}`}>{value}</p><p className="mt-1 text-[10px] text-slate-500">{label}</p></div>; }
-function Avatar({ initials, isYou }: { initials: string; isYou?: boolean }) { return <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${isYou ? "bg-[#2563eb] ring-2 ring-blue-300" : "bg-[#213f68]"}`}>{initials}</span>; }
-function Availability({ value }: { value: string }) { const tone = value === "Available" ? "bg-emerald-50 text-emerald-600" : value === "Busy" ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-500"; return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${tone}`}><i className="size-1 rounded-full bg-current" />{value}</span>; }
-function GoalStatus({ status }: { status: string }) { const tone = status === "Completed" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : status === "In Progress" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700"; return <span className={`rounded-full border px-2 py-0.5 text-[10px] ${tone}`}>{status}</span>; }
+function GoalStatus({ status, customStatuses }: { status: string; customStatuses?: CustomStatusConfig[] }) { const tone = getStatusTheme(status, customStatuses).badge; return <span className={`rounded-full border px-2 py-0.5 text-[10px] ${tone}`}>{status}</span>; }

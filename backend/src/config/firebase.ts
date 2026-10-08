@@ -6,6 +6,17 @@ import admin from "firebase-admin";
 import { env } from "./env.js";
 
 function loadServiceAccount(): admin.ServiceAccount {
+  if (env.firebaseServiceAccountJson) {
+    try {
+      const jsonString = env.firebaseServiceAccountJson.startsWith("{")
+        ? env.firebaseServiceAccountJson
+        : Buffer.from(env.firebaseServiceAccountJson, "base64").toString("utf8");
+      return JSON.parse(jsonString) as admin.ServiceAccount;
+    } catch (err) {
+      throw new Error(`Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   const configuredPath = env.firebaseServiceAccountPath;
   const candidatePaths = [
     path.isAbsolute(configuredPath)

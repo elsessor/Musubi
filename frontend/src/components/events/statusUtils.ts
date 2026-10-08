@@ -1,9 +1,41 @@
+import type { TaskStatus } from "./types";
+
 export type StatusThemeColor = "blue" | "purple" | "emerald" | "amber" | "rose" | "cyan" | "indigo" | "violet" | "slate";
 
 export type CustomStatusConfig = {
   name: string;
   color: StatusThemeColor;
 };
+
+export function getOrderedTaskStatuses(
+  statusOrder: readonly string[] = [],
+  customStatuses: readonly CustomStatusConfig[] = [],
+  currentStatuses: readonly string[] = []
+): TaskStatus[] {
+  // Keep the event's order even when its tasks are filtered in the current view.
+  return Array.from(new Set([
+    ...statusOrder,
+    "To Do", "In Progress", "In Review", "Completed",
+    ...customStatuses.map((status) => status.name),
+    ...currentStatuses
+  ].filter((status) => status.trim().length > 0))) as TaskStatus[];
+}
+
+export function getTaskStatusDistribution(events: { title: string; tasks: { status: string }[]; customStatuses?: CustomStatusConfig[] }[]) {
+  const groups = new Map<string, { key: string; status: string; count: number; theme: ReturnType<typeof getStatusTheme>; events: string[] }>();
+  for (const event of events) {
+    for (const task of event.tasks) {
+      const status = task.status || "To Do";
+      const theme = getStatusTheme(status, event.customStatuses);
+      const key = `${status.trim().toLowerCase()}:${theme.dot}`;
+      const group = groups.get(key) || { key, status, count: 0, theme, events: [] };
+      group.count += 1;
+      if (!group.events.includes(event.title)) group.events.push(event.title);
+      groups.set(key, group);
+    }
+  }
+  return [...groups.values()];
+}
 
 export const COLOR_OPTIONS: { key: StatusThemeColor; label: string; dot: string; bg: string }[] = [
   { key: "blue", label: "Blue", dot: "bg-blue-500", bg: "bg-blue-50" },
@@ -123,25 +155,22 @@ export function getStatusTheme(status: string, customStatuses?: CustomStatusConf
 } {
   const normalized = status.trim().toLowerCase();
 
+  // Saved choices take precedence, including overrides of default labels.
+  const custom = customStatuses?.find((c) => c.name.trim().toLowerCase() === normalized);
+  if (custom && THEME_MAP[custom.color]) return THEME_MAP[custom.color];
+
   // Known default event & task statuses
   if (normalized === "active" || normalized === "in progress") return THEME_MAP.blue;
-  if (normalized === "planning" || normalized === "in review") return THEME_MAP.amber;
-  if (normalized === "completed") return THEME_MAP.emerald;
+  if (normalized === "planning" || normalized === "in review" || normalized === "pending") return THEME_MAP.amber;
+  if (normalized === "completed" || normalized === "done") return THEME_MAP.emerald;
+  if (normalized === "cancelled" || normalized === "canceled") return THEME_MAP.rose;
   if (normalized === "archived" || normalized === "to do") return THEME_MAP.slate;
-
-  // Custom status match
-  if (customStatuses) {
-    const match = customStatuses.find((c) => c.name.trim().toLowerCase() === normalized);
-    if (match && THEME_MAP[match.color]) {
-      return THEME_MAP[match.color];
-    }
-  }
 
   // Fallback based on string hash for consistent colors
   const keys: StatusThemeColor[] = ["indigo", "purple", "rose", "cyan", "violet", "amber", "blue"];
   let hash = 0;
-  for (let i = 0; i < status.length; i++) {
-    hash = status.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < normalized.length; i++) {
+    hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
   }
   const colorKey = keys[Math.abs(hash) % keys.length];
   return THEME_MAP[colorKey];

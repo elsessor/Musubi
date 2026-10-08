@@ -1,11 +1,12 @@
 "use client";
 
+import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
+
 import { Plus, Shield, X } from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
-import { isStartAfterEnd } from "./dateValidation";
-import type { CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import type { OrganizationMember } from "@/services/auth.service";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
@@ -67,10 +68,11 @@ type AddTaskModalProps = {
   eventName: string;
   members?: OrganizationMember[];
   onClose: () => void;
-  onAddTask: (newTask: Task) => void;
+  onAddTask: (newTask: Task) => void | Promise<void>;
   roster?: OrgMemberItem[];
   committees?: { id: string; name: string }[];
   customStatuses?: CustomStatusConfig[];
+  statusOrder?: string[];
 };
 
 export function AddTaskModal({
@@ -79,7 +81,8 @@ export function AddTaskModal({
   onAddTask,
   roster,
   committees = [],
-  customStatuses = []
+  customStatuses = [],
+  statusOrder
 }: AddTaskModalProps) {
   const activeRoster = roster && roster.length > 0 ? roster : MOCK_ROSTER;
   const [title, setTitle] = useState("");
@@ -91,21 +94,21 @@ export function AddTaskModal({
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [dateError, setDateError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
 
-  const defaultStatuses: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
-  const allStatuses: TaskStatus[] = [
-    ...defaultStatuses,
-    ...customStatuses.map((cs) => cs.name as TaskStatus)
-  ];
+  const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses);
 
   const committeeOptions = committees.map((c) => c.name);
-  const statusOptions: CustomSelectOption[] = allStatuses.map((value) => ({ value, label: value }));
+  const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
+    const theme = getStatusTheme(value, customStatuses);
+    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
+  });
   const priorityOptions: CustomSelectOption[] = ALL_PRIORITIES.map((value) => ({
     value,
     label: value,
     indicatorClass: PRIORITY_CONFIG[value].dot,
-    labelClass: PRIORITY_CONFIG[value].classes
+    selectedClass: PRIORITY_CONFIG[value].classes
   }));
   const assigneeOptions: CustomSelectOption[] = activeRoster.map((member) => ({
     value: member.id,
@@ -115,19 +118,16 @@ export function AddTaskModal({
     color: member.color
   }));
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
-
-    if (isStartAfterEnd(startDate, dueDate)) {
-      setDateError("Start date cannot be later than the target date.");
-      return;
-    }
-    setDateError("");
+    if (!title.trim() || saving) return;
 
     const selectedMember = activeRoster.find((m) => m.id === assigneeId) || activeRoster[0];
 
     const nowStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const error = getDateRangeError(startDate.trim() || nowStr, dueDate.trim() || nowStr, "Task");
+    setDateError(error || "");
+    if (error) return;
     const newTask: Task = {
       id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: title.trim(),
@@ -148,8 +148,13 @@ export function AddTaskModal({
       requiredSkills: ["Event Coordination"]
     };
 
-    onAddTask(newTask);
-    onClose();
+    setSaving(true);
+    try {
+      await onAddTask(newTask);
+      onClose();
+    } catch (cause) {
+      setDateError(cause instanceof Error ? cause.message : "Unable to create the task. Please try again.");
+    } finally { setSaving(false); }
   }
 
   return (
@@ -258,6 +263,7 @@ export function AddTaskModal({
                 value={startDate}
                 onChange={(value) => { setStartDate(value); setDateError(""); }}
                 minDate={new Date()}
+                maxDate={parseScheduleDate(dueDate) || undefined}
                 placeholder="Select start date & time"
                 includeTime={true}
               />
@@ -269,7 +275,7 @@ export function AddTaskModal({
               <MiniCalendarPicker
                 value={dueDate}
                 onChange={(value) => { setDueDate(value); setDateError(""); }}
-                minDate={startDate ? new Date(startDate) : new Date()}
+                minDate={parseScheduleDate(startDate) || new Date()}
                 placeholder="Select due date & time"
                 includeTime={true}
               />
@@ -278,6 +284,7 @@ export function AddTaskModal({
           {dateError ? <p className="text-xs font-semibold text-rose-600">{dateError}</p> : null}
 
           {/* Leader Only Restriction */}
+          {(dateError || getDateRangeError(startDate, dueDate, "Task")) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{getDateRangeError(startDate, dueDate, "Task") || dateError}</p>}
           <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">
             <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer select-none">
               <input
@@ -301,9 +308,10 @@ export function AddTaskModal({
             </button>
             <button
               type="submit"
-              className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md"
+              disabled={saving}
+              className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md disabled:opacity-60"
             >
-              Add Task
+              {saving ? "Saving..." : "Add Task"}
             </button>
           </div>
         </form>

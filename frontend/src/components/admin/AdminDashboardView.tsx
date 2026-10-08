@@ -108,7 +108,7 @@ export function AdminDashboardView() {
                 <div>
                   <p className="font-bold text-slate-900 text-sm">{org.name}</p>
                   <p className="mt-0.5 text-xs text-slate-400 font-medium">
-                    {org.type} · {org.memberCount} members · {org.goalCount} goals
+                    {org.type} · {org.memberCount} members · {org.goalCount} committees
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-0.5 text-xs font-bold text-emerald-600 ring-1 ring-emerald-200/70">

@@ -4,6 +4,7 @@ import { writeAuditLog } from "../utils/auditLog.js";
 
 export const TaskItemSchema = z.object({
   title: z.string().describe("Actionable task title"),
+  description: z.string().describe("Specific, actionable 1-2 sentence description explaining step-by-step what needs to be done for this subtask"),
   priority: z.enum(["Low", "Medium", "High", "Critical"]).describe("Priority level of the task"),
   assigneeName: z.string().describe("Suggested assignee or committee role"),
   dueDateOffsetDays: z.number().int().min(1).max(30).describe("Suggested due date offset in days from today"),
@@ -42,7 +43,7 @@ Macro-Goal Description:
 "${input.goalDescription}"
 
 Guidelines:
-1. Make tasks realistic, actionable, and tailored specifically to the goal description.
+1. Make tasks realistic, actionable, and tailored specifically to the goal description. Provide unique, detailed 1-2 sentence descriptions for each subtask explaining what steps to take.
 2. Assign appropriate priority levels: Low, Medium, High, or Critical.
 3. Suggest clear assignees (e.g., "Logistics Lead", "Ana Reyes", "Marco Dela Cruz", "Finance Officer").
 4. Provide sensible deadline offsets (1 to 20 days from today).
@@ -108,7 +109,7 @@ export async function runAtomizerFlow(input: AtomizeInput) {
       actorRole: input.userRole ?? "Student Leader",
       action: `AI Task Atomizer generated ${result.tasks.length} tasks for "${input.eventName}" via Genkit`,
       actionCategory: "AI Agent Actions",
-      targetType: "Event Goal",
+      targetType: "Event",
       targetName: input.eventName,
       context: {
         taskCount: result.tasks.length,

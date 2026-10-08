@@ -43,6 +43,8 @@ import {
   updateOrganizationController
 } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
+import { workflowRouter } from "./workflow.routes.js";
+import { taskRouter } from "./task.routes.js";
 
 export const authRouter = Router();
 
@@ -89,4 +91,6 @@ authRouter.patch("/organizations/:organizationId/join-requests/:requestId", revi
 authRouter.get("/organizations/:organizationId", organizationController);
 authRouter.get("/organizations/:organizationId/management", organizationManagementDetailController);
 authRouter.patch("/organizations/:organizationId", updateOrganizationController);
+authRouter.use(taskRouter);
+authRouter.use(workflowRouter);
 

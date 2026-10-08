@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronRight, Megaphone, Pin, Plus, X } from "lucide-react";
 import type { Announcement } from "@/services/announcements.service";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 type AnnouncementsViewProps = {
   announcements: Announcement[];
@@ -15,7 +16,11 @@ export function AnnouncementsView({
   isLeader,
   onPostAnnouncement
 }: AnnouncementsViewProps) {
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
+  const selectedAnnouncement = announcements.find((announcement) => announcement.id === selectedAnnouncementId) || null;
+  function setSelectedAnnouncement(announcement: Announcement | null) {
+    setSelectedAnnouncementId(announcement?.id || null);
+  }
 
   return (
     <div className="mt-6 space-y-4 max-w-full">
@@ -69,7 +74,7 @@ export function AnnouncementsView({
                         : "bg-blue-50 text-blue-700 border-blue-200/80"
                     }`}
                   >
-                    {ann.targetAudience}
+                    {ann.targetAudience === "Committee" ? ann.committeeName || "Committee" : ann.targetAudience}
                   </span>
                 </div>
 
@@ -115,7 +120,7 @@ export function AnnouncementsView({
                         : "bg-blue-50 text-blue-700 border-blue-200/80"
                     }`}
                   >
-                    {selectedAnnouncement.targetAudience}
+                    {selectedAnnouncement.targetAudience === "Committee" ? selectedAnnouncement.committeeName || "Committee" : selectedAnnouncement.targetAudience}
                   </span>
                 </div>
                 <h2 className="text-lg font-bold text-slate-900 leading-snug">
@@ -158,44 +163,51 @@ export function AnnouncementsView({
 
 type PostAnnouncementModalProps = {
   isOpen: boolean;
+  committees: Array<{ id: string; name: string }>;
   onClose: () => void;
   onSubmit: (data: {
     title: string;
     content: string;
     targetAudience: string;
+    committeeId?: string;
     isPinned: boolean;
   }) => Promise<void>;
 };
 
 export function PostAnnouncementModal({
   isOpen,
+  committees,
   onClose,
   onSubmit
 }: PostAnnouncementModalProps) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [targetAudience, setTargetAudience] = useState<"All Members" | "Leaders Only">("All Members");
+  const [audienceChoice, setAudienceChoice] = useState("All Members");
+  const [error, setError] = useState("");
   const [isPinned, setIsPinned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const targetAudience = audienceChoice.startsWith("committee:") ? "Committee" : audienceChoice;
+  const committeeId = targetAudience === "Committee" ? audienceChoice.slice("committee:".length) : undefined;
 
   if (!isOpen) return null;
 
-  const isValid = Boolean(title.trim() && content.trim());
+  const isValid = Boolean(title.trim() && content.trim() && (targetAudience !== "Committee" || committees.some((committee) => committee.id === committeeId)));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid || submitting) return;
 
     setSubmitting(true);
+    setError("");
     try {
-      await onSubmit({ title, content, targetAudience, isPinned });
+      await onSubmit({ title, content, targetAudience, committeeId: targetAudience === "Committee" ? committeeId : undefined, isPinned });
       setTitle("");
       setContent("");
-      setTargetAudience("All Members");
+      setAudienceChoice("All Members");
       setIsPinned(false);
       onClose();
     } catch (err) {
-      console.error("[PostAnnouncementModal] Error posting announcement:", err);
+      setError(err instanceof Error ? err.message : "Unable to post your announcement.");
     } finally {
       setSubmitting(false);
     }
@@ -203,7 +215,7 @@ export function PostAnnouncementModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in">
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100">
+      <div role="dialog" aria-modal="true" aria-label="Post announcement" className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl border border-slate-100">
         {/* Modal Header */}
         <div className="flex items-start justify-between pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -260,35 +272,30 @@ export function PostAnnouncementModal({
 
           {/* 2-Column Row for TARGET AUDIENCE & OPTIONS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-            {/* Target Audience Button Group */}
+            {/* Three audience choices; committee selection stays in the third control. */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                 TARGET AUDIENCE
               </label>
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setTargetAudience("All Members")}
-                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition text-center ${
-                    targetAudience === "All Members"
-                      ? "bg-[#1e3a5f] text-white shadow-xs"
-                      : "bg-[#f1f4f8] hover:bg-slate-200/60 text-slate-600 font-semibold"
-                  }`}
-                >
-                  All Members
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTargetAudience("Leaders Only")}
-                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition text-center ${
-                    targetAudience === "Leaders Only"
-                      ? "bg-[#1e3a5f] text-white shadow-xs"
-                      : "bg-[#f1f4f8] hover:bg-slate-200/60 text-slate-600 font-semibold"
-                  }`}
-                >
-                  Leaders Only
-                </button>
+              <div className="space-y-2" role="group" aria-label="Target audience">
+                {["All Members", "Leaders Only"].map((audience) => (
+                  <button key={audience} type="button" disabled={submitting} aria-pressed={audienceChoice === audience} onClick={() => setAudienceChoice(audience)} className={`w-full rounded-xl px-3 py-2.5 text-center text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60 ${audienceChoice === audience ? "bg-[#1e3a5f] text-white shadow-xs" : "bg-[#f1f4f8] text-slate-600 hover:bg-slate-200/60"}`}>
+                    {audience}
+                  </button>
+                ))}
+                <CustomSelect
+                  value={targetAudience === "Committee" ? audienceChoice : ""}
+                  onChange={setAudienceChoice}
+                  options={committees.map((committee) => ({ value: `committee:${committee.id}`, label: committee.name }))}
+                  placeholder="Specific committee"
+                  disabled={submitting || !committees.length}
+                  portal
+                  buttonClassName={targetAudience === "Committee"
+                    ? "rounded-xl border-transparent !bg-[#1e3a5f] text-xs font-bold text-white shadow-xs hover:!bg-[#152a45] [&_svg]:text-white"
+                    : "rounded-xl bg-[#f1f4f8] text-xs"}
+                />
               </div>
+              {targetAudience === "Committee" && <p className="mt-2 text-[11px] text-slate-500">Visible to members of this committee and organization leaders.</p>}
             </div>
 
             {/* Options Checkbox Card */}
@@ -318,6 +325,7 @@ export function PostAnnouncementModal({
           </div>
 
           {/* Action Buttons */}
+          {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
           <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
             <button
               type="button"

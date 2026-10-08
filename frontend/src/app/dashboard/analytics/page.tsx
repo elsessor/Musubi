@@ -21,6 +21,7 @@ import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import { fetchAuditLogs, type AuditLogRecord } from "@/services/audit.service";
+import { getStatusTheme, getTaskStatusDistribution } from "@/components/events/statusUtils";
 import type { Event, Task } from "@/components/events/types";
 
 function greetingDate() {
@@ -88,7 +89,7 @@ export default function AnalyticsPage() {
   const completedTasks = allTasks.filter((t) => t.status === "Completed");
   const inProgressTasks = allTasks.filter((t) => t.status === "In Progress");
   const todoTasks = allTasks.filter((t) => t.status === "To Do");
-  const inReviewTasks = allTasks.filter((t) => t.status === "In Review");
+  const statusDistribution = getTaskStatusDistribution(events);
 
   const completionRate = allTasks.length > 0 ? Math.round((completedTasks.length / allTasks.length) * 100) : 0;
   const assignedTasks = allTasks.filter((t) => t.assignee?.name && t.assignee.name.trim());
@@ -151,7 +152,7 @@ export default function AnalyticsPage() {
           />
           <StatCard
             title="AI Atomizations"
-            value={`${aiEventsCount} Goal${aiEventsCount === 1 ? "" : "s"}`}
+            value={`${aiEventsCount} Event${aiEventsCount === 1 ? "" : "s"}`}
             change={`${aiSubtasksCount} subtask${aiSubtasksCount === 1 ? "" : "s"} generated`}
             icon={Zap}
             color="text-amber-500"
@@ -169,7 +170,7 @@ export default function AnalyticsPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">Event &amp; Task Velocity</h3>
-                  <p className="text-xs text-slate-400">Real-time status breakdown across all active organizational goals</p>
+                  <p className="text-xs text-slate-400">Real-time status breakdown across all active organizational events</p>
                 </div>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
@@ -186,49 +187,21 @@ export default function AnalyticsPage() {
               </div>
               <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100 p-0.5">
                 {allTasks.length > 0 ? (
-                  <>
-                    <div
-                      style={{ width: `${(completedTasks.length / allTasks.length) * 100}%` }}
-                      className="bg-emerald-500 transition-all duration-500"
-                      title={`Completed: ${completedTasks.length}`}
-                    />
-                    <div
-                      style={{ width: `${(inProgressTasks.length / allTasks.length) * 100}%` }}
-                      className="bg-blue-500 transition-all duration-500"
-                      title={`In Progress: ${inProgressTasks.length}`}
-                    />
-                    <div
-                      style={{ width: `${(inReviewTasks.length / allTasks.length) * 100}%` }}
-                      className="bg-violet-500 transition-all duration-500"
-                      title={`In Review: ${inReviewTasks.length}`}
-                    />
-                    <div
-                      style={{ width: `${(todoTasks.length / allTasks.length) * 100}%` }}
-                      className="bg-slate-300 transition-all duration-500"
-                      title={`To Do: ${todoTasks.length}`}
-                    />
-                  </>
+                  statusDistribution.map((group) => <div
+                    key={group.key}
+                    style={{ width: ((group.count / allTasks.length) * 100) + "%" }}
+                    className={group.theme.dot + " transition-all duration-500"}
+                    title={group.status + ": " + group.count + " ? " + group.events.join(", ")}
+                  />)
                 ) : (
                   <div className="w-full bg-slate-200" />
                 )}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                  <span className="font-medium text-slate-600">Completed ({completedTasks.length})</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                  <span className="font-medium text-slate-600">In Progress ({inProgressTasks.length})</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-violet-500" />
-                  <span className="font-medium text-slate-600">In Review ({inReviewTasks.length})</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
-                  <span className="font-medium text-slate-600">To Do ({todoTasks.length})</span>
-                </div>
+                {statusDistribution.map((group) => <div key={group.key} className="flex items-center gap-1.5" title={group.events.join(", ")}>
+                  <span className={"h-2.5 w-2.5 rounded-full " + group.theme.dot} />
+                  <span className="font-medium text-slate-600">{group.status} ({group.count})</span>
+                </div>)}
               </div>
             </div>
 
@@ -239,7 +212,7 @@ export default function AnalyticsPage() {
               </h4>
               {events.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400">
-                  No published events found. Create an event or atomize a goal to track analytics.
+                  No published events found. Create an event or atomize an event to track analytics.
                 </div>
               ) : (
                 events.map((event) => {
@@ -259,7 +232,7 @@ export default function AnalyticsPage() {
                         <div>
                           <div className="flex items-center gap-2">
                             <h5 className="text-sm font-bold text-slate-900">{event.title}</h5>
-                            <span className="rounded-full bg-blue-100/80 px-2.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${getStatusTheme(event.status, event.eventCustomStatuses).badge}`}>
                               {event.status}
                             </span>
                           </div>
@@ -278,7 +251,7 @@ export default function AnalyticsPage() {
                           <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
                             <div
                               style={{ width: `${evProgress}%` }}
-                              className="h-full bg-blue-600 transition-all duration-300"
+                              className={`h-full transition-all duration-300 ${getStatusTheme(event.status, event.eventCustomStatuses).dot}`}
                             />
                           </div>
                         </div>
@@ -316,7 +289,7 @@ export default function AnalyticsPage() {
 
                 <div className="flex items-center justify-between rounded-xl bg-blue-50/50 p-3.5 border border-blue-100">
                   <div>
-                    <span className="text-xs font-semibold text-slate-600 block">AI Goal Runs</span>
+                    <span className="text-xs font-semibold text-slate-600 block">AI Event Runs</span>
                     <span className="text-lg font-extrabold text-slate-900">{aiEventsCount}</span>
                   </div>
                   <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">

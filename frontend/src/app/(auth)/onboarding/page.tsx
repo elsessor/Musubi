@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { SuccessDialog } from "@/components/ui/SuccessDialog";
 import { completeOnboarding, getOrganizationDirectory, joinOrganization, type OrganizationDirectoryOption } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { OrganizationTypeSelect } from "@/components/dashboard/OrganizationTypeSelect";
 import { PROGRAM_OPTIONS, SKILL_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
 
 type Role = "leader" | "member";
@@ -276,7 +277,7 @@ export default function OnboardingPage() {
           {stage === "role" && <>
             <SectionTitle title="What is your role?" description="This helps us tailor your workspace and the tools you can access." />
             <div className="mt-6 space-y-3">
-              <RoleOption active={role === "leader"} icon="★" title="Student Leader" description="I manage an organization, set goals, and delegate work." onClick={() => setRole("leader")} />
+              <RoleOption active={role === "leader"} icon="★" title="Student Leader" description="I manage an organization, plan events, and delegate work." onClick={() => setRole("leader")} />
               <RoleOption active={role === "member"} icon="♟" title="Organization Member" description="I collaborate on tasks assigned by my organization." onClick={() => setRole("member")} />
             </div>
             <PrimaryButton className="mt-7" disabled={!role} onClick={continueFromRole}>Continue <span aria-hidden>→</span></PrimaryButton>
@@ -299,7 +300,7 @@ export default function OnboardingPage() {
             </div>}
             {isNewOrganization ? <div className="mt-6 space-y-4">
               <Field label="Organization name"><input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} className="onboarding-input" placeholder="e.g. Computer Science Society" /></Field>
-              <Field label="Organization type"><CustomSelect value={organizationType} onChange={setOrganizationType} options={["Academic", "Arts & Culture", "Sports", "Student Government", "Community Service"]} placeholder="Select a type" className="w-full" /></Field>
+              <Field label="Organization type"><OrganizationTypeSelect value={organizationType} onChange={setOrganizationType} /></Field>
               <Field label="Organization description"><textarea value={organizationDescription} onChange={(event) => setOrganizationDescription(event.target.value)} className="onboarding-input min-h-24 h-auto py-3" placeholder="Describe your organization, its purpose, and planned activities." /></Field>
               <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">New organization registrations are reviewed by a Musubi administrator before activation.</p>
             </div> : <div className="mt-6">
@@ -337,7 +338,14 @@ export default function OnboardingPage() {
             <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Year level <span className="text-red-500">*</span></label><div className="mt-3 flex flex-wrap gap-2">{years.map((item) => <button key={item} type="button" onClick={() => { setYear(item); setError(""); }} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${year === item ? "border-brand bg-brand text-white" : "border-slate-200 text-slate-600 hover:border-blue-300"}`}>{item}</button>)}</div></div>
             <div className="mt-5"><Field label="Program"><ComboboxInput value={program} onChange={(val) => { setProgram(val); setError(""); }} options={programOptions} placeholder="Choose or type your program" className="onboarding-input h-10 bg-white text-[13px] text-slate-900" /></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your program manually.</p></div>
             <div className="mt-5"><Field label="Organization position"><ComboboxInput value={position} onChange={(val) => { setPosition(val); setError(""); }} options={activePositionOptions} placeholder="Choose or type your position" className="onboarding-input h-10 bg-white text-[13px] text-slate-900" /></Field><p className="mt-1.5 text-xs text-slate-500">Choose from the list or enter your position manually.</p></div>
-            <div className="mt-6"><label className="text-xs font-bold uppercase tracking-wide text-slate-500">Birthdate</label><div className="mt-2 flex gap-2"><CustomSelect value={birthMonth} onChange={setBirthMonth} options={["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]} placeholder="Month" className="flex-1" /><CustomSelect value={birthDay} onChange={setBirthDay} options={Array.from({ length: 31 }, (_, index) => index + 1)} placeholder="Day" className="w-24" /><CustomSelect value={birthYear} onChange={setBirthYear} options={Array.from({ length: 60 }, (_, index) => new Date().getFullYear() - index)} placeholder="Year" className="w-28" /></div></div>
+            <div className="mt-6">
+              <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Birthdate</label>
+              <div className="mt-2 flex gap-2">
+                <CustomSelect direction="up" value={birthMonth} onChange={setBirthMonth} options={["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]} placeholder="Month" className="flex-1" />
+                <CustomSelect direction="up" value={birthDay} onChange={setBirthDay} options={Array.from({ length: 31 }, (_, index) => index + 1)} placeholder="Day" className="w-24" />
+                <CustomSelect direction="up" value={birthYear} onChange={setBirthYear} options={Array.from({ length: 60 }, (_, index) => new Date().getFullYear() - index)} placeholder="Year" className="w-28" />
+              </div>
+            </div>
             <ErrorMessage message={error} />
             <div className="mt-7 flex gap-3"><SecondaryButton onClick={() => setStage("organization")}>Back</SecondaryButton><PrimaryButton onClick={submitDetails}>{isNewOrganization ? "Submit for review" : isJoiningOrganizationLater ? "Complete setup" : "Submit request"} <span aria-hidden>→</span></PrimaryButton></div>
           </>}
@@ -363,15 +371,18 @@ function ComboboxInput({
   onChange,
   options,
   placeholder,
-  className = ""
+  className = "",
+  direction = "auto"
 }: {
   value: string;
   onChange: (val: string) => void;
   options: string[];
   placeholder: string;
   className?: string;
+  direction?: "up" | "down" | "auto";
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const filteredOptions = useMemo(() => {
@@ -390,15 +401,33 @@ function ComboboxInput({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const checkPosition = () => {
+    if (containerRef.current) {
+      if (direction === "up") {
+        setOpenUpward(true);
+      } else if (direction === "down") {
+        setOpenUpward(false);
+      } else {
+        const rect = containerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        setOpenUpward(spaceBelow < 240);
+      }
+    }
+  };
+
   return (
     <div ref={containerRef} className="relative w-full">
       <div className="relative flex items-center">
         <input
           type="text"
           value={value}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            checkPosition();
+            setIsOpen(true);
+          }}
           onChange={(event) => {
             onChange(event.target.value);
+            checkPosition();
             setIsOpen(true);
           }}
           className={`${className} pr-9`}
@@ -407,7 +436,10 @@ function ComboboxInput({
         <button
           type="button"
           tabIndex={-1}
-          onClick={() => setIsOpen((previous) => !previous)}
+          onClick={() => {
+            if (!isOpen) checkPosition();
+            setIsOpen((previous) => !previous);
+          }}
           className="absolute right-2.5 text-slate-400 hover:text-slate-600 transition"
         >
           <ChevronDown className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
@@ -415,7 +447,11 @@ function ComboboxInput({
       </div>
 
       {isOpen && filteredOptions.length > 0 && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10 transition-all">
+        <div
+          className={`absolute left-0 z-50 max-h-56 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10 transition-all ${
+            openUpward ? "bottom-full mb-1" : "top-full mt-1"
+          }`}
+        >
           {filteredOptions.map((option) => (
             <button
               key={option}
@@ -446,15 +482,18 @@ function CustomSelect({
   onChange,
   options,
   placeholder,
-  className = ""
+  className = "",
+  direction = "auto"
 }: {
   value: string;
   onChange: (val: string) => void;
   options: (string | number)[];
   placeholder: string;
   className?: string;
+  direction?: "up" | "down" | "auto";
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const stringOptions = useMemo(() => options.map(String), [options]);
@@ -469,11 +508,26 @@ function CustomSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleToggle = () => {
+    if (!isOpen && containerRef.current) {
+      if (direction === "up") {
+        setOpenUpward(true);
+      } else if (direction === "down") {
+        setOpenUpward(false);
+      } else {
+        const rect = containerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        setOpenUpward(spaceBelow < 240);
+      }
+    }
+    setIsOpen((previous) => !previous);
+  };
+
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => setIsOpen((previous) => !previous)}
+        onClick={handleToggle}
         className={`flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-[13px] transition hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-[#244775]/20 ${
           value ? "font-medium text-slate-900" : "text-slate-400"
         }`}
@@ -483,7 +537,11 @@ function CustomSelect({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10 transition-all">
+        <div
+          className={`absolute left-0 z-50 max-h-56 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10 transition-all ${
+            openUpward ? "bottom-full mb-1" : "top-full mt-1"
+          }`}
+        >
           <button
             type="button"
             onClick={() => {

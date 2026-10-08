@@ -5,6 +5,13 @@ import { firebaseAdmin, firebaseAuth, firestore } from "../config/firebase.js";
 import type { FirestoreUser, JwtPayload, LoginResponse, UserRole } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
 import { writeAuditLog } from "../utils/auditLog.js";
+import { recordTaskPerformance } from "../utils/taskPerformance.js";
+import { memberForViewer, taskForViewer } from "../utils/profileAccess.js";
+import { assertCanUpdateOrganization } from "../utils/organizationPermissions.js";
+import { renameCommitteeReferences } from "../utils/committeeReferences.js";
+import { assertCanPostAnnouncement, canViewAnnouncement } from "../utils/announcementAccess.js";
+import { getDateRangeError } from "../utils/dateRange.js";
+import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
 const validRoles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -37,18 +44,40 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
     birthdate: typeof data.birthdate === "string" ? data.birthdate : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
     skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
+    availability: typeof data.availability === "string" ? data.availability : null,
+    status: typeof data.status === "string" ? data.status : null,
     onboardingCompleted: data.onboardingCompleted === true,
     createdAt: data.createdAt ?? firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     lastLogin: data.lastLogin ?? firebaseAdmin.firestore.FieldValue.serverTimestamp()
   };
 }
 
-async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
+async function getOrCreateUserDocument(uid: string, clientFullName?: string): Promise<FirestoreUser> {
   const userRef = firestore.collection("users").doc(uid);
   const snapshot = await userRef.get();
+  const firebaseUser = await firebaseAuth.getUser(uid);
 
   if (snapshot.exists) {
     const data = snapshot.data() ?? {};
+    let currentFullName = typeof data.fullName === "string" ? data.fullName : "Campus Member";
+
+    const candidateName =
+      (clientFullName && clientFullName.trim() && clientFullName.trim() !== "Campus Member")
+        ? clientFullName.trim()
+        : (firebaseUser.displayName && firebaseUser.displayName.trim() && firebaseUser.displayName.trim() !== "Campus Member")
+        ? firebaseUser.displayName.trim()
+        : undefined;
+
+    if ((currentFullName === "Campus Member" || !currentFullName.trim()) && candidateName) {
+      currentFullName = candidateName;
+      await userRef.update({ fullName: candidateName });
+      try {
+        await firebaseAuth.updateUser(uid, { displayName: candidateName });
+      } catch {
+        // ignore update error if any
+      }
+    }
+
     let orgName = typeof data.organizationName === "string" && data.organizationName.trim() ? data.organizationName : null;
     if (typeof data.organizationId === "string" && data.organizationId.trim()) {
       try {
@@ -63,17 +92,23 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
         console.error("[getOrCreateUserDocument] Error syncing organizationName:", err);
       }
     }
-    const user = normalizeUserDocument(uid, { ...data, organizationName: orgName });
+    const user = normalizeUserDocument(uid, { ...data, fullName: currentFullName, organizationName: orgName });
     await userRef.update({
       lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
     });
     return user;
   }
 
-  const firebaseUser = await firebaseAuth.getUser(uid);
+  const effectiveName =
+    (clientFullName && clientFullName.trim() && clientFullName.trim() !== "Campus Member")
+      ? clientFullName.trim()
+      : (firebaseUser.displayName && firebaseUser.displayName.trim() && firebaseUser.displayName.trim() !== "Campus Member")
+      ? firebaseUser.displayName.trim()
+      : "Campus Member";
+
   const user: FirestoreUser = {
     uid,
-    fullName: firebaseUser.displayName ?? "Campus Member",
+    fullName: effectiveName,
     email: firebaseUser.email ?? "",
     role: DEFAULT_ROLE,
     position: null,
@@ -90,16 +125,23 @@ async function getOrCreateUserDocument(uid: string): Promise<FirestoreUser> {
   };
 
   await userRef.set(user);
+  if (effectiveName !== "Campus Member" && !firebaseUser.displayName) {
+    try {
+      await firebaseAuth.updateUser(uid, { displayName: effectiveName });
+    } catch {
+      // ignore
+    }
+  }
   return user;
 }
 
-export async function loginWithFirebaseToken(idToken: string): Promise<LoginResponse> {
+export async function loginWithFirebaseToken(idToken: string, clientFullName?: string): Promise<LoginResponse> {
   if (!idToken) {
     throw new AppError("Firebase ID token is required.", 400);
   }
 
   const decodedToken = await firebaseAuth.verifyIdToken(idToken);
-  const user = await getOrCreateUserDocument(decodedToken.uid);
+  const user = await getOrCreateUserDocument(decodedToken.uid, clientFullName);
 
   const payload: JwtPayload = {
     uid: user.uid,
@@ -135,6 +177,8 @@ export async function loginWithFirebaseToken(idToken: string): Promise<LoginResp
       birthdate: user.birthdate,
       profilePicture: user.profilePicture,
       skills: user.skills,
+      availability: user.availability,
+      status: user.status,
       onboardingCompleted: user.onboardingCompleted
     }
   };
@@ -206,6 +250,8 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     birthdate: user.birthdate,
     profilePicture: user.profilePicture,
     skills: user.skills,
+    availability: user.availability,
+    status: user.status,
     onboardingCompleted: user.onboardingCompleted
   };
 }
@@ -424,19 +470,12 @@ export async function createOrganization(uid: string, input: { name: string; typ
 export async function getOrganizationMembers(uid: string, organizationId: string) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to these members.", 403);
-  const snapshot = await firestore.collection("users").where("organizationId", "==", organizationId).get();
-  return snapshot.docs.map((document) => {
-    const data = document.data();
-    return {
-      id: document.id,
-      name: typeof data.fullName === "string" ? data.fullName : "Unnamed member",
-      role: typeof data.role === "string" ? data.role : "Organization Member",
-      position: typeof data.position === "string" ? data.position : "Organization Member",
-      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
-      committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
-      committeeName: typeof data.committeeName === "string" ? data.committeeName : null
-    };
-  });
+  const [snapshot, eventSnapshot] = await Promise.all([
+    firestore.collection("users").where("organizationId", "==", organizationId).get(),
+    firestore.collection("events").where("orgId", "==", organizationId).get()
+  ]);
+  const events = eventSnapshot.docs.map((document) => ({ ...document.data(), id: document.id }));
+  return snapshot.docs.map((document) => memberForViewer(user, document.id, document.data(), events));
 }
 
 export async function removeOrganizationMember(uid: string, organizationId: string, memberId: string) {
@@ -491,8 +530,8 @@ export async function getOrganizationCommittees(uid: string, organizationId: str
   return snapshot.docs.map((document) => {
     const data = document.data();
     const createdAt = data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0;
-    return { id: document.id, name: typeof data.name === "string" ? data.name : "Untitled committee", description: typeof data.description === "string" ? data.description : "", headMemberUID: typeof data.headMemberUID === "string" ? data.headMemberUID : null, createdAt };
-  }).sort((left, right) => left.createdAt - right.createdAt).map(({ createdAt: _createdAt, ...committee }) => committee);
+    return { id: document.id, name: typeof data.name === "string" ? data.name : "Untitled committee", description: typeof data.description === "string" ? data.description : "", headMemberUID: typeof data.headMemberUID === "string" ? data.headMemberUID : null, createdAt, createdAtISO: asIsoString(data.createdAt) };
+  }).sort((left, right) => left.createdAt - right.createdAt).map(({ createdAt: _sortDate, createdAtISO, ...committee }) => ({ ...committee, createdAt: createdAtISO }));
 }
 
 export async function createOrganizationCommittee(
@@ -529,7 +568,7 @@ export async function createOrganizationCommittee(
   }
   await batch.commit();
   writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role, action: "Committee created", actionCategory: "Organization", targetType: "Committee", targetName: input.name.trim(), orgId: organizationId });
-  return { id: committeeRef.id, name: input.name.trim(), description: input.description.trim(), headMemberUID: input.headMemberId };
+  return { id: committeeRef.id, name: input.name.trim(), description: input.description.trim(), headMemberUID: input.headMemberId, createdAt: asIsoString((await committeeRef.get()).data()?.createdAt) };
 }
 
 export async function addMembersToOrganizationCommittee(uid: string, organizationId: string, committeeId: string, memberIds: string[]) {
@@ -615,6 +654,20 @@ export async function updateOrganizationCommittee(
     await batch.commit();
   }
 
+  const previousName = committeeSnapshot.data()?.name;
+  if (typeof previousName === "string" && previousName !== name) {
+    const events = await firestore.collection("events").where("orgId", "==", organizationId).get();
+    for (const event of events.docs) {
+      if (!Object.keys(renameCommitteeReferences(event.data(), previousName, name)).length) continue;
+      await firestore.runTransaction(async (transaction) => {
+        const current = await transaction.get(event.ref);
+        if (!current.exists || current.data()?.orgId !== organizationId) return;
+        const update = renameCommitteeReferences(current.data()!, previousName, name);
+        if (Object.keys(update).length) transaction.update(event.ref, update);
+      });
+    }
+  }
+
   writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role, action: "Committee updated", actionCategory: "Organization", targetType: "Committee", targetName: name, orgId: organizationId });
   return { id: committeeId, name, description, headMemberUID: input.headMemberId };
 }
@@ -642,7 +695,50 @@ async function requireAdmin(uid: string) {
 
 export async function getOrganizationsForAdmin(uid: string) {
   await requireAdmin(uid);
-  const snapshot = await firestore.collection("organizations").orderBy("createdAt", "desc").get();
+  let snapshot = await firestore.collection("organizations").get();
+
+  if (snapshot.empty) {
+    const DEFAULT_SEED_ORGS = [
+      {
+        name: "University Student Council",
+        type: "Governing",
+        description: "The highest governing student body of the university.",
+        setupStatus: "active"
+      },
+      {
+        name: "Computer Science Society",
+        type: "Academic",
+        description: "Org for CS majors focused on tech and innovation.",
+        setupStatus: "active"
+      },
+      {
+        name: "Socio-Civic Action Group",
+        type: "Socio-Civic",
+        description: "Community outreach and civic engagement programs.",
+        setupStatus: "active"
+      },
+      {
+        name: "Campus Media Network",
+        type: "Media",
+        description: "Handles campus publications and broadcast.",
+        setupStatus: "active"
+      }
+    ];
+
+    const batch = firestore.batch();
+    for (const org of DEFAULT_SEED_ORGS) {
+      const ref = firestore.collection("organizations").doc();
+      batch.set(ref, {
+        ...org,
+        organizationConfig: {},
+        createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    await batch.commit();
+    snapshot = await firestore.collection("organizations").get();
+  }
+
   return Promise.all(snapshot.docs.map(async (document) => {
     const [members, memberRecords, committees] = await Promise.all([
       firestore.collection("users").where("organizationId", "==", document.id).get(),
@@ -655,14 +751,31 @@ export async function getOrganizationsForAdmin(uid: string) {
 
 export async function getOrganizationManagementDetail(uid: string, organizationId: string) {
   await requireAdmin(uid);
-  const ref = firestore.collection("organizations").doc(organizationId);
-  const snapshot = await ref.get();
-  if (!snapshot.exists) throw new AppError("Organization was not found.", 404);
+  let ref = firestore.collection("organizations").doc(organizationId);
+  let snapshot = await ref.get();
+
+  if (!snapshot.exists) {
+    const firstSnap = await firestore.collection("organizations").limit(1).get();
+    if (!firstSnap.empty) {
+      snapshot = firstSnap.docs[0];
+      ref = snapshot.ref;
+    } else {
+      await getOrganizationsForAdmin(uid);
+      const seededSnap = await firestore.collection("organizations").limit(1).get();
+      if (!seededSnap.empty) {
+        snapshot = seededSnap.docs[0];
+        ref = snapshot.ref;
+      } else {
+        throw new AppError("Organization was not found.", 404);
+      }
+    }
+  }
+
   const [usersSnapshot, membersSnapshot, committeesSnapshot, goalsSnapshot] = await Promise.all([
-    firestore.collection("users").where("organizationId", "==", organizationId).get(),
+    firestore.collection("users").where("organizationId", "==", snapshot.id).get(),
     ref.collection("members").get(),
     ref.collection("committees").get(),
-    ref.collection("goals").get()
+    firestore.collection("events").where("orgId", "==", snapshot.id).get()
   ]);
   const memberSource = membersSnapshot.size ? membersSnapshot : usersSnapshot;
   const members = memberSource.docs.map((document) => { const data = document.data(); return { id: document.id, name: typeof data.fullName === "string" ? data.fullName : typeof data.name === "string" ? data.name : "Unnamed member", role: typeof data.role === "string" ? data.role : "Organization Member", position: typeof data.position === "string" ? data.position : "—", committeeId: typeof data.committeeId === "string" ? data.committeeId : null }; });
@@ -673,9 +786,7 @@ export async function getOrganizationManagementDetail(uid: string, organizationI
 
 export async function updateOrganizationForAdmin(uid: string, organizationId: string, input: { name?: string; type?: string; description?: string; setupStatus?: string; organizationConfig?: { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } }) {
   const currentUser = await getCurrentUser(uid);
-  if (currentUser.role !== "Admin" && currentUser.organizationId !== organizationId) {
-    throw new AppError("Organization leader or administrator access is required.", 403);
-  }
+  assertCanUpdateOrganization(currentUser, organizationId, input);
   const ref = firestore.collection("organizations").doc(organizationId);
   const before = await ref.get();
   if (!before.exists) throw new AppError("Organization was not found.", 404);
@@ -1171,20 +1282,31 @@ export async function watchAuditLogs(
   return unsubscribe;
 }
 
-export async function createEventForUser(uid: string, input: { orgId?: string; title: string; description?: string; status?: string; startDate?: string; endDate?: string; memberCount?: number; progress?: number; committee?: string; tasks?: any[] }) {
+export async function createEventForUser(uid: string, input: { orgId?: string; title: string; description?: string; status?: string; startDate?: string; endDate?: string; memberCount?: number; progress?: number; committee?: string; tasks?: any[]; customStatuses?: any[]; statusOrder?: string[] }) {
   const user = await getCurrentUser(uid);
   const targetOrgId = input.orgId || user.organizationId || "default-org";
+  assertCanEditEvent(user, targetOrgId);
+  const startDate = input.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const endDate = input.endDate || new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const dateError = getDateRangeError(startDate, endDate);
+  if (dateError) throw new AppError(dateError, 400);
+  for (const task of input.tasks || []) {
+    const error = getDateRangeError(task.startDate, task.dueDate || task.deadline, "Task");
+    if (error) throw new AppError(`${task.title || "Subtask"}: ${error}`, 400);
+  }
 
   const eventRef = await firestore.collection("events").add({
     title: input.title.trim(),
     description: (input.description || "").trim(),
     status: input.status || "Active",
-    startDate: input.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    endDate: input.endDate || new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    startDate,
+    endDate,
     memberCount: typeof input.memberCount === "number" ? input.memberCount : 1,
     progress: typeof input.progress === "number" ? input.progress : 0,
     committee: input.committee ?? "",
-    tasks: Array.isArray(input.tasks) ? input.tasks : [],
+    customStatuses: Array.isArray(input.customStatuses) ? input.customStatuses : [],
+    statusOrder: Array.isArray(input.statusOrder) ? input.statusOrder : [],
+    tasks: recordTaskPerformance(Array.isArray(input.tasks) ? input.tasks.map((task) => ({ ...task, performanceReview: null, attachments: [] })) : [], [], { uid, fullName: user.fullName, isLeader: false }),
     orgId: targetOrgId,
     createdBy: uid,
     createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
@@ -1212,74 +1334,34 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
 
   const beforeData = snap.data() ?? {};
   const eventOrgId = typeof beforeData.orgId === "string" ? beforeData.orgId : null;
-  const isLeader = user.role === "Student Leader" || user.role === "Admin";
-  if (user.role !== "Admin" && (!eventOrgId || user.organizationId !== eventOrgId)) {
-    throw new AppError("You do not have access to this event.", 403);
-  }
-
-  let updatePayload: Record<string, any>;
-  if (isLeader) {
-    updatePayload = { ...input };
-    delete updatePayload.id;
-  } else {
-    const allowedKeys = new Set(["tasks"]);
-    if (Object.keys(input).some((key) => !allowedKeys.has(key)) || !Array.isArray(input.tasks)) {
-      throw new AppError("Organization members can only update their assigned tasks.", 403);
-    }
-
-    const originalTasks: any[] = Array.isArray(beforeData.tasks) ? beforeData.tasks : [];
-    const submittedTasks: any[] = input.tasks;
-    const submittedById = new Map(submittedTasks.filter((task) => task && typeof task.id === "string").map((task) => [task.id, task]));
-    if (submittedTasks.length !== originalTasks.length || submittedById.size !== originalTasks.length) {
-      throw new AppError("Organization members cannot add or remove tasks.", 403);
-    }
-    let updatedOwnedTask = false;
-    const validPriorities = new Set(["Low", "Medium", "High", "Critical"]);
-    const updatedTasks = originalTasks.map((original) => {
-      const submitted = submittedById.get(original.id);
-      if (!submitted) throw new AppError("Task list does not match this event.", 400);
-      const assigneeName = typeof original.assignedMemberName === "string"
-        ? original.assignedMemberName
-        : typeof original.assignee?.name === "string" ? original.assignee.name : "";
-      const isAssignedToUser = original.assignedMemberUID === uid || (!original.assignedMemberUID && assigneeName.trim().toLowerCase() === user.fullName.trim().toLowerCase());
-      if (!isAssignedToUser) return original;
-
-      const updated = { ...original };
-      if (submitted.title !== original.title) {
-        if (typeof submitted.title !== "string" || !submitted.title.trim() || submitted.title.length > 200) throw new AppError("Enter a valid task title (up to 200 characters).", 400);
-        updated.title = submitted.title.trim();
-      }
-      if (submitted.description !== original.description) {
-        if (typeof submitted.description !== "string" || submitted.description.length > 5000) throw new AppError("Task description must be 5,000 characters or fewer.", 400);
-        updated.description = submitted.description.trim();
-      }
-      if (submitted.status !== original.status) {
-        if (typeof submitted.status !== "string" || !submitted.status.trim()) throw new AppError("Choose a valid task status.", 400);
-        updated.status = submitted.status;
-      }
-      if (submitted.priority !== original.priority) {
-        throw new AppError("Priority changes must be submitted as a request for leader approval.", 403);
-      }
-      const priorityRequest = submitted.priorityChangeRequest;
-      if (priorityRequest && priorityRequest.requestedPriority !== original.priorityChangeRequest?.requestedPriority) {
-        if (!validPriorities.has(priorityRequest.requestedPriority)) throw new AppError("Choose a valid priority to request.", 400);
-        updated.priorityChangeRequest = {
-          requestedPriority: priorityRequest.requestedPriority,
-          requestedByUID: uid,
-          requestedAt: new Date().toISOString()
-        };
-      }
-      if (updated.title !== original.title || updated.description !== original.description || updated.status !== original.status || updated.priorityChangeRequest !== original.priorityChangeRequest) updatedOwnedTask = true;
-      return updated;
-    });
-    if (!updatedOwnedTask) throw new AppError("You can only edit tasks assigned to you.", 403);
-    updatePayload = { tasks: updatedTasks };
-    const completedCount = updatedTasks.filter((task) => task.status === "Completed" || task.status === "Done").length;
-    updatePayload.progress = updatedTasks.length ? Math.round((completedCount / updatedTasks.length) * 100) : 0;
-  }
+  assertCanEditEvent(user, eventOrgId);
+  const updatePayload: Record<string, any> = { ...input };
+  delete updatePayload.id;
   updatePayload.updatedAt = firebaseAdmin.firestore.FieldValue.serverTimestamp();
 
-  await docRef.update(updatePayload);
+  await firestore.runTransaction(async (transaction) => {
+    const latestSnapshot = await transaction.get(docRef);
+    if (!latestSnapshot.exists) throw new AppError("Event not found.", 404);
+    const latest = latestSnapshot.data() || {};
+    assertCanEditEvent(user, latest.orgId);
+    const payload = { ...updatePayload };
+    if ("startDate" in payload || "endDate" in payload) {
+      const error = getDateRangeError("startDate" in payload ? payload.startDate : latest.startDate, "endDate" in payload ? payload.endDate : latest.endDate);
+      if (error) throw new AppError(error, 400);
+    }
+    if (Array.isArray(payload.tasks)) {
+      const originals = Array.isArray(latest.tasks) ? latest.tasks : [];
+      for (const task of payload.tasks) {
+        const original = originals.find((item: any) => item.id === task.id);
+        if (!original || task.startDate !== original.startDate || task.dueDate !== original.dueDate || task.deadline !== original.deadline) {
+          const error = getDateRangeError(task.startDate, task.dueDate || task.deadline, "Task");
+          if (error) throw new AppError(`${task.title || "Subtask"}: ${error}`, 400);
+        }
+      }
+      payload.tasks = recordTaskPerformance(preserveTaskAttachments(payload.tasks, originals), originals, { uid, fullName: user.fullName, isLeader: true });
+    }
+    transaction.update(docRef, payload);
+  });
 
   let actionMsg = `Updated event "${beforeData.title || "Event"}"`;
   if (Array.isArray(input.tasks) && Array.isArray(beforeData.tasks)) {
@@ -1298,9 +1380,9 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
     actorUID: uid,
     actorName: user.fullName,
     actorRole: user.role,
-    action: isLeader ? actionMsg : `Updated an assigned task in "${beforeData.title || "Event"}"`,
+    action: actionMsg,
     actionCategory: "Events & Tasks",
-    targetType: "Event Goal",
+    targetType: "Event",
     targetName: typeof beforeData.title === "string" ? beforeData.title : "Event",
     orgId: user.organizationId ?? (typeof beforeData.orgId === "string" ? beforeData.orgId : null)
   });
@@ -1351,6 +1433,8 @@ export async function clearEventsForOrg(uid: string, organizationId: string) {
 export async function getEventsForUser(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
   const targetOrgId = orgId || user.organizationId || "default-org";
+  assertEventAccess(user, targetOrgId);
+  const organization = (await firestore.collection("organizations").doc(targetOrgId).get()).data();
   const snapshot = await firestore.collection("events").where("orgId", "==", targetOrgId).get();
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();
@@ -1358,9 +1442,10 @@ export async function getEventsForUser(uid: string, orgId?: string) {
       id: docSnap.id,
       title: typeof data.title === "string" ? data.title : "Untitled Event",
       description: typeof data.description === "string" ? data.description : "",
-      status: ["Active", "Planning", "Completed", "Archived"].includes(data.status)
-        ? data.status
+      status: typeof data.status === "string" && data.status.trim()
+        ? data.status.trim()
         : "Planning",
+      eventCustomStatuses: Array.isArray(organization?.eventCustomStatuses) ? organization.eventCustomStatuses : [],
       startDate: typeof data.startDate === "string" ? data.startDate : "TBD",
       endDate: typeof data.endDate === "string" ? data.endDate : "TBD",
       memberCount: typeof data.memberCount === "number" ? data.memberCount : 0,
@@ -1368,7 +1453,7 @@ export async function getEventsForUser(uid: string, orgId?: string) {
       committee: typeof data.committee === "string" ? data.committee : "General",
       tasks: Array.isArray(data.tasks)
         ? data.tasks.map((t: any) => ({
-          ...t,
+          ...taskForViewer(user, t),
           title: typeof t.title === "string" && t.title.trim()
             ? t.title
             : typeof t.description === "string" && t.description.trim()
@@ -1392,6 +1477,7 @@ export async function createAnnouncementService(
     title: string;
     content: string;
     targetAudience?: string;
+    committeeId?: string;
     isPinned?: boolean;
     authorName?: string;
     authorRole?: string;
@@ -1399,6 +1485,20 @@ export async function createAnnouncementService(
 ) {
   const user = await getCurrentUser(uid);
   const targetOrgId = data.orgId || user.organizationId || "default-org";
+
+  const audience = data.targetAudience || "All Members";
+  assertCanPostAnnouncement(user, targetOrgId, audience, data.committeeId);
+  if (typeof data.title !== "string" || !data.title.trim() || typeof data.content !== "string" || !data.content.trim()) {
+    throw new AppError("Announcement title and message are required.", 400);
+  }
+  let committeeName: string | null = null;
+  if (audience === "Committee") {
+    const committee = await firestore.collection("committees").doc(data.committeeId!).get();
+    if (!committee.exists || committee.data()?.orgId?.path !== firestore.collection("organizations").doc(targetOrgId).path) {
+      throw new AppError("Select a committee from this organization.", 400);
+    }
+    committeeName = committee.data()!.name;
+  }
 
   const formattedDate = new Date().toLocaleDateString("en-US", {
     month: "short",
@@ -1411,7 +1511,9 @@ export async function createAnnouncementService(
     orgId: targetOrgId,
     title: (data.title || "").trim(),
     content: (data.content || "").trim(),
-    targetAudience: data.targetAudience || "All Members",
+    targetAudience: audience,
+    committeeId: audience === "Committee" ? data.committeeId : null,
+    committeeName,
     isPinned: Boolean(data.isPinned),
     authorName: data.authorName || user.fullName || "Student Leader",
     authorUid: uid,
@@ -1449,42 +1551,49 @@ export async function createAnnouncementService(
 
 export async function getAnnouncementsService(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
-  const targetOrgId = orgId || user.organizationId || "default-org";
+  const targetOrgId = orgId || user.organizationId;
+  if (user.role !== "Admin" && orgId && orgId !== user.organizationId) throw new AppError("You do not have access to this organization's announcements.", 403);
+  const member = user.role === "Organization Member" ? (await firestore.collection("users").doc(uid).get()).data() : null;
 
   const snapshot = await firestore.collection("announcements").get();
   const list: any[] = [];
 
   snapshot.docs.forEach((docSnap) => {
     const data = docSnap.data();
-    const itemOrgId = data.organizationId || data.orgId || "default-org";
+    const itemOrgId = data.organizationId || data.orgId;
     const targetAudience = data.targetAudience || "All Members";
 
-    if (user.role === "Organization Member" && targetAudience === "Leaders Only") {
+    // 1. Strict Organization Match Filter
+    const isSysAdmin = user.role === "Admin" || (user.role as string) === "System Administrator";
+    const isOrgMatch =
+      (isSysAdmin && (!orgId || orgId === "all")) ||
+      (targetOrgId && itemOrgId === targetOrgId) ||
+      (user.organizationId && itemOrgId === user.organizationId);
+
+    if (!isOrgMatch) {
       return;
     }
 
-    const isAllMembers = targetAudience === "All Members";
-    const isOrgMatch =
-      !targetOrgId ||
-      targetOrgId === "default-org" ||
-      itemOrgId === "default-org" ||
-      itemOrgId === targetOrgId;
-
-    if (isAllMembers || isOrgMatch) {
-      list.push({
-        id: docSnap.id,
-        organizationId: itemOrgId,
-        title: typeof data.title === "string" ? data.title : "Untitled Announcement",
-        content: typeof data.content === "string" ? data.content : "",
-        targetAudience,
-        isPinned: Boolean(data.isPinned),
-        authorName: typeof data.authorName === "string" ? data.authorName : "Student Leader",
-        authorUid: typeof data.authorUid === "string" ? data.authorUid : "",
-        authorRole: typeof data.authorRole === "string" ? data.authorRole : "Student Leader",
-        createdAt: typeof data.createdAt === "string" ? data.createdAt : "Recent",
-        timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now()
-      });
+    // 2. Audience / Role Filter
+    if (!canViewAnnouncement({ ...user, committeeId: typeof member?.committeeId === "string" ? member.committeeId : null }, data)) {
+      return;
     }
+
+    list.push({
+      id: docSnap.id,
+      organizationId: itemOrgId,
+      title: typeof data.title === "string" ? data.title : "Untitled Announcement",
+      content: typeof data.content === "string" ? data.content : "",
+      targetAudience,
+      committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
+      committeeName: typeof data.committeeName === "string" ? data.committeeName : null,
+      isPinned: Boolean(data.isPinned),
+      authorName: typeof data.authorName === "string" ? data.authorName : "Student Leader",
+      authorUid: typeof data.authorUid === "string" ? data.authorUid : "",
+      authorRole: typeof data.authorRole === "string" ? data.authorRole : "Student Leader",
+      createdAt: typeof data.createdAt === "string" ? data.createdAt : "Recent",
+      timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now()
+    });
   });
 
   list.sort((a, b) => {
@@ -1494,6 +1603,3 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
 
   return list;
 }
-
-
-

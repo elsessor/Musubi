@@ -20,6 +20,8 @@ export type NotificationRecord = {
   nudgeCategory?: "deadline" | "followup" | "system";
   dueDate?: string;
   targetAudience?: string;
+  committeeId?: string | null;
+  committeeName?: string | null;
   content?: string;
 };
 
@@ -170,17 +172,21 @@ export function subscribeNotificationsFirestore(
   const unsubAnnouncements = subscribeAnnouncementsFirestore(targetOrgId, userRole, (announcements) => {
     announcementNotifs = announcements.map((ann) => ({
       id: `announcement_${ann.id}`,
-      orgId: targetOrgId,
+      orgId: ann.organizationId || targetOrgId,
       title: ann.title,
       content: ann.content,
-      description: `From ${ann.authorName} · ${ann.createdAt || "Recent"}`,
+      description: ann.authorName
+        ? `Posted by ${ann.authorName}${ann.authorRole ? ` (${ann.authorRole})` : ""} · ${ann.createdAt || "Recent"}`
+        : ann.content || "New announcement posted",
       type: "announcement" as const,
       unread: true,
       time: ann.createdAt || "Recent",
       createdAt: ann.createdAt || new Date().toISOString(),
       isPinned: Boolean(ann.isPinned),
       authorName: ann.authorName,
-      targetAudience: ann.targetAudience
+      targetAudience: ann.targetAudience,
+      committeeId: ann.committeeId,
+      committeeName: ann.committeeName
     }));
     emitMerged();
   });
@@ -245,11 +251,10 @@ export function subscribeNotificationsFirestore(
         const recipientUID = data.recipientUID ?? null;
         const itemOrgId = data.orgId ?? null;
 
-        const isForUser = currentUid && recipientUID === currentUid;
-        const isForOrg = targetOrgId && itemOrgId === targetOrgId;
-        const isGlobal = !recipientUID && !itemOrgId;
+        const isForUser = Boolean(currentUid && recipientUID === currentUid);
+        const isForOrg = Boolean(targetOrgId && itemOrgId === targetOrgId);
 
-        if (isForUser || isForOrg || isGlobal) {
+        if (isForUser || isForOrg) {
           const readBy = Array.isArray(data.readBy) ? data.readBy : [];
           const isRead = Boolean(data.read) || (currentUid ? readBy.includes(currentUid) : false);
 
@@ -269,7 +274,6 @@ export function subscribeNotificationsFirestore(
       emitMerged();
     },
     (err) => {
-      console.warn("[subscribeNotificationsFirestore] Notifications error:", err);
       emitMerged();
     }
   );
@@ -289,7 +293,12 @@ export function subscribeNotificationsFirestore(
         const category = typeof data.actionCategory === "string" ? data.actionCategory : "";
         const action = typeof data.action === "string" ? data.action : "System activity";
 
-        if (category === "Security & Access" || action.toLowerCase().includes("signed in") || action.toLowerCase().includes("login")) {
+        if (
+          category === "Security & Access" ||
+          action.toLowerCase().includes("signed in") ||
+          action.toLowerCase().includes("login") ||
+          action.toLowerCase().includes("announcement")
+        ) {
           return;
         }
         const actorName = typeof data.actorName === "string" ? data.actorName : "System";
@@ -332,7 +341,6 @@ export function subscribeNotificationsFirestore(
       emitMerged();
     },
     (err) => {
-      console.warn("[subscribeNotificationsFirestore] Audit logs error:", err);
       emitMerged();
     }
   );

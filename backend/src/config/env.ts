@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const requiredKeys = [
-  "FIREBASE_SERVICE_ACCOUNT_PATH",
   "JWT_SECRET",
   "JWT_EXPIRES_IN",
   "FRONTEND_URL"
@@ -39,7 +38,8 @@ function readPort(): number {
 
 export const env = {
   port: readPort(),
-  firebaseServiceAccountPath: readEnv("FIREBASE_SERVICE_ACCOUNT_PATH"),
+  firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() || process.env.FIREBASE_SERVICE_ACCOUNT_BASE64?.trim(),
+  firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim() || ".firebase-service-account.json",
   jwtSecret: readEnv("JWT_SECRET"),
   jwtExpiresIn: readEnv("JWT_EXPIRES_IN"),
   frontendUrl: readEnv("FRONTEND_URL")

@@ -3,8 +3,8 @@ import { FeatureItem } from "@/components/auth/FeatureItem";
 const features = [
   {
     icon: "bolt",
-    title: "AI Goal Atomizer",
-    description: "Turn organizational goals into structured sub-tasks instantly."
+    title: "AI Event Atomizer",
+    description: "Turn organizational events into structured sub-tasks instantly."
   },
   {
     icon: "users",
@@ -57,7 +57,7 @@ export function MarketingPanel() {
             AI-Powered Workflow Management and Task Orchestration System for Campus Organizations
           </h1>
           <p className="mt-6 max-w-lg text-base font-medium leading-7 text-white/70">
-            Break high-level goals into delegatable sub-tasks, intelligently assign work based on
+            Break events into delegatable sub-tasks, intelligently assign work based on
             member skills and workload, and monitor project progress in real time.
           </p>
 

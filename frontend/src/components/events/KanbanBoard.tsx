@@ -3,7 +3,6 @@
 import {
   AlertOctagon,
   Calendar,
-  CheckCircle2,
   ChevronLeft,
   Columns3,
   Filter,
@@ -11,7 +10,7 @@ import {
   Edit3,
   LayoutGrid,
   Plus,
-  RotateCcw,
+  MoreHorizontal,
   Rows,
   Save,
   Search,
@@ -34,11 +33,14 @@ import { TaskGridView } from "./TaskGridView";
 import { TaskTableView } from "./TaskTableView";
 import { TaskExpandedView } from "./TaskExpandedView";
 import { TaskCalendarView } from "./TaskCalendarView";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
+import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
-import { updateEventFirestore } from "@/services/events.service";
+import { updateEventFirestore, updateTaskStatus } from "@/services/events.service";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
 const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
@@ -92,6 +94,7 @@ export function KanbanBoard({
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
+  const [isSavingEventStatus, setIsSavingEventStatus] = useState(false);
   const [isEditingEventDetails, setIsEditingEventDetails] = useState(false);
   const [eventTitleDraft, setEventTitleDraft] = useState(event.title);
   const [eventDescriptionDraft, setEventDescriptionDraft] = useState(event.description);
@@ -107,11 +110,7 @@ export function KanbanBoard({
   const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_STATUSES);
 
   function canEditTask(task: Task) {
-    if (isLeader) return true;
-    if (!profile?.uid) return false;
-    if (task.assignedMemberUID) return task.assignedMemberUID === profile.uid;
-    const assigneeName = task.assignedMemberName || task.assignee?.name || "";
-    return assigneeName.trim().toLowerCase() === profile.fullName.trim().toLowerCase();
+    return canUpdateTaskStatus(task, firebaseUser?.uid ?? profile?.uid, profile?.fullName || firebaseUser?.displayName || "", profile?.role);
   }
 
   // Sync state if event prop changes
@@ -119,7 +118,7 @@ export function KanbanBoard({
     setCurrentEvent(event);
     setTasks(event.tasks || []);
 
-    const loadedCustom = Array.isArray(event.customStatuses) && event.customStatuses.length > 0
+    const loadedCustom = Array.isArray(event.customStatuses)
       ? event.customStatuses
       : (() => {
           try {
@@ -147,18 +146,10 @@ export function KanbanBoard({
   // Synchronize statusOrder with customStatuses and defaultStatuses
   useEffect(() => {
     setStatusOrder((prev) => {
-      const existing = new Set(prev);
-      const missingDefaults = DEFAULT_STATUSES.filter((st) => !existing.has(st));
-      const missingCustom = customStatuses.filter((cs) => !existing.has(cs.name)).map((cs) => cs.name);
-      const validCustomNames = new Set(customStatuses.map((cs) => cs.name));
-      const filtered = prev.filter(
-        (st) => DEFAULT_STATUSES.includes(st as TaskStatus) || validCustomNames.has(st)
-      );
-
-      if (missingDefaults.length === 0 && missingCustom.length === 0 && filtered.length === prev.length) {
-        return prev;
-      }
-      const updated = [...filtered, ...missingDefaults, ...missingCustom];
+      const known = Array.from(new Set([...DEFAULT_STATUSES, ...customStatuses.map((status) => status.name), ...tasks.map((task) => task.status)]));
+      const filtered = prev.filter((status) => known.includes(status));
+      const updated = [...filtered, ...known.filter((status) => !filtered.includes(status))];
+      if (updated.length === prev.length && updated.every((status, index) => status === prev[index])) return prev;
       try {
         if (currentEvent?.id) {
           localStorage.setItem(`musubi_task_status_order_${currentEvent.id}`, JSON.stringify(updated));
@@ -166,7 +157,7 @@ export function KanbanBoard({
       } catch {}
       return updated;
     });
-  }, [customStatuses, currentEvent?.id]);
+  }, [customStatuses, currentEvent?.id, tasks]);
 
   function handleReorderStatusOrder(newOrder: string[]) {
     setStatusOrder(newOrder);
@@ -252,7 +243,8 @@ export function KanbanBoard({
     setDragOverStatusPill(null);
   }
 
-  function syncEvent(updatedTasks: Task[], statusOverride?: EventStatus, progressOverride?: number) {
+  function syncEvent(updatedTasks: Task[], statusOverride?: EventStatus, progressOverride?: number, successMessage?: { title: string; description: string }) {
+    if (!isLeader) return;
     const completedTasks = updatedTasks.filter((t) => t.status === "Completed").length;
     const computedProgress = updatedTasks.length > 0
       ? Math.round((completedTasks / updatedTasks.length) * 100)
@@ -276,8 +268,14 @@ export function KanbanBoard({
     const update = isLeader
       ? { status: finalStatus, progress: finalProgress, tasks: updatedTasks }
       : { tasks: updatedTasks };
-    void updateEventFirestore(firebaseUser, event.id, update).catch((error) => {
+    void updateEventFirestore(firebaseUser, event.id, update).then(() => {
+      showToast({ ...(successMessage || { title: "Changes saved", description: "Your changes have been saved successfully." }), tone: "success" });
+    }).catch((error) => {
       console.error("Failed to update event:", error);
+      setCurrentEvent(currentEvent);
+      setTasks(tasks);
+      onUpdateEvent?.(currentEvent);
+      showToast({ title: "Changes not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
     });
   }
 
@@ -296,6 +294,7 @@ export function KanbanBoard({
     } catch (error) {
       console.error("Failed to create task:", error);
       showToast({ title: "Task not saved", description: "We couldn’t save the task. Please try again.", tone: "error" });
+      throw error;
     }
     setShowAddTaskModal(false);
   }
@@ -318,40 +317,84 @@ export function KanbanBoard({
     setReassignTaskTarget(null);
   }
 
-  function handleEventStatusChange(targetStatus: EventStatus) {
-    if (!isLeader) return;
+  async function handleEventStatusChange(targetStatus: EventStatus) {
+    if (!isLeader || isSavingEventStatus || targetStatus === currentEvent.status) return;
     const isCompleted = targetStatus === "Completed";
-    const updatedTasks = isCompleted
-      ? tasks.map((t) => ({ ...t, status: "Completed" as TaskStatus }))
-      : tasks;
+    const updatedTasks = isCompleted ? tasks.map((task) => ({ ...task, status: "Completed" as TaskStatus })) : tasks;
+    const updated = { ...currentEvent, status: targetStatus, tasks: updatedTasks, progress: isCompleted ? 100 : currentEvent.progress };
+    setIsSavingEventStatus(true);
+    try {
+      await updateEventFirestore(firebaseUser, currentEvent.id, isCompleted
+        ? { status: targetStatus, tasks: updatedTasks, progress: 100 }
+        : { status: targetStatus });
+      setCurrentEvent(updated);
+      setTasks(updatedTasks);
+      onUpdateEvent?.(updated);
+      showToast({ title: "Event status updated", description: `The event is now ${targetStatus}.`, tone: "success" });
+    } catch (error) {
+      showToast({ title: "Status not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
+      throw error;
+    } finally { setIsSavingEventStatus(false); }
+  }
 
-    syncEvent(updatedTasks, targetStatus, isCompleted ? 100 : currentEvent.progress);
+  function requestEventStatusChange(status: EventStatus) {
+    if (!isLeader || isSavingEventStatus || status === currentEvent.status) return;
+    if (status === "Completed" || status === "Cancelled") setStatusModalTarget(status === "Completed" ? "Completed" : "Cancelled");
+    else void handleEventStatusChange(status).catch(() => {});
   }
 
   function handleUpdateTaskStatus(taskId: string, targetStatus: TaskStatus) {
     const target = tasks.find((task) => task.id === taskId);
     if (!target || !canEditTask(target)) return;
     const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: targetStatus } : t));
-    syncEvent(updatedTasks);
+    if (isLeader) {
+      syncEvent(updatedTasks);
+      return;
+    }
+    const completed = updatedTasks.filter((task) => task.status === "Completed" || task.status === "Done").length;
+    const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: updatedTasks.length ? Math.round(completed / updatedTasks.length * 100) : 0 };
+    setTasks(updatedTasks);
+    setCurrentEvent(updatedEvent);
+    onUpdateEvent?.(updatedEvent);
+    void updateTaskStatus(firebaseUser, event.id, taskId, targetStatus).then((savedTask) => {
+      handleSavedTask(savedTask);
+      showToast({ title: "Status updated", description: "Your task status has been saved successfully.", tone: "success" });
+    }).catch((error) => {
+      setTasks(tasks);
+      setCurrentEvent(currentEvent);
+      onUpdateEvent?.(currentEvent);
+      showToast({ title: "Status not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
+    });
+  }
+
+  function handleSavedTask(updatedTask: Task) {
+    const updatedTasks = tasks.map((task) => task.id === updatedTask.id ? updatedTask : task);
+    const completed = updatedTasks.filter((task) => task.status === "Completed" || task.status === "Done").length;
+    const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: updatedTasks.length ? Math.round(completed / updatedTasks.length * 100) : 0 };
+    setTasks(updatedTasks);
+    setCurrentEvent(updatedEvent);
+    setSelectedDetailTask((selected) => selected?.id === updatedTask.id ? updatedTask : selected);
+    onUpdateEvent?.(updatedEvent);
   }
 
   function handleUpdateTaskPriority(taskId: string, newPriority: TaskPriority) {
+    if (!isLeader) return;
     const target = tasks.find((task) => task.id === taskId);
     if (!target || !canEditTask(target)) return;
-    if (!isLeader && target.priorityChangeRequest) {
-      showToast({ title: "Priority request pending", description: "A leader needs to review the current priority request first.", tone: "info" });
-      return;
-    }
     const updatedTasks = tasks.map((task) => task.id === taskId
-      ? isLeader ? { ...task, priority: newPriority, priorityChangeRequest: null } : { ...task, priorityChangeRequest: { requestedPriority: newPriority } }
+      ? { ...task, priority: newPriority, priorityChangeRequest: null }
       : task);
     syncEvent(updatedTasks);
-    if (!isLeader) showToast({ title: "Priority change requested", description: "A leader will review your request.", tone: "success" });
   }
 
   function handleUpdateTask(updatedTask: Task) {
     const original = tasks.find((task) => task.id === updatedTask.id);
     if (!original || !canEditTask(original)) return;
+    if (!isLeader) {
+      handleUpdateTaskStatus(updatedTask.id, updatedTask.status);
+      setSelectedDetailTask(null);
+      return;
+    }
     const updatedTasks = tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
     syncEvent(updatedTasks);
     setSelectedDetailTask(null);
@@ -359,11 +402,13 @@ export function KanbanBoard({
 
   function handleDeleteTask(taskId: string) {
     if (!isLeader) return;
+    const deletedTask = tasks.find((task) => task.id === taskId);
+    if (!deletedTask) return;
     const updatedTasks = tasks.filter((task) => task.id !== taskId);
     const updatedProgress = updatedTasks.length
       ? Math.round((updatedTasks.filter((task) => task.status === "Completed").length / updatedTasks.length) * 100)
       : 0;
-    syncEvent(updatedTasks, undefined, updatedProgress);
+    syncEvent(updatedTasks, undefined, updatedProgress, { title: "Subtask deleted", description: `${deletedTask.title || "The subtask"} has been deleted successfully.` });
     setSelectedDetailTask(null);
   }
 
@@ -436,10 +481,10 @@ export function KanbanBoard({
   const completedCount = tasks.filter((t) => t.status === "Completed").length;
 
   return (
-    <div className="flex h-full flex-col animate-in fade-in duration-200">
+    <div className="flex h-full min-w-0 flex-col animate-in fade-in duration-200">
       {/* Breadcrumb Navigation */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-sm text-slate-500 font-medium">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-slate-500">
           <button
             type="button"
             onClick={onBack}
@@ -449,60 +494,48 @@ export function KanbanBoard({
             Events &amp; Tasks
           </button>
           <span>/</span>
-          <span className="font-extrabold text-slate-900">{currentEvent.title}</span>
+          <span className="min-w-0 truncate font-semibold text-slate-900">{currentEvent.title}</span>
         </div>
 
-        {/* Event Lifecycle Header Buttons */}
-        <div className="flex items-center gap-2">
-          {isLeader && onDeleteEvent && (
-            <button
-              type="button"
-              onClick={() => setConfirmDeleteEvent(true)}
-              className="inline-flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
-            >
-              <Trash2 size={14} /> Delete Event
-            </button>
-          )}
-          {isLeader && currentEvent.status !== "Completed" && (
-            <button
-              type="button"
-              onClick={() => setStatusModalTarget("Completed")}
-              className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-sm hover:bg-emerald-700 transition"
-            >
-              <CheckCircle2 size={14} />
-              Mark Completed
-            </button>
-          )}
-
-          {isLeader && currentEvent.status !== "Cancelled" && (
-            <button
-              type="button"
-              onClick={() => setStatusModalTarget("Cancelled")}
-              className="inline-flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
-            >
-              <XCircle size={14} />
-              Mark Cancelled
-            </button>
-          )}
-
-          {isLeader && (currentEvent.status === "Completed" || currentEvent.status === "Cancelled") && (
-            <button
-              type="button"
-              onClick={() => handleEventStatusChange("Active")}
-              className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition"
-            >
-              <RotateCcw size={14} />
-              Reopen Event
-            </button>
-          )}
-        </div>
+        {isLeader && (
+          <div className="flex max-w-full flex-wrap items-end gap-2">
+            <div className="w-48 max-w-full">
+              <p className="mb-1 text-[11px] font-semibold text-slate-500">Change event status</p>
+              <CustomSelect
+                value={currentEvent.status}
+                onChange={requestEventStatusChange}
+                disabled={isSavingEventStatus || isDeletingEvent}
+                portal
+                options={Array.from(new Set(["Active", "Planning", "Completed", "Cancelled", "Archived", ...(currentEvent.eventCustomStatuses || []).map((status) => status.name), currentEvent.status])).map((value) => {
+                  const theme = getStatusTheme(value, currentEvent.eventCustomStatuses);
+                  return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
+                })}
+                buttonClassName="rounded-xl py-2 text-xs"
+              />
+            </div>
+            {onDeleteEvent && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label="More event actions" disabled={isSavingEventStatus || isDeletingEvent} className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50">
+                    <MoreHorizontal size={18} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-40 rounded-xl border-slate-200 bg-white p-1.5 shadow-xl">
+                  <DropdownMenuItem onSelect={() => setConfirmDeleteEvent(true)} className="cursor-pointer gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 focus:bg-rose-50 focus:text-rose-700">
+                    <Trash2 size={14} className="text-rose-600" /> Delete Event
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Event Header Summary Card */}
-      <div className="mb-4 rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-xs">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
+      <div className="mb-5 min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2.5">
               {isEditingEventDetails ? (
                 <input
                   autoFocus
@@ -512,7 +545,7 @@ export function KanbanBoard({
                   className="w-full max-w-xl rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-lg font-extrabold text-slate-900 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
                 />
               ) : (
-                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">{currentEvent.title}</h1>
+                <h1 className="min-w-0 break-words text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">{currentEvent.title}</h1>
               )}
               {isLeader && !isEditingEventDetails && (
                 <button
@@ -541,15 +574,7 @@ export function KanbanBoard({
                   </button>
                 </div>
               )}
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-extrabold ${
-                  currentEvent.status === "Completed"
-                    ? "bg-emerald-100 text-emerald-800"
-                    : currentEvent.status === "Cancelled"
-                    ? "bg-rose-100 text-rose-800"
-                    : "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
-                }`}
-              >
+              <span className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-extrabold ${getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).badge}`}>
                 {currentEvent.status}
               </span>
               {currentEvent.committee && (
@@ -569,7 +594,7 @@ export function KanbanBoard({
                 className="mt-2 w-full max-w-2xl resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
               />
             ) : (
-              <p className="mt-1 text-xs text-slate-600 font-medium max-w-2xl">{currentEvent.description}</p>
+              <p className="mt-2 max-w-2xl break-words text-sm leading-6 text-slate-500">{currentEvent.description}</p>
             )}
             {eventDetailsError && <p role="alert" className="mt-1 text-xs font-semibold text-rose-600">{eventDetailsError}</p>}
 
@@ -588,8 +613,8 @@ export function KanbanBoard({
             </div>
           </div>
 
-          <div className="text-right">
-            <p className="text-3xl font-black text-slate-900">{currentEvent.progress}%</p>
+          <div className="shrink-0 border-t border-slate-100 pt-3 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0 sm:text-right">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900">{currentEvent.progress}%</p>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Progress</p>
           </div>
         </div>
@@ -598,11 +623,7 @@ export function KanbanBoard({
         <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
           <div
             className={`h-full rounded-full transition-all ${
-              currentEvent.progress === 100
-                ? "bg-emerald-500"
-                : currentEvent.status === "Cancelled"
-                ? "bg-rose-400"
-                : "bg-gradient-to-r from-blue-600 to-indigo-500"
+              getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).dot
             }`}
             style={{ width: `${currentEvent.progress}%` }}
           />
@@ -610,7 +631,7 @@ export function KanbanBoard({
       </div>
 
       {/* Filter bar & View toggles */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
           <div className="relative flex items-center">
@@ -749,7 +770,7 @@ export function KanbanBoard({
       </div>
 
       {/* Main View Area */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         {viewMode === "grid" && (
           <TaskGridView
             tasks={visibleTasks}
@@ -757,6 +778,7 @@ export function KanbanBoard({
             onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
+            statusOrder={statusOrder}
           />
         )}
 
@@ -767,6 +789,7 @@ export function KanbanBoard({
             onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
+            statusOrder={statusOrder}
           />
         )}
 
@@ -777,6 +800,7 @@ export function KanbanBoard({
             onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
+            statusOrder={statusOrder}
           />
         )}
 
@@ -787,12 +811,12 @@ export function KanbanBoard({
                 key={status}
                 status={status}
                 tasks={getColumnTasks(status)}
-                onAddTask={() => { if (isLeader) setShowAddTaskModal(true); }}
+                onAddTask={isLeader ? () => setShowAddTaskModal(true) : undefined}
                 onDragStart={(id) => setDraggedId(id)}
                 onDrop={handleDrop}
-                onReassignTask={(t) => { if (isLeader) setReassignTaskTarget(t); }}
+                onReassignTask={isLeader ? (task) => setReassignTaskTarget(task) : undefined}
                 onSelectTask={(task) => setSelectedDetailTask(task)}
-                onUpdatePriority={handleUpdateTaskPriority}
+                onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
                 customStatuses={customStatuses}
                 isLeader={isLeader}
                 onColumnDragStart={(st) => setDraggedStatusPill(st)}
@@ -830,7 +854,7 @@ export function KanbanBoard({
           <TaskCalendarView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
-            onUpdatePriority={handleUpdateTaskPriority}
+            onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
             onAddTask={isLeader ? () => setShowAddTaskModal(true) : undefined}
             customStatuses={customStatuses}
@@ -846,11 +870,14 @@ export function KanbanBoard({
       {/* Task Detail Modal */}
       {selectedDetailTask && (
         <TaskDetailModal
+          eventId={currentEvent.id}
           task={selectedDetailTask}
           onClose={() => setSelectedDetailTask(null)}
           onUpdateTask={handleUpdateTask}
+          onAttachmentsUpdated={handleSavedTask}
           onDeleteTask={handleDeleteTask}
           customStatuses={customStatuses}
+          statusOrder={statusOrder}
           committees={committees}
           roster={realRoster}
           isLeader={isLeader}
@@ -867,6 +894,7 @@ export function KanbanBoard({
           onAddTask={handleAddTask}
           committees={committees}
           customStatuses={customStatuses}
+          statusOrder={statusOrder}
           roster={realRoster}
         />
       )}
@@ -883,10 +911,11 @@ export function KanbanBoard({
       )}
 
       {/* Event Lifecycle Status Confirmation Modal */}
-      {statusModalTarget && (
+      {isLeader && statusModalTarget && (
         <EventStatusModal
           eventTitle={currentEvent.title}
           targetStatus={statusModalTarget}
+          unfinishedTaskCount={tasks.filter((task) => task.status !== "Completed").length}
           onClose={() => setStatusModalTarget(null)}
           onConfirm={handleEventStatusChange}
         />
@@ -905,19 +934,22 @@ export function KanbanBoard({
         onDeleteStatus={handleDeleteCustomStatus}
       />
 
-      {confirmDeleteEvent && onDeleteEvent && (
+      {isLeader && confirmDeleteEvent && onDeleteEvent && (
         <ConfirmDeleteModal
+          key={currentEvent.title}
           itemType="event"
           itemName={currentEvent.title}
+          requireNameConfirmation
           isDeleting={isDeletingEvent}
           onCancel={() => setConfirmDeleteEvent(false)}
           onConfirm={async () => {
             setIsDeletingEvent(true);
             try {
               await onDeleteEvent();
+              showToast({ title: "Event deleted", description: "The event has been deleted successfully.", tone: "success" });
               setConfirmDeleteEvent(false);
             } catch (error) {
-              console.error("Failed to delete event:", error);
+              showToast({ title: "Event not deleted", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
             } finally {
               setIsDeletingEvent(false);
             }

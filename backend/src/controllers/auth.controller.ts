@@ -57,7 +57,8 @@ export async function loginController(request: Request, response: Response, next
   try {
     const idToken = typeof request.body.idToken === "string" ? request.body.idToken : getBearerToken(request);
     if (!idToken) throw new AppError("Firebase ID token is required.", 400);
-    const session = await loginWithFirebaseToken(idToken);
+    const fullName = typeof request.body.fullName === "string" && request.body.fullName.trim() ? request.body.fullName.trim() : undefined;
+    const session = await loginWithFirebaseToken(idToken, fullName);
     response.status(200).json(session);
   } catch (error) { next(error); }
 }
@@ -552,11 +553,11 @@ export async function atomizeGoalController(request: Request, response: Response
     const { eventName, goalDescription, defaultStatus } = request.body as Record<string, unknown>;
 
     if (typeof goalDescription !== "string" || !goalDescription.trim()) {
-      throw new AppError("A goal description is required.", 400);
+      throw new AppError("An event description is required.", 400);
     }
 
     const result = await runAtomizerFlow({
-      eventName: typeof eventName === "string" ? eventName.trim() : "Event Goal",
+      eventName: typeof eventName === "string" ? eventName.trim() : "Event",
       goalDescription: goalDescription.trim(),
       defaultStatus: typeof defaultStatus === "string" ? defaultStatus : "To Do",
       uid: user.uid,

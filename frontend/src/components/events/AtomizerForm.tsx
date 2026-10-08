@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
-import type { CustomStatusConfig, StatusThemeColor } from "./statusUtils";
+import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 import { atomizeGoal } from "@/services/auth.service";
 import { delegateSubtasksHeuristically, inferSkillsFromTask } from "@/utils/heuristicDelegation";
 import type { OrganizationMember } from "@/services/auth.service";
@@ -16,11 +16,13 @@ const DEFAULT_STATUS_LIST: TaskStatus[] = ["To Do", "In Progress", "In Review", 
 function ModernStatusDropdown({
   value,
   onChange,
-  options
+  options,
+  customStatuses
 }: {
   value: string;
   onChange: (val: TaskStatus) => void;
   options: string[];
+  customStatuses: CustomStatusConfig[];
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -36,18 +38,8 @@ function ModernStatusDropdown({
   }, []);
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "To Do":
-        return { bg: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" };
-      case "In Progress":
-        return { bg: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" };
-      case "In Review":
-        return { bg: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" };
-      case "Completed":
-        return { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" };
-      default:
-        return { bg: "bg-slate-100 text-slate-700 border-slate-200", dot: "bg-slate-400" };
-    }
+    const theme = getStatusTheme(status, customStatuses);
+    return { bg: theme.badge, dot: theme.dot };
   };
 
   const activeBadge = getStatusBadge(value);
@@ -83,7 +75,7 @@ function ModernStatusDropdown({
                 }}
                 className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm font-semibold transition ${
                   isSelected
-                    ? "bg-blue-50/80 text-blue-900 font-bold"
+                    ? `${getStatusTheme(status, customStatuses).badge} font-bold`
                     : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
@@ -173,7 +165,7 @@ function ModernEventDropdown({
               >
                 <div className="flex items-center gap-2 truncate">
                   <span className="truncate">{ev.title}</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${getStatusTheme(ev.status, ev.eventCustomStatuses).badge}`}>
                     {ev.status || "Planning"}
                   </span>
                 </div>
@@ -193,7 +185,8 @@ type AtomizerFormProps = {
   onPublishGoalTasks?: (
     targetEventId: string,
     publishedTasks: Task[],
-    newEventDetails?: { title: string; description: string }
+    newEventDetails?: { title: string; description: string },
+    workflow?: { customStatuses: CustomStatusConfig[]; statusOrder: string[] }
   ) => void;
 };
 
@@ -212,6 +205,17 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
   const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_STATUS_LIST);
+
+  const targetEvent = isCreateFromDescription ? undefined : events.find((event) => event.id === selectedEventId);
+  const workflowSource = useRef<string | null>(null);
+  useEffect(() => {
+    const source = targetEvent?.id || "new";
+    if (workflowSource.current === source) return;
+    workflowSource.current = source;
+    setCustomStatuses(targetEvent?.customStatuses || []);
+    setStatusOrder(targetEvent?.statusOrder?.length ? targetEvent.statusOrder : [...DEFAULT_STATUS_LIST, ...(targetEvent?.customStatuses || []).map((status) => status.name)]);
+    setDefaultStatus("To Do");
+  }, [targetEvent]);
 
   function handleAddStatus(name: string, color: StatusThemeColor, insertIndex?: number) {
     const newConfig: CustomStatusConfig = { name, color };
@@ -261,7 +265,9 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
       const rawSubtasks: Subtask[] = data.tasks.map((item, idx) => ({
         id: `subtask-ai-${Date.now()}-${idx}`,
         title: item.title,
-        description: `Actionable subtask breakdown for ${eventName}. Priority: ${item.priority}.`,
+        description:
+          (item as unknown as { description?: string }).description ||
+          `Actionable operational subtask breakdown for "${item.title}".`,
         assigneeName: item.assigneeName || "",
         requiredSkills:
           (item as unknown as { requiredSkills?: string[] }).requiredSkills &&
@@ -294,7 +300,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
       setActiveGoalDraft(draft);
     } catch (err: unknown) {
       console.error("[Atomizer] Error running Genkit flow:", err);
-      const rawMsg = err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.";
+      const rawMsg = err instanceof Error ? err.message : "Failed to atomize event using Genkit AI.";
       if (rawMsg.includes("429") || rawMsg.includes("quota") || rawMsg.includes("Too Many Requests")) {
         setErrorMsg("Gemini API rate limit reached (5 requests/min on Free Tier). Please wait ~30 seconds before trying again.");
       } else {
@@ -310,6 +316,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
     return (
       <SubtaskReviewScreen
         goalDraft={activeGoalDraft}
+        customStatuses={customStatuses}
         members={members}
         onBack={() => setActiveGoalDraft(null)}
         onPublishGoal={(publishedGoal) => {
@@ -353,7 +360,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
                     title: publishedGoal.eventName || newEventTitle.trim() || goalDescription.trim().split("\n")[0]?.slice(0, 40) || "New Event",
                     description: goalDescription
                   }
-                : undefined
+                : undefined,
+              { customStatuses, statusOrder }
             );
           }
         }}
@@ -378,7 +386,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Describe an event or task goal and the AI will break it into specific, actionable tasks with suggested assignees, deadlines, and priorities.
+              Describe an event and the AI will break it into specific, actionable tasks with suggested assignees, deadlines, and priorities.
             </p>
           </div>
         </div>
@@ -435,14 +443,15 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               value={defaultStatus}
               onChange={setDefaultStatus}
               options={statusOrder}
+              customStatuses={customStatuses}
             />
           </div>
         </div>
 
-        {/* Goal description */}
+        {/* Event description */}
         <div className="mt-5">
           <label className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
-            Goal Description
+            Event Description
           </label>
           <textarea
             value={goalDescription}
@@ -472,7 +481,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
             ) : (
               <Zap size={16} />
             )}
-            {isAtomizing ? "Atomizing with Genkit..." : "Atomize Goal with AI"}
+            {isAtomizing ? "Atomizing with Genkit..." : "Atomize Event with AI"}
           </button>
         </div>
       </div>

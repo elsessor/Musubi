@@ -6,11 +6,14 @@ import { BookOpen, CalendarDays, Plus, X, Zap } from "lucide-react";
 import { AtomizerForm } from "./AtomizerForm";
 import { EventsDashboard } from "./EventsDashboard";
 import { KanbanBoard } from "./KanbanBoard";
+import { TaskAssigneeMembersContext } from "./TaskAssignee";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
+import type { CustomStatusConfig } from "./statusUtils";
 import type { Event, Task } from "./types";
 import { isStartAfterEnd } from "./dateValidation";
 
 import { getFirebaseDb } from "@/firebase/config";
+import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { createEventFirestore, deleteEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
@@ -118,7 +121,8 @@ export function EventsTasksView() {
   async function handlePublishGoalTasks(
     targetEventId: string,
     publishedTasks: Task[],
-    newEventDetails?: { title: string; description: string }
+    newEventDetails?: { title: string; description: string },
+    workflow?: { customStatuses: CustomStatusConfig[]; statusOrder: string[] }
   ) {
     if (targetEventId === "CREATE_NEW" || newEventDetails) {
       const startFormatted = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -133,7 +137,9 @@ export function EventsTasksView() {
           endDate: endFormatted,
           memberCount: 1,
           progress: 0,
-          tasks: publishedTasks
+          tasks: publishedTasks,
+          customStatuses: workflow?.customStatuses || [],
+          statusOrder: workflow?.statusOrder || []
         });
         showToast({
           title: "Event created",
@@ -156,10 +162,12 @@ export function EventsTasksView() {
     const progress = tasks.length
       ? Math.round((tasks.filter((task) => task.status === "Completed").length / tasks.length) * 100)
       : 0;
-    const updatedEvent = { ...targetEvent, tasks, progress };
+    const customStatuses = Array.from(new Map([...(targetEvent.customStatuses || []), ...(workflow?.customStatuses || [])].map((status) => [status.name.trim().toLowerCase(), status])).values());
+    const statusOrder = Array.from(new Set([...(workflow?.statusOrder || targetEvent.statusOrder || []), ...customStatuses.map((status) => status.name)]));
+    const updatedEvent = { ...targetEvent, tasks, progress, customStatuses, statusOrder };
 
     handleUpdateEvent(updatedEvent);
-    void updateEventFirestore(firebaseUser, targetEvent.id, { tasks, progress })
+    void updateEventFirestore(firebaseUser, targetEvent.id, { tasks, progress, customStatuses, statusOrder })
       .then(() => showToast({ title: "Tasks added", description: `Your ${publishedTasks.length === 1 ? "task is" : "tasks are"} ready to manage in ${targetEvent.title}.`, tone: "success" }))
       .catch((error) => console.error("Failed to publish atomized tasks:", error));
     setActiveTab("events");
@@ -167,27 +175,25 @@ export function EventsTasksView() {
 
   function handleNewEvent() {
     setCommittee("");
+    setDateError("");
     setIsModalOpen(true);
   }
 
   async function handleCreateEventSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    if (isStartAfterEnd(startDate, endDate)) {
-      setDateError("Start date cannot be later than the event end date.");
-      return;
-    }
-    setDateError("");
-    setCreating(true);
-
     const startFormatted = startDate
-      ? (!isNaN(new Date(startDate).getTime()) ? new Date(startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : startDate)
+      ? startDate.trim()
       : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
     const endFormatted = endDate
-      ? (!isNaN(new Date(endDate).getTime()) ? new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : endDate)
+      ? endDate.trim()
       : new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
+    const error = getDateRangeError(startFormatted, endFormatted);
+    setDateError(error || "");
+    if (error) return;
+    setCreating(true);
     try {
       await createEventFirestore(firebaseUser, effectiveOrgId || profile?.organizationId || "default-org", {
         title: title.trim(),
@@ -208,13 +214,14 @@ export function EventsTasksView() {
       setEndDate("");
       setCommittee("");
     } catch (err) {
-      console.error("Failed to create event:", err);
+      setDateError(err instanceof Error ? err.message : "Unable to create the event. Please try again.");
     } finally {
       setCreating(false);
     }
   }
 
   return (
+    <TaskAssigneeMembersContext.Provider value={members}>
     <div className="flex h-full flex-col">
       {/* Tab navigation */}
       <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
@@ -251,6 +258,7 @@ export function EventsTasksView() {
           />
         ) : (
           <EventsDashboard
+            organizationId={effectiveOrgId}
             events={events}
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}
@@ -335,6 +343,7 @@ export function EventsTasksView() {
                     value={startDate}
                     onChange={(value) => { setStartDate(value); setDateError(""); }}
                     minDate={new Date()}
+                    maxDate={parseScheduleDate(endDate) || undefined}
                     placeholder="Select start date & time"
                     includeTime={true}
                   />
@@ -346,7 +355,7 @@ export function EventsTasksView() {
                   <MiniCalendarPicker
                     value={endDate}
                     onChange={(value) => { setEndDate(value); setDateError(""); }}
-                    minDate={startDate ? new Date(startDate) : new Date()}
+                    minDate={parseScheduleDate(startDate) || new Date()}
                     placeholder="Select end date & time"
                     includeTime={true}
                   />
@@ -355,6 +364,7 @@ export function EventsTasksView() {
               {dateError ? <p className="text-xs font-semibold text-rose-600">{dateError}</p> : null}
 
               {/* BUTTONS */}
+              {(dateError || getDateRangeError(startDate, endDate)) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{getDateRangeError(startDate, endDate) || dateError}</p>}
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
                   type="button"
@@ -380,6 +390,7 @@ export function EventsTasksView() {
         </div>
       )}
     </div>
+    </TaskAssigneeMembersContext.Provider>
   );
 }
 

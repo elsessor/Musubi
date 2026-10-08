@@ -77,7 +77,7 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const [kpis, setKpis] = useState<DashboardKPI[]>([
-    { id: "active-goals", label: "Active Goals", value: 0, icon: "target", accent: "blue" },
+    { id: "active-goals", label: "Active Events", value: 0, icon: "target", accent: "blue" },
     { id: "total-subtasks", label: "Total Sub-Tasks", value: 0, icon: "briefcase", accent: "purple" },
     { id: "members-available", label: "Members Available", value: 0, icon: "users", accent: "green" },
     { id: "pending-delegations", label: "Pending Delegations", value: 0, icon: "clock", accent: "orange" }
@@ -196,7 +196,8 @@ export function DashboardPage() {
         title: e.title,
         dueDate: `Due ${e.endDate || e.startDate}`,
         progress: e.progress,
-        status: e.status === "Active" ? "In Progress" : e.status === "Completed" ? "Completed" : "Pending"
+        status: e.status,
+        customStatuses: e.eventCustomStatuses
       }));
 
       setGoals(mappedGoals);
@@ -301,8 +302,8 @@ export function DashboardPage() {
   const isMemberView = dashboardUser.role === "Organization Member";
 
   const memberSubtasks = useMemo(() => {
-    const matched: (Task & { eventTitle?: string })[] = [];
-    const allInOrg: (Task & { eventTitle?: string })[] = [];
+    const matched: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+    const allInOrg: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
 
     const userNameLower = (dashboardUser.name || "").toLowerCase().trim();
     const userId = dashboardUser.id;
@@ -310,7 +311,7 @@ export function DashboardPage() {
     realtimeEventsList.forEach((event) => {
       if (Array.isArray(event.tasks)) {
         event.tasks.forEach((task) => {
-          const item = { ...task, eventTitle: event.title };
+          const item = { ...task, eventTitle: event.title, customStatuses: event.customStatuses };
           allInOrg.push(item);
 
           const assignedNameLower = (task.assignedMemberName || task.assignee?.name || "").toLowerCase().trim();

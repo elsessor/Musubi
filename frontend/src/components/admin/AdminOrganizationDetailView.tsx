@@ -2,84 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, ChevronLeft } from "lucide-react";
+import { Building2, ChevronLeft, Users } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
 import {
   getOrganizationManagementDetail,
   type OrganizationManagementDetail
 } from "@/services/auth.service";
-
-// Fallback seed data matching reference screenshot
-const SEED_ORGANIZATION_DETAILS: Record<
-  string,
-  {
-    id: string;
-    orgIdCode: string;
-    name: string;
-    type: string;
-    setupStatus: string;
-    delegationMode: string;
-    atomization: string;
-    nudges: string;
-    created: string;
-    updated: string;
-    description: string;
-    membersCount: number;
-    goalsCount: number;
-    members: Array<{
-      id: string;
-      name: string;
-      studentId: string;
-      role: "Leader" | "Member";
-      initials: string;
-      color: string;
-    }>;
-  }
-> = {
-  "org-1": {
-    id: "org-1",
-    orgIdCode: "ORG-001",
-    name: "University Student Council",
-    type: "Governing",
-    setupStatus: "Complete",
-    delegationMode: "Heuristic",
-    atomization: "Enabled",
-    nudges: "Enabled",
-    created: "Aug 12, 2024",
-    updated: "Jun 1, 2026",
-    description: "The highest governing student body of the university.",
-    membersCount: 7,
-    goalsCount: 5,
-    members: [
-      { id: "m1", name: "Hans San Miguel", studentId: "2021-00100", role: "Leader", initials: "HS", color: "bg-[#1e293b]" },
-      { id: "m2", name: "Beatrice Lim", studentId: "2021-00842", role: "Member", initials: "BL", color: "bg-[#1e3a8a]" },
-      { id: "m3", name: "Ana Reyes", studentId: "2022-01021", role: "Member", initials: "AR", color: "bg-[#0f766e]" },
-      { id: "m4", name: "Marco Dela Cruz", studentId: "2021-00533", role: "Member", initials: "MD", color: "bg-[#334155]" },
-      { id: "m5", name: "Sophia Tan", studentId: "2020-00312", role: "Member", initials: "ST", color: "bg-[#3730a3]" },
-      { id: "m6", name: "Luis Garcia", studentId: "2022-00761", role: "Member", initials: "LG", color: "bg-[#475569]" }
-    ]
-  },
-  "org-2": {
-    id: "org-2",
-    orgIdCode: "ORG-002",
-    name: "Computer Science Society",
-    type: "Academic",
-    setupStatus: "Complete",
-    delegationMode: "Heuristic",
-    atomization: "Enabled",
-    nudges: "Enabled",
-    created: "Sep 1, 2024",
-    updated: "Jun 5, 2026",
-    description: "Org for CS majors focused on tech and innovation.",
-    membersCount: 24,
-    goalsCount: 3,
-    members: [
-      { id: "m1", name: "Hans San Miguel", studentId: "2021-00100", role: "Leader", initials: "HS", color: "bg-[#1e293b]" },
-      { id: "m2", name: "Beatrice Lim", studentId: "2021-00842", role: "Member", initials: "BL", color: "bg-[#1e3a8a]" }
-    ]
-  }
-};
 
 function getAvatarBgColor(index: number): string {
   const colors = [
@@ -96,32 +25,62 @@ function getAvatarBgColor(index: number): string {
 function getInitials(name: string): string {
   if (!name) return "U";
   const parts = name.trim().split(" ").filter(Boolean);
+  if (parts.length === 0) return "U";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function formatDate(isoString: string | null | undefined): string {
+  if (!isoString) return "—";
+  try {
+    return new Date(isoString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+  } catch {
+    return "—";
+  }
+}
+
 type AdminOrganizationDetailViewProps = {
   organizationId: string;
+  onBack?: () => void;
 };
 
-export function AdminOrganizationDetailView({ organizationId }: AdminOrganizationDetailViewProps) {
+export function AdminOrganizationDetailView({ organizationId, onBack }: AdminOrganizationDetailViewProps) {
   const router = useRouter();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
 
   const [detail, setDetail] = useState<OrganizationManagementDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      router.push("/admin/organizations");
+    }
+  };
 
   useEffect(() => {
-    if (!firebaseUser || !organizationId) return;
+    if (!firebaseUser || !organizationId) {
+      setLoading(false);
+      return;
+    }
 
     let isMounted = true;
     setLoading(true);
+    setError("");
 
     void getOrganizationManagementDetail(firebaseUser, organizationId)
       .then((data) => {
         if (isMounted) setDetail(data);
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (isMounted) setError(err instanceof Error ? err.message : "Failed to load organization details.");
+      })
       .finally(() => {
         if (isMounted) setLoading(false);
       });
@@ -131,37 +90,58 @@ export function AdminOrganizationDetailView({ organizationId }: AdminOrganizatio
     };
   }, [firebaseUser, organizationId]);
 
-  // Derived org info
-  const fallback = SEED_ORGANIZATION_DETAILS[organizationId] || SEED_ORGANIZATION_DETAILS["org-1"];
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl py-12 text-center text-sm font-semibold text-slate-500">
+        Loading organization details...
+      </div>
+    );
+  }
 
-  const orgName = detail?.organization.name || fallback.name;
-  const orgType = detail?.organization.type || fallback.type;
-  const orgDescription = detail?.organization.description || fallback.description;
-  const setupStatus = detail?.organization.status === "active" ? "Complete" : fallback.setupStatus;
-  const orgCode = fallback.orgIdCode;
+  if (error || !detail) {
+    return (
+      <div className="mx-auto w-full max-w-7xl space-y-6">
+        <div>
+          <button
+            onClick={handleBack}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+          >
+            <ChevronLeft className="size-4" />
+            <span>Back to Organizations</span>
+          </button>
+        </div>
+        <div className="rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
+          <p className="text-sm font-semibold text-rose-600">{error || "Organization not found."}</p>
+        </div>
+      </div>
+    );
+  }
 
-  const totalMembers = detail?.members ? detail.members.length : fallback.membersCount;
-  const totalGoals = detail?.goalSummary
-    ? Object.values(detail.goalSummary).reduce((a, b) => a + b, 0)
-    : fallback.goalsCount;
+  const org = detail.organization;
+  const orgName = org.name || "Untitled Organization";
+  const orgType = org.type || "Academic";
+  const orgDescription = org.description || "No description provided.";
+  const setupStatus = org.status === "active" ? "Complete" : org.status === "pending" ? "Pending Approval" : "Inactive";
+  const orgCode = `ORG-${org.id.slice(0, 6).toUpperCase()}`;
 
-  const membersList = detail?.members && detail.members.length > 0
-    ? detail.members.map((m, idx) => ({
-        id: m.id,
-        name: m.name,
-        studentId: `202${idx % 3 + 1}-00${100 + idx * 42}`,
-        role: (m.role === "Student Leader" || m.role === "Admin" ? "Leader" : "Member") as "Leader" | "Member",
-        initials: getInitials(m.name),
-        color: getAvatarBgColor(idx)
-      }))
-    : fallback.members;
+  const totalMembers = detail.members ? detail.members.length : 0;
+  const totalGoals = Object.values(detail.goalSummary || {}).reduce((sum, count) => sum + count, 0);
+
+  const membersList = (detail.members || []).map((m, idx) => ({
+    id: m.id,
+    name: m.name || "Unnamed Member",
+    position: m.position || m.role || "Member",
+    role: (m.role === "Student Leader" || m.role === "Admin" ? "Leader" : "Member") as "Leader" | "Member",
+    initials: getInitials(m.name),
+    color: getAvatarBgColor(idx)
+  }));
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       {/* Back Link */}
       <div>
         <button
-          onClick={() => router.push("/admin/organizations")}
+          onClick={handleBack}
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
         >
           <ChevronLeft className="size-4" />
@@ -181,7 +161,13 @@ export function AdminOrganizationDetailView({ organizationId }: AdminOrganizatio
               <span className="rounded-full bg-slate-700/60 px-3 py-1 text-xs font-semibold text-slate-200">
                 {orgType}
               </span>
-              <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-500/30">
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${
+                  org.status === "active"
+                    ? "bg-emerald-500/20 text-emerald-300 ring-emerald-500/30"
+                    : "bg-amber-500/20 text-amber-300 ring-amber-500/30"
+                }`}
+              >
                 {setupStatus}
               </span>
             </div>
@@ -196,7 +182,7 @@ export function AdminOrganizationDetailView({ organizationId }: AdminOrganizatio
           </div>
           <div>
             <p className="text-2xl font-extrabold text-indigo-600">{totalGoals}</p>
-            <p className="text-xs font-medium text-slate-400 mt-0.5">Goals</p>
+            <p className="text-xs font-medium text-slate-400 mt-0.5">Events</p>
           </div>
           <div>
             <p className="text-2xl font-extrabold text-emerald-600">{setupStatus}</p>
@@ -226,27 +212,27 @@ export function AdminOrganizationDetailView({ organizationId }: AdminOrganizatio
 
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">DELEGATION MODE</span>
-            <span className="text-xs font-semibold text-slate-800">{fallback.delegationMode}</span>
+            <span className="text-xs font-semibold text-slate-800">Heuristic</span>
           </div>
 
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">ATOMIZATION</span>
-            <span className="text-xs font-semibold text-slate-800">{fallback.atomization}</span>
+            <span className="text-xs font-semibold text-slate-800">Enabled</span>
           </div>
 
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">NUDGES</span>
-            <span className="text-xs font-semibold text-slate-800">{fallback.nudges}</span>
+            <span className="text-xs font-semibold text-slate-800">Enabled</span>
           </div>
 
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">CREATED</span>
-            <span className="text-xs font-semibold text-slate-800">{fallback.created}</span>
+            <span className="text-xs font-semibold text-slate-800">{formatDate(org.createdAt)}</span>
           </div>
 
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">UPDATED</span>
-            <span className="text-xs font-semibold text-slate-800">{fallback.updated}</span>
+            <span className="text-xs font-semibold text-slate-800">{formatDate(org.updatedAt)}</span>
           </div>
 
           <div className="pt-1">
@@ -267,30 +253,37 @@ export function AdminOrganizationDetailView({ organizationId }: AdminOrganizatio
             </h2>
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {membersList.map((member) => (
-              <div key={member.id} className="flex items-center justify-between py-3 first:pt-2 last:pb-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`size-9 shrink-0 rounded-full ${member.color} flex items-center justify-center text-xs font-bold text-white shadow-sm`}>
-                    {member.initials}
+          {membersList.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400">
+              <Users className="mx-auto size-6 text-slate-300 mb-2" />
+              No members found in this organization.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {membersList.map((member) => (
+                <div key={member.id} className="flex items-center justify-between py-3 first:pt-2 last:pb-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`size-9 shrink-0 rounded-full ${member.color} flex items-center justify-center text-xs font-bold text-white shadow-sm`}>
+                      {member.initials}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 truncate">{member.name}</p>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{member.position}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-900 truncate">{member.name}</p>
-                    <p className="text-xs font-mono text-slate-400 truncate mt-0.5">{member.studentId}</p>
-                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
+                      member.role === "Leader"
+                        ? "bg-purple-50 text-purple-600 ring-1 ring-inset ring-purple-600/10"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {member.role}
+                  </span>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
-                    member.role === "Leader"
-                      ? "bg-purple-50 text-purple-600 ring-1 ring-inset ring-purple-600/10"
-                      : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {member.role}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
