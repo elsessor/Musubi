@@ -131,6 +131,7 @@ export default function OrganizationPage() {
     title: string;
     content: string;
     targetAudience: string;
+    committeeId?: string;
     isPinned: boolean;
   }) {
     const orgId = profile?.organizationId || "default-org";
@@ -408,6 +409,7 @@ export default function OrganizationPage() {
       {profileMember ? <MemberProfileModal member={profileMember} onClose={() => setProfileMember(null)} /> : null}
       {memberToRemove ? <ConfirmRemoveCommitteeMemberModal memberName={memberToRemove.name} committeeName="" organizationRemoval isRemoving={isRemovingMember} onCancel={() => setMemberToRemove(null)} onConfirm={() => void removeMemberFromOrganization()} /> : null}
       <PostAnnouncementModal
+        committees={committees}
         isOpen={isPostAnnouncementOpen}
         onClose={() => setIsPostAnnouncementOpen(false)}
         onSubmit={handlePostAnnouncement}

@@ -9,6 +9,7 @@ import { recordTaskPerformance } from "../utils/taskPerformance.js";
 import { memberForViewer, taskForViewer } from "../utils/profileAccess.js";
 import { assertCanUpdateOrganization } from "../utils/organizationPermissions.js";
 import { renameCommitteeReferences } from "../utils/committeeReferences.js";
+import { assertCanPostAnnouncement, canViewAnnouncement } from "../utils/announcementAccess.js";
 import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
@@ -1456,6 +1457,7 @@ export async function createAnnouncementService(
     title: string;
     content: string;
     targetAudience?: string;
+    committeeId?: string;
     isPinned?: boolean;
     authorName?: string;
     authorRole?: string;
@@ -1463,6 +1465,20 @@ export async function createAnnouncementService(
 ) {
   const user = await getCurrentUser(uid);
   const targetOrgId = data.orgId || user.organizationId || "default-org";
+
+  const audience = data.targetAudience || "All Members";
+  assertCanPostAnnouncement(user, targetOrgId, audience, data.committeeId);
+  if (typeof data.title !== "string" || !data.title.trim() || typeof data.content !== "string" || !data.content.trim()) {
+    throw new AppError("Announcement title and message are required.", 400);
+  }
+  let committeeName: string | null = null;
+  if (audience === "Committee") {
+    const committee = await firestore.collection("committees").doc(data.committeeId!).get();
+    if (!committee.exists || committee.data()?.orgId?.path !== firestore.collection("organizations").doc(targetOrgId).path) {
+      throw new AppError("Select a committee from this organization.", 400);
+    }
+    committeeName = committee.data()!.name;
+  }
 
   const formattedDate = new Date().toLocaleDateString("en-US", {
     month: "short",
@@ -1475,7 +1491,9 @@ export async function createAnnouncementService(
     orgId: targetOrgId,
     title: (data.title || "").trim(),
     content: (data.content || "").trim(),
-    targetAudience: data.targetAudience || "All Members",
+    targetAudience: audience,
+    committeeId: audience === "Committee" ? data.committeeId : null,
+    committeeName,
     isPinned: Boolean(data.isPinned),
     authorName: data.authorName || user.fullName || "Student Leader",
     authorUid: uid,
@@ -1514,6 +1532,8 @@ export async function createAnnouncementService(
 export async function getAnnouncementsService(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
   const targetOrgId = orgId || user.organizationId;
+  if (user.role !== "Admin" && orgId && orgId !== user.organizationId) throw new AppError("You do not have access to this organization's announcements.", 403);
+  const member = user.role === "Organization Member" ? (await firestore.collection("users").doc(uid).get()).data() : null;
 
   const snapshot = await firestore.collection("announcements").get();
   const list: any[] = [];
@@ -1535,10 +1555,7 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
     }
 
     // 2. Audience / Role Filter
-    const isMember = user.role === "Organization Member";
-    const isLeadersOnly = targetAudience === "Leaders Only" || targetAudience === "Officers Only";
-
-    if (isMember && isLeadersOnly) {
+    if (!canViewAnnouncement({ ...user, committeeId: typeof member?.committeeId === "string" ? member.committeeId : null }, data)) {
       return;
     }
 
@@ -1548,6 +1565,8 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
       title: typeof data.title === "string" ? data.title : "Untitled Announcement",
       content: typeof data.content === "string" ? data.content : "",
       targetAudience,
+      committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
+      committeeName: typeof data.committeeName === "string" ? data.committeeName : null,
       isPinned: Boolean(data.isPinned),
       authorName: typeof data.authorName === "string" ? data.authorName : "Student Leader",
       authorUid: typeof data.authorUid === "string" ? data.authorUid : "",
