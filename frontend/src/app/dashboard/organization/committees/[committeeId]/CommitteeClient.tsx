@@ -5,6 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ClipboardList, Search } from "lucide-react";
 
+import { CommitteeHeader } from "@/components/dashboard/CommitteeHeader";
+import { OrganizationMemberTable } from "@/components/dashboard/OrganizationMemberTable";
+import { subscribeEventsFirestore } from "@/services/events.service";
+import type { Event } from "@/components/events/types";
+import type { MemberProfile } from "@/components/dashboard/MemberProfileModal";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AddCommitteeMembersModal } from "@/components/dashboard/AddCommitteeMembersModal";
 import { MemberProfileModal } from "@/components/dashboard/MemberProfileModal";
@@ -14,6 +19,7 @@ import {
   getOrganization,
   getOrganizationCommittees,
   getOrganizationMembers,
+  subscribeOrganizationMembersFirestore,
   type OrganizationCommitteeRecord,
   type OrganizationMember,
   type OrganizationRecord
@@ -34,9 +40,10 @@ export function CommitteeClient() {
   const authLoading = useAuthStore((state) => state.loading);
   const logout = useLogout();
 
-  const [profileMember, setProfileMember] = useState<OrganizationMember | null>(null);
+  const [profileMember, setProfileMember] = useState<MemberProfile | null>(null);
   const [committee, setCommittee] = useState<OrganizationCommitteeRecord | null>(null);
   const [organization, setOrganization] = useState<OrganizationRecord | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
@@ -64,11 +71,38 @@ export function CommitteeClient() {
       .finally(() => setLoading(false));
   }, [firebaseUser, committeeId, profile?.organizationId]);
 
+  useEffect(() => {
+    if (!firebaseUser || !profile?.organizationId) { setEvents([]); return; }
+    const unsubscribe = subscribeEventsFirestore(firebaseUser, profile.organizationId, setEvents);
+    return () => { if (typeof unsubscribe === "function") unsubscribe(); };
+  }, [firebaseUser, profile?.organizationId]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile?.organizationId) return;
+    return subscribeOrganizationMembersFirestore(profile.organizationId, setMembers, firebaseUser);
+  }, [firebaseUser, profile?.organizationId]);
+
+  const committeeRows = useMemo(() => members
+    .filter((member) => member.committeeId === committee?.id)
+    .map((member) => {
+      return {
+        id: member.id,
+        initials: member.name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?",
+        name: member.name,
+        role: member.position || member.role,
+        committee: committee?.name || "Not assigned",
+        skills: member.skills,
+        workload: member.workload ?? 0,
+        reliability: member.reliability ?? "?",
+        availability: member.availability || "Available",
+        assignedTasks: member.assignedTasks
+      };
+    }), [members, committee?.id, committee?.name]);
+
   const committeeMembers = useMemo(() => {
-    return members
-      .filter((member) => member.committeeId === committee?.id)
-      .filter((member) => `${member.name} ${member.position} ${member.role} ${member.skills.join(" ")}`.toLowerCase().includes(query.toLowerCase()));
-  }, [committee?.id, members, query]);
+    const search = query.trim().toLowerCase();
+    return committeeRows.filter((member) => [member.name, member.role, ...member.skills].some((value) => value.toLowerCase().includes(search)));
+  }, [committeeRows, query]);
 
   async function addMembers(memberIds: string[]) {
     if (!firebaseUser || !profile?.organizationId || !committee) return;
@@ -94,9 +128,9 @@ export function CommitteeClient() {
   return (
     <DashboardLayout activeNavId="organization" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems(profile.role)} notificationCount={0} onLogout={logout} user={user}>
       <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
-        <Link href="/dashboard/organization" className="inline-flex items-center gap-2 text-sm font-semibold text-[#2868ed] hover:text-blue-700">
+        <Link href="/dashboard/organization?tab=committees" className="inline-flex items-center gap-2 text-sm font-semibold text-[#2868ed] hover:text-blue-700">
           <ArrowLeft className="size-4" />
-          Back to organization
+          Back to committees
         </Link>
         {loading ? (
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Loading committee...</div>
@@ -109,130 +143,38 @@ export function CommitteeClient() {
           </div>
         ) : (
           <>
-            <div className="mt-5 rounded-2xl border border-[#dce3ed] bg-white p-6">
-              <p className="text-xs font-bold uppercase tracking-wide text-[#2868ed]">{organization?.name}</p>
-              <h1 className="mt-1 text-2xl font-extrabold">{committee.name}</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-500">{committee.description || "No description provided."}</p>
-              <p className="mt-4 text-sm">
-                Committee head: <span className="font-bold">{members.find((member) => member.id === committee.headMemberUID)?.name || "Not assigned"}</span>
-              </p>
-            </div>
-            <div className="mt-6 flex items-center justify-between gap-4">
-              <h2 className="text-xl font-bold">Committee members ({committeeMembers.length})</h2>
+            <CommitteeHeader
+              committee={committee}
+              organizationName={organization?.name || profile.organizationName || ""}
+              headName={members.find((member) => member.id === committee.headMemberUID)?.name}
+              memberCount={committeeRows.length}
+              activeGoals={events.filter((event) => event.status.trim().toLowerCase() === "active" && event.committee?.trim().toLowerCase() === committee.name.trim().toLowerCase()).length}
+            />
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+              <h2 className="text-xl font-bold">Committee members ({committeeRows.length})</h2>
               {profile.role === "Student Leader" ? (
                 <button type="button" onClick={() => setAddMembersOpen(true)} className="rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white">
                   Add members
                 </button>
               ) : null}
             </div>
-            <label className="mt-4 flex h-10 max-w-xl items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3">
+            <label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3">
               <Search className="size-4 text-slate-500" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-[13px] outline-none" placeholder="Search members, roles, or skills..." />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" placeholder="Search by name, role, or skill..." />
             </label>
-            <div className="mt-5 overflow-x-auto rounded-2xl border border-[#dce3ed] bg-white">
-              <table className="min-w-[1180px] w-full border-collapse text-left">
-                <thead className="bg-[#e8eef7] text-[11px] uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Member Name</th>
-                    <th className="px-3 py-3 font-semibold">Role</th>
-                    <th className="px-3 py-3 font-semibold">Committee</th>
-                    <th className="px-3 py-3 font-semibold">Skills</th>
-                    <th className="px-3 py-3 font-semibold">Workload</th>
-                    <th className="px-3 py-3 font-semibold">Reliability</th>
-                    <th className="px-3 py-3 font-semibold">Availability</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {committeeMembers.map((member) => {
-                    const initials = member.name
-                      .split(/\s+/)
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((part) => part[0])
-                      .join("")
-                      .toUpperCase() || "?";
-                    const isYou =
-                      (profile?.uid && member.id === profile.uid) ||
-                      (firebaseUser?.uid && member.id === firebaseUser.uid) ||
-                      (profile?.fullName && member.name.trim().toLowerCase() === profile.fullName.trim().toLowerCase());
-                    return (
-                      <tr key={member.id} className={`border-t border-[#dfe5ee] text-[13px] transition ${isYou ? "bg-blue-50/70 hover:bg-blue-50/90 font-medium" : "hover:bg-slate-50/60"}`}>
-                        <td className="px-4 py-3 font-semibold">
-                          <div className="flex items-center gap-3">
-                            <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${isYou ? "bg-[#2563eb] ring-2 ring-blue-300" : "bg-[#213f68]"}`}>{initials}</span>
-                            <span className={isYou ? "text-[#1d4ed8] font-extrabold" : "text-slate-900"}>{member.name}</span>
-                            {isYou ? (
-                              <span className="rounded-full bg-[#2563eb] px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
-                                You
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-slate-500">{member.position || member.role}</td>
-                        <td className="px-3 py-3">
-                          <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] text-violet-700">{committee.name}</span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex max-w-[410px] flex-wrap gap-1">
-                            {member.skills.length ? (
-                              <>
-                                {member.skills.slice(0, 4).map((skill) => (
-                                  <span key={skill} className="rounded bg-[#e8eef7] px-2 py-0.5 text-[11px] text-[#214574]">
-                                    {skill}
-                                  </span>
-                                ))}
-                                {member.skills.length > 4 ? (
-                                  <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">+{member.skills.length - 4}</span>
-                                ) : null}
-                              </>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-20 rounded bg-slate-100">
-                              <div className="h-full rounded bg-emerald-500" style={{ width: "0%" }} />
-                            </div>
-                            <span className="text-[11px] text-slate-500">0%</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-[11px] font-semibold">-</td>
-                        <td className="px-3 py-3">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-600">
-                            <i className="size-1 rounded-full bg-current" />
-                            Available
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button type="button" onClick={() => setProfileMember(member)} className="text-[12px] font-medium text-[#2868ed] hover:text-blue-700">
-                            View Profile
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {!committeeMembers.length ? <p className="p-8 text-center text-sm text-slate-500">No members are assigned to this committee.</p> : null}
-            </div>
+            <OrganizationMemberTable
+              members={committeeMembers}
+              currentUserId={firebaseUser?.uid || profile.uid}
+              currentUserName={profile.fullName}
+              onViewProfile={setProfileMember}
+              emptyMessage={query.trim() ? "No members match your search." : "No members are assigned to this committee."}
+            />
           </>
         )}
       </section>
       {profileMember ? (
         <MemberProfileModal
-          member={{
-            initials: profileMember.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase() || "?",
-            name: profileMember.name,
-            role: profileMember.position || profileMember.role,
-            committee: committee?.name || "Not assigned",
-            skills: profileMember.skills,
-            workload: 0,
-            reliability: "-",
-            availability: "Available"
-          }}
+          member={profileMember}
           onClose={() => setProfileMember(null)}
         />
       ) : null}

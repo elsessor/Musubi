@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { updateProfile } from "firebase/auth";
+import { useRouter } from "next/navigation";
 import {
   Loader2,
+  ArrowLeft,
   User,
   X
 } from "lucide-react";
@@ -20,6 +22,7 @@ import { getAssignedProfileTasks } from "@/utils/profileMetrics";
 import { getDashboardNavItems } from "@/utils/routes";
 import { PROGRAM_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
 import { useToastStore } from "@/store/toastStore";
+import { getProfileReturnPath } from "@/utils/profileNavigation";
 
 function asDateInputValue(value: string): string {
   const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -48,12 +51,20 @@ function isAtLeastSeventeen(birthdate: string): boolean {
 }
 
 export default function DashboardProfilePage() {
+  const router = useRouter();
   const authLoading = useAuthStore((state) => state.loading);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const profile = useAuthStore((state) => state.profile);
   const setProfile = useAuthStore((state) => state.setProfile);
   const showToast = useToastStore((state) => state.showToast);
   const logout = useLogout();
+
+  function handleBack() {
+    const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+    if (returnTo) router.push(getProfileReturnPath(returnTo));
+    else if (window.history.length > 1) router.back();
+    else router.push("/dashboard");
+  }
 
   const [userData, setUserData] = useState<ProfileOverviewUser>({
     fullName: profile?.fullName || firebaseUser?.displayName || "",
@@ -267,6 +278,11 @@ export default function DashboardProfilePage() {
       onLogout={logout}
     >
     <section>
+      <div className="mx-auto mb-5 max-w-7xl">
+        <button type="button" onClick={handleBack} className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-blue-600 transition hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+          <ArrowLeft size={16} />Back
+        </button>
+      </div>
       <ProfileOverview user={userData} tasks={userSubtasks} loading={loading || authLoading} tasksLoading={tasksLoading} profileError={profileError} tasksError={tasksError} onEdit={openEditModal} />
 
       {/* Edit Profile Modal */}

@@ -36,14 +36,18 @@ function formatBirthdate(value: string): string {
     : "Not set";
 }
 
-export function ProfileOverview({ user, tasks, loading, tasksLoading, profileError, tasksError, onEdit }: {
+export function ProfileOverview({ user, tasks, loading, tasksLoading, profileError, tasksError, onEdit, title = "My Profile", showPerformance = true, showPersonalDetails = true, committee }: {
   user: ProfileOverviewUser;
   tasks: ProfileTask[];
   loading: boolean;
   tasksLoading: boolean;
   profileError: string;
   tasksError: string;
-  onEdit: () => void;
+  onEdit?: () => void;
+  title?: string;
+  showPerformance?: boolean;
+  showPersonalDetails?: boolean;
+  committee?: string;
 }) {
   const [filter, setFilter] = useState<ProfileTaskFilter>("all");
   const [page, setPage] = useState(1);
@@ -67,10 +71,12 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
   const chartMaximum = Math.ceil(maxCompletions / 4) * 4;
   const topPerformer = metrics.rating !== null && metrics.rating >= 4.5;
   const fields = [
-    ["Full name", user.fullName], ["Email", user.email], ["Year level", user.yearLevel],
-    ["Program", user.program], ["Role", user.position || user.role],
+    ["Full name", user.fullName],
+    ...(showPersonalDetails ? [["Email", user.email], ["Year level", user.yearLevel], ["Program", user.program]] : []),
+    ["Role", user.position || user.role],
     ["Organization", [user.organizationName, user.position || user.role].filter(Boolean).join(" — ")],
-    ["Birthdate", formatBirthdate(user.birthdate)]
+    ...(committee ? [["Committee", committee]] : []),
+    ...(showPersonalDetails ? [["Birthdate", formatBirthdate(user.birthdate)]] : [])
   ];
   const filters: { id: ProfileTaskFilter; label: string; tone: string; selected: string }[] = [
     { id: "all", label: `All (${tasks.length})`, tone: "text-slate-500", selected: "bg-slate-900 text-white" },
@@ -83,10 +89,10 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
   return (
     <div className="mx-auto max-w-7xl space-y-5 text-[#0f203a]">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
-        <button type="button" onClick={onEdit} disabled={loading || Boolean(profileError)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
+        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        {onEdit && <button type="button" onClick={onEdit} disabled={loading || Boolean(profileError)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
           <Edit2 size={14} /> Edit Profile
-        </button>
+        </button>}
       </div>
 
       {profileError ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{profileError}</p> : null}
@@ -109,21 +115,21 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
         </div>
       </section>
 
-      <section aria-label="Profile statistics" aria-busy={loading || tasksLoading} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      {showPerformance && <section aria-label="Profile statistics" aria-busy={loading || tasksLoading} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {[
           { label: "Workload score", value: `${metrics.workload}%`, tone: metrics.workload >= 80 ? "text-rose-500" : metrics.workload >= 50 ? "text-amber-500" : "text-emerald-500", hint: `${metrics.counts.active + metrics.counts.pending} unfinished tasks / ${PROFILE_TASK_CAPACITY}-task capacity` },
           { label: "Reliability score", value: metrics.reliability === null ? "—" : `${metrics.reliability}%`, tone: "text-blue-600", hint: metrics.reliabilitySampleCount ? `On-time completions across ${metrics.reliabilitySampleCount} tasks with recorded dates` : "No completed tasks with both a completion date and a deadline yet" },
           { label: "Avg match %", value: metrics.averageMatch === null ? "—" : `${metrics.averageMatch}%`, tone: "text-blue-600", hint: "Average of saved assignment match scores" },
-          { label: "Tasks done", value: metrics.counts.done, tone: "text-slate-900", hint: "Completed tasks assigned to you" }
+          { label: "Tasks done", value: metrics.counts.done, tone: "text-slate-900", hint: "Completed tasks assigned to this profile" }
         ].map((metric) => <div key={metric.label} title={metric.hint} className={`${cardClass} px-3 py-5 text-center`}>
           <p className={`text-[28px] font-bold leading-none ${metric.tone}`}>{ready ? metric.value : "—"}</p>
           <p className={`mt-2 ${labelClass}`}>{metric.label}</p>
         </div>)}
-      </section>
+      </section>}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <div className="min-w-0 space-y-5">
-          <section aria-labelledby="performance-heading" className={`${cardClass} p-5`}>
+      <div className={`grid items-start gap-5 ${showPerformance ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : "grid-cols-1"}`}>
+        <div className={showPerformance ? "min-w-0 space-y-5" : "grid min-w-0 items-start gap-5 sm:grid-cols-2"}>
+          {showPerformance && <section aria-labelledby="performance-heading" className={`${cardClass} p-5`}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">Leader reviews &amp; performance</p>
@@ -143,7 +149,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
               <Award size={14} className="shrink-0" />
               {ready ? metrics.ratingCount ? topPerformer ? "Top Performer" : "Based on saved leader reviews" : "No ratings yet — awaiting leader reviews" : "Loading performance data…"}
             </div>
-          </section>
+          </section>}
 
           <section aria-label="Personal details" className={`${cardClass} px-5 py-2`}>
             <dl className="divide-y divide-slate-100">
@@ -157,12 +163,12 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
           <section aria-labelledby="skills-heading" className={`${cardClass} p-5`}>
             <h3 id="skills-heading" className={labelClass}>Skill keywords</h3>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {user.skills.length ? user.skills.map((skill) => <span key={skill} className="rounded-full bg-[#f0f4f8] px-3 py-1 text-[10px]">{skill}</span>) : <p className="text-xs text-slate-500">No skills added yet. Edit your profile to add skills.</p>}
+              {user.skills.length ? user.skills.map((skill) => <span key={skill} className="rounded-full bg-[#f0f4f8] px-3 py-1 text-[10px]">{skill}</span>) : <p className="text-xs text-slate-500">{onEdit ? "No skills added yet. Edit your profile to add skills." : "No skills listed."}</p>}
             </div>
           </section>
         </div>
 
-        <div className="min-w-0 space-y-5">
+        {showPerformance && <div className="min-w-0 space-y-5">
           <section aria-labelledby="completion-heading" className={`${cardClass} p-5`}>
             <h3 id="completion-heading" className={labelClass}>Sub-task completion — this month</h3>
             <p className="sr-only">{new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}. {ready ? metrics.weeks.map((week) => `${week.label}: ${week.count}`).join(". ") : "Completion data unavailable."}</p>
@@ -194,7 +200,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
             </div>
 
             {!ready ? <p role="status" className="py-12 text-center text-xs text-slate-400">{tasksError || profileError ? "Task data is unavailable. Please refresh and try again." : "Loading your sub-tasks…"}</p>
-              : visibleTasks.length === 0 ? <p className="py-12 text-center text-xs text-slate-400">{tasks.length ? "No sub-tasks match this filter." : "No sub-tasks assigned to you yet."}</p>
+              : visibleTasks.length === 0 ? <p className="py-12 text-center text-xs text-slate-400">{tasks.length ? "No sub-tasks match this filter." : "No sub-tasks assigned yet."}</p>
                 : <div className="mt-1 divide-y divide-slate-100">
                   {visibleTasks.map((task) => {
                     const tone = getStatusTheme(task.status || "Pending", task.customStatuses).badge;
@@ -205,6 +211,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
                           <span className="text-slate-400">• {task.eventTitle}</span>
                           {typeof match === "number" && Number.isFinite(match) && match >= 0 && match <= 100 ? <span className="font-medium text-blue-600">{match}% match</span> : null}
+                          {task.performanceReview && <span className="font-medium text-amber-600">Leader rating: {task.performanceReview.rating}/5</span>}
                         </div>
                       </div>
                       <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] ${tone}`}>{task.status || "Pending"}</span>
@@ -221,8 +228,9 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
               </nav>
             </div> : null}
           </section>
-        </div>
+        </div>}
       </div>
     </div>
   );
+
 }

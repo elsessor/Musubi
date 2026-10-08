@@ -6,7 +6,8 @@ import type { FirestoreUser, JwtPayload, LoginResponse, UserRole } from "../type
 import { AppError } from "../utils/AppError.js";
 import { writeAuditLog } from "../utils/auditLog.js";
 import { recordTaskPerformance } from "../utils/taskPerformance.js";
-import { assertCanEditEvent, preserveTaskAttachments } from "../utils/taskPermissions.js";
+import { memberForViewer, taskForViewer } from "../utils/profileAccess.js";
+import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
 const validRoles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -465,19 +466,12 @@ export async function createOrganization(uid: string, input: { name: string; typ
 export async function getOrganizationMembers(uid: string, organizationId: string) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to these members.", 403);
-  const snapshot = await firestore.collection("users").where("organizationId", "==", organizationId).get();
-  return snapshot.docs.map((document) => {
-    const data = document.data();
-    return {
-      id: document.id,
-      name: typeof data.fullName === "string" ? data.fullName : "Unnamed member",
-      role: typeof data.role === "string" ? data.role : "Organization Member",
-      position: typeof data.position === "string" ? data.position : "Organization Member",
-      skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
-      committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
-      committeeName: typeof data.committeeName === "string" ? data.committeeName : null
-    };
-  });
+  const [snapshot, eventSnapshot] = await Promise.all([
+    firestore.collection("users").where("organizationId", "==", organizationId).get(),
+    firestore.collection("events").where("orgId", "==", organizationId).get()
+  ]);
+  const events = eventSnapshot.docs.map((document) => ({ ...document.data(), id: document.id }));
+  return snapshot.docs.map((document) => memberForViewer(user, document.id, document.data(), events));
 }
 
 export async function removeOrganizationMember(uid: string, organizationId: string, memberId: string) {
@@ -532,8 +526,8 @@ export async function getOrganizationCommittees(uid: string, organizationId: str
   return snapshot.docs.map((document) => {
     const data = document.data();
     const createdAt = data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0;
-    return { id: document.id, name: typeof data.name === "string" ? data.name : "Untitled committee", description: typeof data.description === "string" ? data.description : "", headMemberUID: typeof data.headMemberUID === "string" ? data.headMemberUID : null, createdAt };
-  }).sort((left, right) => left.createdAt - right.createdAt).map(({ createdAt: _createdAt, ...committee }) => committee);
+    return { id: document.id, name: typeof data.name === "string" ? data.name : "Untitled committee", description: typeof data.description === "string" ? data.description : "", headMemberUID: typeof data.headMemberUID === "string" ? data.headMemberUID : null, createdAt, createdAtISO: asIsoString(data.createdAt) };
+  }).sort((left, right) => left.createdAt - right.createdAt).map(({ createdAt: _sortDate, createdAtISO, ...committee }) => ({ ...committee, createdAt: createdAtISO }));
 }
 
 export async function createOrganizationCommittee(
@@ -570,7 +564,7 @@ export async function createOrganizationCommittee(
   }
   await batch.commit();
   writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role, action: "Committee created", actionCategory: "Organization", targetType: "Committee", targetName: input.name.trim(), orgId: organizationId });
-  return { id: committeeRef.id, name: input.name.trim(), description: input.description.trim(), headMemberUID: input.headMemberId };
+  return { id: committeeRef.id, name: input.name.trim(), description: input.description.trim(), headMemberUID: input.headMemberId, createdAt: asIsoString((await committeeRef.get()).data()?.createdAt) };
 }
 
 export async function addMembersToOrganizationCommittee(uid: string, organizationId: string, committeeId: string, memberIds: string[]) {
@@ -1404,6 +1398,7 @@ export async function clearEventsForOrg(uid: string, organizationId: string) {
 export async function getEventsForUser(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
   const targetOrgId = orgId || user.organizationId || "default-org";
+  assertEventAccess(user, targetOrgId);
   const organization = (await firestore.collection("organizations").doc(targetOrgId).get()).data();
   const snapshot = await firestore.collection("events").where("orgId", "==", targetOrgId).get();
   return snapshot.docs.map((docSnap) => {
@@ -1423,7 +1418,7 @@ export async function getEventsForUser(uid: string, orgId?: string) {
       committee: typeof data.committee === "string" ? data.committee : "General",
       tasks: Array.isArray(data.tasks)
         ? data.tasks.map((t: any) => ({
-          ...t,
+          ...taskForViewer(user, t),
           title: typeof t.title === "string" && t.title.trim()
             ? t.title
             : typeof t.description === "string" && t.description.trim()
@@ -1555,6 +1550,5 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
 
   return list;
 }
-
 
 

@@ -2,6 +2,8 @@
 
 import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
 import { X } from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
+import Link from "next/link";
 
 export type MemberProfile = {
   id?: string;
@@ -15,11 +17,16 @@ export type MemberProfile = {
   availability: string;
   assignedTasks?: Array<{
     id: string;
+    eventId?: string;
+    dueDate?: string;
+    deadline?: string;
+    completedAt?: string | null;
     title: string;
     eventTitle?: string;
     customStatuses?: CustomStatusConfig[];
     status: string;
     matchPercentage?: number;
+    performanceReview?: { rating: number; reviewerUID?: string; reviewedAt?: string } | null;
   }>;
 };
 
@@ -30,11 +37,17 @@ export function MemberProfileModal({
   member: MemberProfile;
   onClose: () => void;
 }) {
+  const viewerUID = useAuthStore((state) => state.firebaseUser?.uid || state.profile?.uid);
+  const viewerRole = useAuthStore((state) => state.profile?.role);
+  const canViewPerformance = viewerRole === "Student Leader" || viewerRole === "Admin" || Boolean(viewerUID && viewerUID === member.id);
   const workloadColor =
     member.workload >= 80 ? "bg-rose-500" : member.workload >= 50 ? "bg-amber-400" : "bg-emerald-500";
   const assignedTasks = member.assignedTasks ?? [];
-  const visibleTasks = assignedTasks.slice(0, 3);
+  const visibleTasks = canViewPerformance ? assignedTasks.slice(0, 3) : [];
   const remainingTaskCount = Math.max(0, assignedTasks.length - visibleTasks.length);
+  const returnTo = typeof window === "undefined" ? "/dashboard/organization?tab=members" : window.location.pathname + window.location.search;
+  const fullProfileHref = viewerUID === member.id ? `/dashboard/profile?${new URLSearchParams({ returnTo })}`
+    : `/dashboard/organization/member-profile?${new URLSearchParams({ memberId: member.id || "", returnTo })}`;
 
   return (
     <div
@@ -96,8 +109,8 @@ export function MemberProfileModal({
           </div>
 
           {/* Realtime Stats Bar */}
-          <div className="grid grid-cols-3 gap-3 rounded-2xl bg-slate-50/90 border border-slate-100 p-4 text-center">
-            <div>
+          <div className={`grid ${canViewPerformance ? "grid-cols-3" : "grid-cols-1"} gap-3 rounded-2xl bg-slate-50/90 border border-slate-100 p-4 text-center`}>
+            {canViewPerformance && <><div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <div className="h-1.5 w-12 rounded-full bg-slate-200 overflow-hidden">
                   <div className={`h-full rounded-full ${workloadColor}`} style={{ width: `${member.workload}%` }} />
@@ -110,7 +123,7 @@ export function MemberProfileModal({
             <div>
               <p className="text-xs font-extrabold text-blue-600 mb-1">{member.reliability}</p>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reliability</p>
-            </div>
+            </div></>}
 
             <div>
               <span
@@ -132,21 +145,22 @@ export function MemberProfileModal({
           </div>
 
           {/* Member Assigned Subtasks */}
-          {assignedTasks.length > 0 && (
+          {canViewPerformance && assignedTasks.length > 0 && (
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Active Sub-tasks ({assignedTasks.length})
+                  Assigned Sub-tasks ({assignedTasks.length})
                 </p>
-                {remainingTaskCount > 0 ? <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">+{remainingTaskCount} more</span> : null}
+                {remainingTaskCount > 0 && <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">+{remainingTaskCount} more</span>}
               </div>
               <div className="space-y-2">
                 {visibleTasks.map((task) => (
                   <div
-                    key={task.id}
+                    key={`${task.eventTitle || ""}:${task.id}`}
                     className="p-3 rounded-xl border border-slate-200/80 bg-white text-xs space-y-1"
                   >
                     <p className="font-bold text-slate-900">{task.title}</p>
+                    {task.performanceReview && <p className="text-[11px] text-slate-500">Leader performance rating: {task.performanceReview.rating}/5</p>}
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-slate-400 font-medium">• {task.eventTitle || "Campus Event"}</span>
                       <span
@@ -163,6 +177,9 @@ export function MemberProfileModal({
             </div>
           )}
         </div>
+        {member.id && <div className="flex justify-end border-t border-slate-100 p-4">
+          <Link href={fullProfileHref} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">View full profile</Link>
+        </div>}
       </div>
     </div>
   );

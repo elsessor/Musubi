@@ -59,6 +59,11 @@ export type OrganizationMember = {
   activeTasksCount?: number;
   completedOnTime?: number;
   completedTotal?: number;
+  availability?: string;
+  profilePicture?: string | null;
+  workload?: number;
+  reliability?: string;
+  assignedTasks?: import("@/components/dashboard/MemberProfileModal").MemberProfile["assignedTasks"];
 };
 
 export type OrganizationJoinRequest = {
@@ -84,6 +89,7 @@ export type OrganizationCommitteeRecord = {
   /** @deprecated Compatibility alias for existing committee-card rendering. */
   headMemberId?: string | null;
   description: string;
+  createdAt?: string | null;
   /** Members are stored on user documents, not committee documents. */
   memberIds?: string[];
 };
@@ -409,7 +415,12 @@ export async function getOrganizationMembers(user: User, organizationId: string)
         position: typeof record.position === "string" ? record.position : "Organization Member",
         skills: normalizeStringArray(record.skills),
         committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
-        committeeName: typeof record.committeeName === "string" ? record.committeeName : null
+        committeeName: typeof record.committeeName === "string" ? record.committeeName : null,
+        availability: typeof record.availability === "string" ? record.availability : undefined,
+        profilePicture: typeof record.profilePicture === "string" ? record.profilePicture : null,
+        workload: typeof record.workload === "number" ? record.workload : undefined,
+        reliability: typeof record.reliability === "string" ? record.reliability : undefined,
+        assignedTasks: Array.isArray(record.assignedTasks) ? record.assignedTasks as OrganizationMember["assignedTasks"] : undefined
       };
     })
     : [];
@@ -497,7 +508,7 @@ export async function getOrganizationCommittees(user: User, organizationId: stri
   return Array.isArray(data.committees) ? data.committees.map((item) => {
     const record = isRecord(item) ? item : {};
     const headMemberUID = typeof record.headMemberUID === "string" ? record.headMemberUID : null;
-    return { id: typeof record.id === "string" ? record.id : crypto.randomUUID(), name: typeof record.name === "string" ? record.name : "Untitled committee", description: typeof record.description === "string" ? record.description : "", headMemberUID, headMemberId: headMemberUID };
+    return { id: typeof record.id === "string" ? record.id : crypto.randomUUID(), name: typeof record.name === "string" ? record.name : "Untitled committee", description: typeof record.description === "string" ? record.description : "", headMemberUID, headMemberId: headMemberUID, createdAt: typeof record.createdAt === "string" ? record.createdAt : null };
   }) : [];
 }
 

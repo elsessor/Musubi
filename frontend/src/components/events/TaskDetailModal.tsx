@@ -24,6 +24,7 @@ import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSel
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { TaskAttachments } from "./TaskAttachments";
 import { TaskAssignee } from "./TaskAssignee";
+import { isTaskAssignedToUser } from "@/utils/taskAssignment";
 
 
 type TaskDetailModalProps = {
@@ -59,6 +60,8 @@ export function TaskDetailModal({
   const activeRoster = Array.isArray(roster) ? roster : [];
   const reviewerUID = useAuthStore((state) => state.firebaseUser?.uid);
   const reviewerName = useAuthStore((state) => state.profile?.fullName || "");
+  const reviewerRole = useAuthStore((state) => state.profile?.role);
+  const canViewReview = reviewerRole === "Student Leader" || reviewerRole === "Admin" || isTaskAssignedToUser(task, reviewerUID, reviewerName);
   const [performanceRating, setPerformanceRating] = useState(task.performanceReview?.rating || 0);
 
   const [title, setTitle] = useState(task.title || "");
@@ -320,7 +323,7 @@ export function TaskDetailModal({
               </button>)}
             </div>
             <p className="mt-2 text-[10px] text-slate-500">{performanceRating ? `${performanceRating}/5 — saved with your changes` : "No rating selected"}</p>
-          </fieldset> : task.performanceReview ? <p className="text-xs text-slate-500">Leader performance rating: {task.performanceReview.rating}/5</p> : null}
+          </fieldset> : canViewReview && task.performanceReview ? <p className="text-xs text-slate-500">Leader performance rating: {task.performanceReview.rating}/5</p> : null}
           {(typeof task.matchPercentage === "number" || (task.blockedBy && task.blockedBy > 0) || task.isAiGenerated) && (
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
               {task.isAiGenerated && (

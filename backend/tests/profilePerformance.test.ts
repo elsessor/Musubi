@@ -3,6 +3,7 @@ import test from "node:test";
 import { recordTaskPerformance } from "../src/utils/taskPerformance.js";
 import { getAssignedProfileTasks, getProfileMetrics, getProfileTaskStatus, type ProfileTask } from "../../frontend/src/utils/profileMetrics.js";
 import type { Event } from "../../frontend/src/components/events/types.js";
+import { computeMemberStats } from "../../frontend/src/utils/memberMetrics.js";
 
 const leader = { uid: "leader", fullName: "Team Leader", isLeader: true };
 const member = { uid: "member", fullName: "Team Member", isLeader: false };
@@ -13,6 +14,26 @@ const task = (overrides: Partial<ProfileTask> = {}): ProfileTask => ({
   assignedMemberUID: "member", assignedMemberName: "Team Member",
   assignee: { initials: "TM", color: "bg-blue-500", name: "Team Member" },
   eventId: "event", eventTitle: "Organization event", ...overrides
+});
+
+test("member tables derive metrics from real assignments and completion deadlines", () => {
+  const event = { id: "event", title: "Event", tasks: [
+    task({ id: "custom", status: "Awaiting approval" }),
+    task({ id: "done", status: "Completed", completedAt: "2026-10-08T10:00:00", dueDate: "2026-10-08" }),
+    task({ id: "other", assignedMemberUID: "other" })
+  ] } as Event;
+  const stats = computeMemberStats("Team Member", "member", [event]);
+  assert.equal(stats.workload, 20);
+  assert.equal(stats.reliability, "100%");
+  assert.deepEqual(stats.activeTasks.map((task) => task.id), ["custom"]);
+  assert.equal(computeMemberStats("Team Member", "missing", [event]).reliability, "—");
+});
+
+test("member tables use task capacity for availability and preserve explicit availability", () => {
+  const event = { id: "event", title: "Event", tasks: Array.from({ length: 4 }, (_, index) => task({ id: String(index) })) } as Event;
+  assert.equal(computeMemberStats("Team Member", "member", [event]).availability, "Busy");
+  assert.equal(computeMemberStats("Team Member", "member", [event], "On Leave").availability, "On Leave");
+  assert.equal(computeMemberStats("Team Member", "member", []).workload, 0);
 });
 
 test("assignment uses UID first and only falls back to names for legacy tasks", () => {
