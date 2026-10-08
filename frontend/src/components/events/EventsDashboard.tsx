@@ -20,6 +20,7 @@ import { isEventScheduledOnDay } from "@/utils/calendarSchedule";
 import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 import { useAuthStore } from "@/store/authStore";
 import { eventStatusSettings, type EventStatusSettings } from "@/services/events.service";
@@ -304,21 +305,21 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <div className="relative flex items-center">
-            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
-            <select
-              value={selectedCommittee}
-              onChange={(e) => setSelectedCommittee(e.target.value)}
-              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
-            >
-              <option value="All">All Committees</option>
-              {allCommitteeNames.map((commName) => (
-                <option key={commName} value={commName}>
-                  {commName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <CustomSelect
+            value={selectedCommittee}
+            onChange={setSelectedCommittee}
+            options={[
+              { value: "All", label: "All Committees" },
+              ...allCommitteeNames.map((commName) => ({
+                value: commName,
+                label: commName,
+              })),
+            ]}
+            icon={<SlidersHorizontal size={13} className="text-slate-400" />}
+            containerClassName="w-auto min-w-[150px]"
+            buttonClassName="h-8 rounded-xl bg-white border-slate-200 px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            dropdownClassName="w-48 shadow-xl border-slate-200/90 rounded-2xl"
+          />
 
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">

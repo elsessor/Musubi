@@ -21,6 +21,8 @@ export type CustomSelectProps = {
   onChange: (value: string) => void;
   options: CustomSelectOption[];
   placeholder?: string;
+  icon?: React.ReactNode;
+  containerClassName?: string;
   buttonClassName?: string;
   dropdownClassName?: string;
   disabled?: boolean;
@@ -33,6 +35,8 @@ export function CustomSelect({
   onChange,
   options,
   placeholder = "Select an option",
+  icon,
+  containerClassName = "",
   buttonClassName = "",
   dropdownClassName = "",
   disabled = false,
@@ -131,7 +135,7 @@ export function CustomSelect({
       ) : null;
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={cn("relative w-full", containerClassName)}>
       <button
         type="button"
         onClick={handleToggle}
@@ -145,6 +149,7 @@ export function CustomSelect({
         )}
       >
         <div className="flex items-center gap-2 truncate text-left">
+          {icon}
           {selectedOption?.initials && (
             <span
               className={cn(
