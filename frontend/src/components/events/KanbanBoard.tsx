@@ -3,7 +3,6 @@
 import {
   AlertOctagon,
   Calendar,
-  CheckCircle2,
   ChevronLeft,
   Columns3,
   Filter,
@@ -11,7 +10,7 @@ import {
   Edit3,
   LayoutGrid,
   Plus,
-  RotateCcw,
+  MoreHorizontal,
   Rows,
   Save,
   Search,
@@ -36,6 +35,7 @@ import { TaskExpandedView } from "./TaskExpandedView";
 import { TaskCalendarView } from "./TaskCalendarView";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { useAuthStore } from "@/store/authStore";
@@ -94,6 +94,7 @@ export function KanbanBoard({
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
+  const [isSavingEventStatus, setIsSavingEventStatus] = useState(false);
   const [isEditingEventDetails, setIsEditingEventDetails] = useState(false);
   const [eventTitleDraft, setEventTitleDraft] = useState(event.title);
   const [eventDescriptionDraft, setEventDescriptionDraft] = useState(event.description);
@@ -315,14 +316,30 @@ export function KanbanBoard({
     setReassignTaskTarget(null);
   }
 
-  function handleEventStatusChange(targetStatus: EventStatus) {
-    if (!isLeader) return;
+  async function handleEventStatusChange(targetStatus: EventStatus) {
+    if (!isLeader || isSavingEventStatus || targetStatus === currentEvent.status) return;
     const isCompleted = targetStatus === "Completed";
-    const updatedTasks = isCompleted
-      ? tasks.map((t) => ({ ...t, status: "Completed" as TaskStatus }))
-      : tasks;
+    const updatedTasks = isCompleted ? tasks.map((task) => ({ ...task, status: "Completed" as TaskStatus })) : tasks;
+    const updated = { ...currentEvent, status: targetStatus, tasks: updatedTasks, progress: isCompleted ? 100 : currentEvent.progress };
+    setIsSavingEventStatus(true);
+    try {
+      await updateEventFirestore(firebaseUser, currentEvent.id, isCompleted
+        ? { status: targetStatus, tasks: updatedTasks, progress: 100 }
+        : { status: targetStatus });
+      setCurrentEvent(updated);
+      setTasks(updatedTasks);
+      onUpdateEvent?.(updated);
+      showToast({ title: "Event status updated", description: `The event is now ${targetStatus}.`, tone: "success" });
+    } catch (error) {
+      showToast({ title: "Status not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
+      throw error;
+    } finally { setIsSavingEventStatus(false); }
+  }
 
-    syncEvent(updatedTasks, targetStatus, isCompleted ? 100 : currentEvent.progress);
+  function requestEventStatusChange(status: EventStatus) {
+    if (!isLeader || isSavingEventStatus || status === currentEvent.status) return;
+    if (status === "Completed" || status === "Cancelled") setStatusModalTarget(status === "Completed" ? "Completed" : "Cancelled");
+    else void handleEventStatusChange(status).catch(() => {});
   }
 
   function handleUpdateTaskStatus(taskId: string, targetStatus: TaskStatus) {
@@ -477,50 +494,38 @@ export function KanbanBoard({
           <span className="min-w-0 truncate font-semibold text-slate-900">{currentEvent.title}</span>
         </div>
 
-        {/* Event Lifecycle Header Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          {isLeader && onDeleteEvent && (
-            <button
-              type="button"
-              onClick={() => setConfirmDeleteEvent(true)}
-              className="inline-flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
-            >
-              <Trash2 size={14} /> Delete Event
-            </button>
-          )}
-          {isLeader && currentEvent.status !== "Completed" && (
-            <button
-              type="button"
-              onClick={() => setStatusModalTarget("Completed")}
-              className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-sm hover:bg-emerald-700 transition"
-            >
-              <CheckCircle2 size={14} />
-              Mark Completed
-            </button>
-          )}
-
-          {isLeader && currentEvent.status !== "Cancelled" && (
-            <button
-              type="button"
-              onClick={() => setStatusModalTarget("Cancelled")}
-              className="inline-flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
-            >
-              <XCircle size={14} />
-              Mark Cancelled
-            </button>
-          )}
-
-          {isLeader && (currentEvent.status === "Completed" || currentEvent.status === "Cancelled") && (
-            <button
-              type="button"
-              onClick={() => handleEventStatusChange("Active")}
-              className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition"
-            >
-              <RotateCcw size={14} />
-              Reopen Event
-            </button>
-          )}
-        </div>
+        {isLeader && (
+          <div className="flex max-w-full flex-wrap items-end gap-2">
+            <div className="w-48 max-w-full">
+              <p className="mb-1 text-[11px] font-semibold text-slate-500">Change event status</p>
+              <CustomSelect
+                value={currentEvent.status}
+                onChange={requestEventStatusChange}
+                disabled={isSavingEventStatus || isDeletingEvent}
+                portal
+                options={Array.from(new Set(["Active", "Planning", "Completed", "Cancelled", "Archived", ...(currentEvent.eventCustomStatuses || []).map((status) => status.name), currentEvent.status])).map((value) => {
+                  const theme = getStatusTheme(value, currentEvent.eventCustomStatuses);
+                  return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
+                })}
+                buttonClassName="rounded-xl py-2 text-xs"
+              />
+            </div>
+            {onDeleteEvent && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label="More event actions" disabled={isSavingEventStatus || isDeletingEvent} className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50">
+                    <MoreHorizontal size={18} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-40 rounded-xl border-slate-200 bg-white p-1.5 shadow-xl">
+                  <DropdownMenuItem onSelect={() => setConfirmDeleteEvent(true)} className="cursor-pointer gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 focus:bg-rose-50 focus:text-rose-700">
+                    <Trash2 size={14} className="text-rose-600" /> Delete Event
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Event Header Summary Card */}
@@ -566,28 +571,9 @@ export function KanbanBoard({
                   </button>
                 </div>
               )}
-              {isLeader ? <div className="w-44 max-w-full shrink-0">
-                <CustomSelect
-                  value={currentEvent.status}
-                  onChange={(value) => {
-                    if (value === "Completed" || value === "Cancelled") setStatusModalTarget(value);
-                    else handleEventStatusChange(value);
-                  }}
-                  options={Array.from(new Set(["Active", "Planning", "Completed", "Cancelled", "Archived", ...(currentEvent.eventCustomStatuses || []).map((status) => status.name), currentEvent.status])).map((value) => {
-                    const theme = getStatusTheme(value, currentEvent.eventCustomStatuses);
-                    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
-                  })}
-                  buttonClassName="py-1 text-xs"
-                />
-              </div> : (
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-extrabold ${
-                  getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).badge
-                }`}
-              >
+              <span className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-extrabold ${getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).badge}`}>
                 {currentEvent.status}
               </span>
-              )}
               {currentEvent.committee && (
                 <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
                   {currentEvent.committee} Committee
@@ -922,10 +908,11 @@ export function KanbanBoard({
       )}
 
       {/* Event Lifecycle Status Confirmation Modal */}
-      {statusModalTarget && (
+      {isLeader && statusModalTarget && (
         <EventStatusModal
           eventTitle={currentEvent.title}
           targetStatus={statusModalTarget}
+          unfinishedTaskCount={tasks.filter((task) => task.status !== "Completed").length}
           onClose={() => setStatusModalTarget(null)}
           onConfirm={handleEventStatusChange}
         />
@@ -944,19 +931,22 @@ export function KanbanBoard({
         onDeleteStatus={handleDeleteCustomStatus}
       />
 
-      {confirmDeleteEvent && onDeleteEvent && (
+      {isLeader && confirmDeleteEvent && onDeleteEvent && (
         <ConfirmDeleteModal
+          key={currentEvent.title}
           itemType="event"
           itemName={currentEvent.title}
+          requireNameConfirmation
           isDeleting={isDeletingEvent}
           onCancel={() => setConfirmDeleteEvent(false)}
           onConfirm={async () => {
             setIsDeletingEvent(true);
             try {
               await onDeleteEvent();
+              showToast({ title: "Event deleted", description: "The event has been deleted successfully.", tone: "success" });
               setConfirmDeleteEvent(false);
             } catch (error) {
-              console.error("Failed to delete event:", error);
+              showToast({ title: "Event not deleted", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
             } finally {
               setIsDeletingEvent(false);
             }
