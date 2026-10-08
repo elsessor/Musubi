@@ -102,3 +102,35 @@ export async function downloadTaskFileForUser(uid: string, eventId: string, task
   if (bytes.length !== metadata.size) throw new AppError("This attachment is incomplete. Please try again.", 500);
   return { attachment, bytes };
 }
+
+export async function rateTaskForUser(uid: string, eventId: string, taskId: string, input: unknown) {
+  const user = await getCurrentUser(uid);
+  const eventRef = eventReference(eventId);
+  const ratingData = input && typeof input === "object" && !Array.isArray(input) ? (input as Record<string, any>) : {};
+  const ratingNum = Number(ratingData.rating);
+  const feedbackStr = typeof ratingData.feedback === "string" ? ratingData.feedback : "";
+  if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+    throw new AppError("Performance ratings must be between 1 and 5 stars.", 400);
+  }
+  const result = await firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(eventRef);
+    if (!snapshot.exists) throw new AppError("Event not found.", 404);
+    const event = snapshot.data() || {};
+    const original = getTask(event, taskId);
+    assertEventAccess(user, event.orgId);
+    const ratingTarget = {
+      ...original,
+      performanceReview: {
+        rating: ratingNum,
+        feedback: feedbackStr
+      }
+    };
+    const updated = recordTaskPerformance([ratingTarget], [original], { uid, fullName: user.fullName, isLeader: isTaskLeader(user) })[0];
+    const tasks = (event.tasks || []).map((task: TaskRecord) => (task.id === taskId ? updated : task));
+    transaction.update(eventRef, { tasks, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+    return { event, task: updated };
+  });
+  logTaskAction(user, result.event, result.task, `Rated subtask performance: ${ratingNum}/5 stars`);
+  return { task: result.task };
+}
+

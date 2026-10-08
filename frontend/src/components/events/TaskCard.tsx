@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Calendar, ChevronDown, GripVertical, Lock, UserCheck, Zap } from "lucide-react";
+import { AlertTriangle, Calendar, ChevronDown, GripVertical, Lock, Star, UserCheck, Zap } from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority } from "./types";
 import { OverdueBadge } from "./overdue";
@@ -78,6 +78,12 @@ export function TaskCard({
               {task.committee}
             </span>
           )}
+          {task.performanceReview?.rating ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200" title={`Rated ${task.performanceReview.rating}/5 stars by Leader`}>
+              <Star size={10} className="fill-amber-400 text-amber-500" />
+              {task.performanceReview.rating}/5 Rating
+            </span>
+          ) : null}
           <OverdueBadge task={task} />
         </div>
 

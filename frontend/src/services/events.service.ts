@@ -289,3 +289,19 @@ export async function downloadTaskAttachment(user: User | null, eventId: string,
   const response = await requestTask(user, eventId, taskId, `/attachments/${encodeURIComponent(attachmentId)}`);
   return response.blob();
 }
+
+export async function rateTaskInEvent(
+  user: User | null,
+  eventId: string,
+  taskId: string,
+  rating: number,
+  feedback?: string
+): Promise<Task> {
+  const response = await requestTask(user, eventId, taskId, "/rate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating, feedback })
+  });
+  return (await response.json()).task;
+}
+

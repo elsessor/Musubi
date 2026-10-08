@@ -15,6 +15,7 @@ import {
   Save,
   Search,
   SlidersHorizontal,
+  Star,
   Table,
   Trash2,
   Users,
@@ -40,7 +41,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
-import { updateEventFirestore, updateTaskStatus } from "@/services/events.service";
+import { updateEventFirestore, updateTaskStatus, rateTaskInEvent } from "@/services/events.service";
+import { TaskRatingModal } from "./TaskRatingModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
 const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
@@ -93,6 +95,7 @@ export function KanbanBoard({
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [statusModalTarget, setStatusModalTarget] = useState<"Completed" | "Cancelled" | null>(null);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
+  const [ratingTaskTarget, setRatingTaskTarget] = useState<Task | null>(null);
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
   const [isSavingEventStatus, setIsSavingEventStatus] = useState(false);
@@ -350,6 +353,9 @@ export function KanbanBoard({
     const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: targetStatus } : t));
     if (isLeader) {
       syncEvent(updatedTasks);
+      if (targetStatus === "Completed" || targetStatus === "Done") {
+        setRatingTaskTarget({ ...target, status: targetStatus });
+      }
       return;
     }
     const completed = updatedTasks.filter((task) => task.status === "Completed" || task.status === "Done").length;
@@ -366,6 +372,29 @@ export function KanbanBoard({
       onUpdateEvent?.(currentEvent);
       showToast({ title: "Status not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
     });
+  }
+
+  async function handleRateTask(taskId: string, rating: number, feedback: string) {
+    try {
+      const updatedTask = await rateTaskInEvent(firebaseUser, currentEvent.id, taskId, rating, feedback);
+      handleSavedTask(updatedTask);
+      showToast({ title: "Rating saved", description: "Member performance rating recorded successfully.", tone: "success" });
+    } catch {
+      const target = tasks.find((t) => t.id === taskId);
+      if (target) {
+        const updatedTarget: Task = {
+          ...target,
+          performanceReview: {
+            rating,
+            reviewerUID: firebaseUser?.uid,
+            reviewedAt: new Date().toISOString()
+          }
+        };
+        const updatedTasks = tasks.map((t) => (t.id === taskId ? updatedTarget : t));
+        syncEvent(updatedTasks);
+        showToast({ title: "Rating saved", description: "Member performance rating recorded successfully.", tone: "success" });
+      }
+    }
   }
 
   function handleSavedTask(updatedTask: Task) {
@@ -533,6 +562,29 @@ export function KanbanBoard({
           </div>
         )}
       </div>
+
+      {/* Leader Unrated Tasks Review Banner */}
+      {isLeader && (() => {
+        const unrated = tasks.filter((t) => (t.status === "Completed" || t.status === "Done") && !t.performanceReview?.rating);
+        if (unrated.length === 0) return null;
+        return (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 border border-amber-200/90 p-3 text-xs text-amber-900 shadow-2xs">
+            <div className="flex items-center gap-2 font-semibold">
+              <Star size={16} className="text-amber-500 fill-amber-400 shrink-0" />
+              <span>
+                You have <strong className="font-extrabold text-amber-950">{unrated.length}</strong> completed subtask{unrated.length > 1 ? "s" : ""} waiting for your leader performance rating.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRatingTaskTarget(unrated[0])}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 font-bold text-white shadow-xs hover:bg-amber-700 transition cursor-pointer"
+            >
+              Review &amp; Rate Subtask
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Event Header Summary Card */}
       <div className="mb-5 min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-6">
@@ -943,6 +995,15 @@ export function KanbanBoard({
         onReorderStatusOrder={handleReorderStatusOrder}
         onDeleteStatus={handleDeleteCustomStatus}
       />
+
+      {ratingTaskTarget && (
+        <TaskRatingModal
+          isOpen={Boolean(ratingTaskTarget)}
+          onClose={() => setRatingTaskTarget(null)}
+          task={ratingTaskTarget}
+          onRate={handleRateTask}
+        />
+      )}
 
       {isLeader && confirmDeleteEvent && onDeleteEvent && (
         <ConfirmDeleteModal
