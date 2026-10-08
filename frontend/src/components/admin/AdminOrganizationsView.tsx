@@ -185,7 +185,7 @@ export function AdminOrganizationsView() {
                 </p>
               </div>
 
-              {/* Bottom Row: Members / Goals and Code */}
+              {/* Bottom Row: Members / Committees and Code */}
               <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
                 <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
                   <span>{org.memberCount} members</span>

@@ -6,6 +6,7 @@ import { BookOpen, CalendarDays, Plus, X, Zap } from "lucide-react";
 import { AtomizerForm } from "./AtomizerForm";
 import { EventsDashboard } from "./EventsDashboard";
 import { KanbanBoard } from "./KanbanBoard";
+import { TaskAssigneeMembersContext } from "./TaskAssignee";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import type { CustomStatusConfig } from "./statusUtils";
 import type { Event, Task } from "./types";
@@ -214,6 +215,7 @@ export function EventsTasksView() {
   }
 
   return (
+    <TaskAssigneeMembersContext.Provider value={members}>
     <div className="flex h-full flex-col">
       {/* Tab navigation */}
       <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
@@ -379,6 +381,7 @@ export function EventsTasksView() {
         </div>
       )}
     </div>
+    </TaskAssigneeMembersContext.Provider>
   );
 }
 

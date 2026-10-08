@@ -109,7 +109,7 @@ export async function runAtomizerFlow(input: AtomizeInput) {
       actorRole: input.userRole ?? "Student Leader",
       action: `AI Task Atomizer generated ${result.tasks.length} tasks for "${input.eventName}" via Genkit`,
       actionCategory: "AI Agent Actions",
-      targetType: "Event Goal",
+      targetType: "Event",
       targetName: input.eventName,
       context: {
         taskCount: result.tasks.length,

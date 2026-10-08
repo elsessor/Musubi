@@ -7,6 +7,8 @@ import { AppError } from "../utils/AppError.js";
 import { writeAuditLog } from "../utils/auditLog.js";
 import { recordTaskPerformance } from "../utils/taskPerformance.js";
 import { memberForViewer, taskForViewer } from "../utils/profileAccess.js";
+import { assertCanUpdateOrganization } from "../utils/organizationPermissions.js";
+import { renameCommitteeReferences } from "../utils/committeeReferences.js";
 import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
@@ -650,6 +652,20 @@ export async function updateOrganizationCommittee(
     await batch.commit();
   }
 
+  const previousName = committeeSnapshot.data()?.name;
+  if (typeof previousName === "string" && previousName !== name) {
+    const events = await firestore.collection("events").where("orgId", "==", organizationId).get();
+    for (const event of events.docs) {
+      if (!Object.keys(renameCommitteeReferences(event.data(), previousName, name)).length) continue;
+      await firestore.runTransaction(async (transaction) => {
+        const current = await transaction.get(event.ref);
+        if (!current.exists || current.data()?.orgId !== organizationId) return;
+        const update = renameCommitteeReferences(current.data()!, previousName, name);
+        if (Object.keys(update).length) transaction.update(event.ref, update);
+      });
+    }
+  }
+
   writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role, action: "Committee updated", actionCategory: "Organization", targetType: "Committee", targetName: name, orgId: organizationId });
   return { id: committeeId, name, description, headMemberUID: input.headMemberId };
 }
@@ -757,7 +773,7 @@ export async function getOrganizationManagementDetail(uid: string, organizationI
     firestore.collection("users").where("organizationId", "==", snapshot.id).get(),
     ref.collection("members").get(),
     ref.collection("committees").get(),
-    ref.collection("goals").get()
+    firestore.collection("events").where("orgId", "==", snapshot.id).get()
   ]);
   const memberSource = membersSnapshot.size ? membersSnapshot : usersSnapshot;
   const members = memberSource.docs.map((document) => { const data = document.data(); return { id: document.id, name: typeof data.fullName === "string" ? data.fullName : typeof data.name === "string" ? data.name : "Unnamed member", role: typeof data.role === "string" ? data.role : "Organization Member", position: typeof data.position === "string" ? data.position : "—", committeeId: typeof data.committeeId === "string" ? data.committeeId : null }; });
@@ -768,9 +784,7 @@ export async function getOrganizationManagementDetail(uid: string, organizationI
 
 export async function updateOrganizationForAdmin(uid: string, organizationId: string, input: { name?: string; type?: string; description?: string; setupStatus?: string; organizationConfig?: { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } }) {
   const currentUser = await getCurrentUser(uid);
-  if (currentUser.role !== "Admin" && currentUser.organizationId !== organizationId) {
-    throw new AppError("Organization leader or administrator access is required.", 403);
-  }
+  assertCanUpdateOrganization(currentUser, organizationId, input);
   const ref = firestore.collection("organizations").doc(organizationId);
   const before = await ref.get();
   if (!before.exists) throw new AppError("Organization was not found.", 404);
@@ -1347,7 +1361,7 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
     actorRole: user.role,
     action: actionMsg,
     actionCategory: "Events & Tasks",
-    targetType: "Event Goal",
+    targetType: "Event",
     targetName: typeof beforeData.title === "string" ? beforeData.title : "Event",
     orgId: user.organizationId ?? (typeof beforeData.orgId === "string" ? beforeData.orgId : null)
   });
@@ -1550,5 +1564,3 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
 
   return list;
 }
-
-

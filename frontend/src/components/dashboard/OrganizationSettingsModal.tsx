@@ -58,7 +58,7 @@ export function OrganizationSettingsModal({
             </select>
           </label>
 
-          <SettingToggle label="AI task assistance" description="Allow AI to break event goals into suggested tasks." checked={settings.aiTaskAtomization} onChange={(checked) => setSettings((current) => ({ ...current, aiTaskAtomization: checked }))} />
+          <SettingToggle label="AI task assistance" description="Allow AI to break events into suggested tasks." checked={settings.aiTaskAtomization} onChange={(checked) => setSettings((current) => ({ ...current, aiTaskAtomization: checked }))} />
           <SettingToggle label="Nudge monitoring" description="Enable reminders for task follow-up." checked={settings.nudgeMonitoring} onChange={(checked) => setSettings((current) => ({ ...current, nudgeMonitoring: checked }))} />
           {error ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
         </div>

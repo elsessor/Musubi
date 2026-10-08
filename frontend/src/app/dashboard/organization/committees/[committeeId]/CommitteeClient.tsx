@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ClipboardList, Search } from "lucide-react";
+import { ArrowLeft, ClipboardList, Plus, Search } from "lucide-react";
 
 import { CommitteeHeader } from "@/components/dashboard/CommitteeHeader";
+import { EditCommitteeModal, type EditCommitteeInput } from "@/components/dashboard/EditCommitteeModal";
 import { OrganizationMemberTable } from "@/components/dashboard/OrganizationMemberTable";
-import { subscribeEventsFirestore } from "@/services/events.service";
+import { fetchEvents, subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
 import type { MemberProfile } from "@/components/dashboard/MemberProfileModal";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -20,11 +21,13 @@ import {
   getOrganizationCommittees,
   getOrganizationMembers,
   subscribeOrganizationMembersFirestore,
+  updateOrganizationCommittee,
   type OrganizationCommitteeRecord,
   type OrganizationMember,
   type OrganizationRecord
 } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 import { getDashboardNavItems } from "@/utils/routes";
 
 function dateLabel() {
@@ -39,6 +42,7 @@ export function CommitteeClient() {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const authLoading = useAuthStore((state) => state.loading);
   const logout = useLogout();
+  const showToast = useToastStore((state) => state.showToast);
 
   const [profileMember, setProfileMember] = useState<MemberProfile | null>(null);
   const [committee, setCommittee] = useState<OrganizationCommitteeRecord | null>(null);
@@ -49,6 +53,7 @@ export function CommitteeClient() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [addMembersOpen, setAddMembersOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !profile) router.replace("/sign-in");
@@ -89,6 +94,7 @@ export function CommitteeClient() {
         id: member.id,
         initials: member.name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?",
         name: member.name,
+        profilePicture: member.profilePicture,
         role: member.position || member.role,
         committee: committee?.name || "Not assigned",
         skills: member.skills,
@@ -109,6 +115,27 @@ export function CommitteeClient() {
     await addOrganizationCommitteeMembers(firebaseUser, profile.organizationId, committee.id, memberIds);
     setMembers((current) => current.map((member) => (memberIds.includes(member.id) ? { ...member, committeeId: committee.id, committeeName: committee.name } : member)));
     setAddMembersOpen(false);
+    showToast({ title: "Members added", description: "The selected members have been added to the committee.", tone: "success" });
+  }
+
+  async function editCommittee(input: EditCommitteeInput) {
+    if (!firebaseUser || !profile?.organizationId || !committee || profile.role !== "Student Leader") {
+      throw new Error("Only this organization's student leader can edit committees.");
+    }
+    const memberIds = members.filter((member) => member.committeeId === committee.id).map((member) => member.id);
+    if (input.headMemberId && !memberIds.includes(input.headMemberId)) memberIds.push(input.headMemberId);
+    const result = await updateOrganizationCommittee(firebaseUser, profile.organizationId, committee.id, { ...input, memberIds });
+    setCommittee((current) => current ? { ...current, ...result.committee } : result.committee);
+    setMembers((current) => current.map((member) => memberIds.includes(member.id)
+      ? { ...member, committeeId: committee.id, committeeName: result.committee.name }
+      : member));
+    setEvents((current) => current.map((event) => event.committee?.trim().toLowerCase() === committee.name.trim().toLowerCase()
+      ? { ...event, committee: result.committee.name }
+      : event));
+    showToast({ title: "Committee updated", description: "Your changes have been saved successfully.", tone: "success" });
+    // Refresh authoritative data without treating a successful save as failed if the refresh is interrupted.
+    void getOrganizationMembers(firebaseUser, profile.organizationId).then(setMembers).catch(() => {});
+    void fetchEvents(firebaseUser, profile.organizationId, true).then(setEvents).catch(() => {});
   }
 
   if (authLoading || !profile) {
@@ -149,11 +176,13 @@ export function CommitteeClient() {
               headName={members.find((member) => member.id === committee.headMemberUID)?.name}
               memberCount={committeeRows.length}
               activeGoals={events.filter((event) => event.status.trim().toLowerCase() === "active" && event.committee?.trim().toLowerCase() === committee.name.trim().toLowerCase()).length}
+              onEdit={profile.role === "Student Leader" ? () => setEditOpen(true) : undefined}
             />
             <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
               <h2 className="text-xl font-bold">Committee members ({committeeRows.length})</h2>
               {profile.role === "Student Leader" ? (
-                <button type="button" onClick={() => setAddMembersOpen(true)} className="rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white">
+                <button type="button" onClick={() => setAddMembersOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white">
+                  <Plus className="size-4" aria-hidden="true" />
                   Add members
                 </button>
               ) : null}
@@ -180,6 +209,9 @@ export function CommitteeClient() {
       ) : null}
       {addMembersOpen && committee ? (
         <AddCommitteeMembersModal members={members.filter((member) => member.committeeId !== committee.id)} onClose={() => setAddMembersOpen(false)} onAdd={addMembers} />
+      ) : null}
+      {editOpen && committee && profile.role === "Student Leader" ? (
+        <EditCommitteeModal committee={committee} members={members} onClose={() => setEditOpen(false)} onSave={editCommittee} />
       ) : null}
     </DashboardLayout>
   );

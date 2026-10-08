@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { SuccessDialog } from "@/components/ui/SuccessDialog";
 import { completeOnboarding, getOrganizationDirectory, joinOrganization, type OrganizationDirectoryOption } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { OrganizationTypeSelect } from "@/components/dashboard/OrganizationTypeSelect";
 import { PROGRAM_OPTIONS, SKILL_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
 
 type Role = "leader" | "member";
@@ -276,7 +277,7 @@ export default function OnboardingPage() {
           {stage === "role" && <>
             <SectionTitle title="What is your role?" description="This helps us tailor your workspace and the tools you can access." />
             <div className="mt-6 space-y-3">
-              <RoleOption active={role === "leader"} icon="★" title="Student Leader" description="I manage an organization, set goals, and delegate work." onClick={() => setRole("leader")} />
+              <RoleOption active={role === "leader"} icon="★" title="Student Leader" description="I manage an organization, plan events, and delegate work." onClick={() => setRole("leader")} />
               <RoleOption active={role === "member"} icon="♟" title="Organization Member" description="I collaborate on tasks assigned by my organization." onClick={() => setRole("member")} />
             </div>
             <PrimaryButton className="mt-7" disabled={!role} onClick={continueFromRole}>Continue <span aria-hidden>→</span></PrimaryButton>
@@ -299,7 +300,7 @@ export default function OnboardingPage() {
             </div>}
             {isNewOrganization ? <div className="mt-6 space-y-4">
               <Field label="Organization name"><input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} className="onboarding-input" placeholder="e.g. Computer Science Society" /></Field>
-              <Field label="Organization type"><CustomSelect value={organizationType} onChange={setOrganizationType} options={["Academic", "Arts & Culture", "Sports", "Student Government", "Community Service"]} placeholder="Select a type" className="w-full" /></Field>
+              <Field label="Organization type"><OrganizationTypeSelect value={organizationType} onChange={setOrganizationType} /></Field>
               <Field label="Organization description"><textarea value={organizationDescription} onChange={(event) => setOrganizationDescription(event.target.value)} className="onboarding-input min-h-24 h-auto py-3" placeholder="Describe your organization, its purpose, and planned activities." /></Field>
               <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">New organization registrations are reviewed by a Musubi administrator before activation.</p>
             </div> : <div className="mt-6">

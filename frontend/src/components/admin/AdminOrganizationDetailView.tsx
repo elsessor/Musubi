@@ -125,7 +125,7 @@ export function AdminOrganizationDetailView({ organizationId, onBack }: AdminOrg
   const orgCode = `ORG-${org.id.slice(0, 6).toUpperCase()}`;
 
   const totalMembers = detail.members ? detail.members.length : 0;
-  const totalGoals = detail.goalSummary?.total ?? (detail.committees ? detail.committees.length : 0);
+  const totalGoals = Object.values(detail.goalSummary || {}).reduce((sum, count) => sum + count, 0);
 
   const membersList = (detail.members || []).map((m, idx) => ({
     id: m.id,
@@ -182,7 +182,7 @@ export function AdminOrganizationDetailView({ organizationId, onBack }: AdminOrg
           </div>
           <div>
             <p className="text-2xl font-extrabold text-indigo-600">{totalGoals}</p>
-            <p className="text-xs font-medium text-slate-400 mt-0.5">Goals / Committees</p>
+            <p className="text-xs font-medium text-slate-400 mt-0.5">Events</p>
           </div>
           <div>
             <p className="text-2xl font-extrabold text-emerald-600">{setupStatus}</p>

@@ -41,7 +41,7 @@ export function RecentGoals({ goals }: RecentGoalsProps) {
     <article className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Recent Goals
+          Recent Events
         </h2>
         <Link className="text-sm font-semibold text-blue-600 transition hover:text-blue-700" href="/dashboard/events">
           View All →
@@ -56,8 +56,8 @@ export function RecentGoals({ goals }: RecentGoalsProps) {
         </div>
       ) : (
         <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-          <p className="text-sm font-medium text-slate-700">No goals yet</p>
-          <p className="mt-1 text-sm text-slate-500">Goals will appear here once they are created.</p>
+          <p className="text-sm font-medium text-slate-700">No events yet</p>
+          <p className="mt-1 text-sm text-slate-500">Events will appear here once they are created.</p>
         </div>
       )}
     </article>

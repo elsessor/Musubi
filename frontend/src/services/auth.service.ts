@@ -382,7 +382,7 @@ export async function getOrganization(user: User, organizationId: string): Promi
 export async function updateOrganizationDetails(
   user: User,
   organizationId: string,
-  input: { name?: string; type?: string; description?: string; setupStatus?: string; organizationConfig?: { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } }
+  input: { name?: string; type?: string; description?: string; organizationConfig?: { delegationMode: "Heuristic" | "Manual"; aiTaskAtomization: boolean; nudgeMonitoring: boolean } }
 ): Promise<OrganizationRecord> {
   const token = await user.getIdToken();
   const res = await fetch(`${API_BASE_URL}/auth/organizations/${organizationId}`, {

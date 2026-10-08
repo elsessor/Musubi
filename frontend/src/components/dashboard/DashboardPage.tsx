@@ -77,7 +77,7 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const [kpis, setKpis] = useState<DashboardKPI[]>([
-    { id: "active-goals", label: "Active Goals", value: 0, icon: "target", accent: "blue" },
+    { id: "active-goals", label: "Active Events", value: 0, icon: "target", accent: "blue" },
     { id: "total-subtasks", label: "Total Sub-Tasks", value: 0, icon: "briefcase", accent: "purple" },
     { id: "members-available", label: "Members Available", value: 0, icon: "users", accent: "green" },
     { id: "pending-delegations", label: "Pending Delegations", value: 0, icon: "clock", accent: "orange" }

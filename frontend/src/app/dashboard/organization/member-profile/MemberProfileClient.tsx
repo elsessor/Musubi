@@ -64,9 +64,9 @@ export function MemberProfileClient() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [authLoading, firebaseUser, memberId, profile, isOwner]);
 
-  const tasks = useMemo(() => canViewPerformance ? (member?.assignedTasks || []).map((task) => ({
+  const tasks = useMemo(() => (member?.assignedTasks || []).map((task) => ({
     ...task, eventId: task.eventId || "", eventTitle: task.eventTitle || ""
-  }) as ProfileTask) : [], [member, canViewPerformance]);
+  }) as ProfileTask), [member]);
 
   if (authLoading || !profile || isOwner) return <p role="status" className="p-8 text-sm text-slate-500">Loading profile…</p>;
   const user: ProfileOverviewUser = {

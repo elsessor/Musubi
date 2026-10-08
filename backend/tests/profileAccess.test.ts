@@ -10,12 +10,17 @@ const data = { fullName: "Other Member", role: "Organization Member", organizati
 const task = { id: "task", title: "Exhibit setup", assignedMemberUID: "other", assignedMemberName: "Other Member", status: "Completed", completedAt: "2026-10-08T10:00:00", dueDate: "2026-10-08", performanceReview: { rating: 4, reviewerUID: "leader" } };
 const events = [{ id: "event", title: "Exhibit", tasks: [task, { ...task, id: "active", status: "Awaiting permits" }] }];
 
-test("members receive only collaboration fields on another member's profile", () => {
+test("members can see others' subtasks while performance and personal fields stay private", () => {
   const profile = memberForViewer(member, "other", data, events);
   assert.equal(profile.name, "Other Member");
   assert.equal(profile.availability, "Available");
   assert.equal(memberForViewer(member, "other", { ...data, status: "On Leave" }, events).availability, "On Leave");
-  for (const key of ["workload", "reliability", "assignedTasks", "email", "birthdate", "performanceReview"]) {
+  assert.equal(profile.assignedTasks.length, 2);
+  assert.equal(profile.assignedTasks[0].title, task.title);
+  assert.equal(profile.assignedTasks[0].status, task.status);
+  assert.equal(profile.assignedTasks[0].eventId, "event");
+  for (const key of ["performanceReview", "matchPercentage", "completedAt"]) assert.equal(key in profile.assignedTasks[0], false, key);
+  for (const key of ["workload", "reliability", "email", "birthdate", "performanceReview"]) {
     assert.equal(key in profile, false, key);
   }
 });

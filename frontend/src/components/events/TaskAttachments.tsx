@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Download, ExternalLink, FileText, Image as ImageIcon, Link as LinkIcon, Loader2, Paperclip, Plus, X } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 import { addTaskFileAttachment, addTaskLinkAttachment, downloadTaskAttachment } from "@/services/events.service";
 import type { Task, TaskAttachment } from "./types";
 import { AttachmentPreview } from "./AttachmentPreview";
@@ -52,6 +53,7 @@ export function TaskAttachments({ eventId, task, canAdd, onTaskUpdated }: {
     try {
       for (const file of files) saved(await addTaskFileAttachment(firebaseUser, eventId, task.id, file));
       setShowOptions(false);
+      useToastStore.getState().showToast({ title: "Attachments added", description: "Your files have been saved successfully.", tone: "success" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The attachment could not be saved. Please try again.");
     } finally { setBusy(false); }
@@ -69,6 +71,7 @@ export function TaskAttachments({ eventId, task, canAdd, onTaskUpdated }: {
     try {
       saved(await addTaskLinkAttachment(firebaseUser, eventId, task.id, { name: linkName.trim(), url: url.href }));
       setLinkName(""); setLinkUrl(""); setShowLink(false); setShowOptions(false);
+      useToastStore.getState().showToast({ title: "Link added", description: "Your link has been saved successfully.", tone: "success" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The link could not be saved. Please try again.");
     } finally { setBusy(false); }

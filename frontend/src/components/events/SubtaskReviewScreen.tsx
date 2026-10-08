@@ -304,7 +304,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
               }`}
           >
             <Zap size={15} />
-            {isPublished ? "Goal Published" : `Publish Goal (${subtasks.length} subtasks)`}
+            {isPublished ? "Event Published" : `Publish Event (${subtasks.length} subtasks)`}
           </button>
         </div>
       </div>
@@ -478,10 +478,10 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
         />
       )}
 
-      {/* Publish Goal Dialog */}
+      {/* Publish Event Dialog */}
       {showPublishModal && (
         <OldPublishGoalModal
-          goalName={currentGoal.eventName || "Goal Breakdown"}
+          goalName={currentGoal.eventName || "Event Breakdown"}
           subtasks={subtasks}
           isPublishing={publishing}
           onConfirm={() => void handleConfirmPublish()}
@@ -1314,7 +1314,7 @@ function OldPublishGoalModal({
             <Zap size={20} />
           </span>
           <div>
-            <h3 className="text-base font-extrabold text-slate-900">Publish Goal Confirmation</h3>
+            <h3 className="text-base font-extrabold text-slate-900">Publish Event Confirmation</h3>
             <p className="text-xs text-slate-500">Transition status from Draft to Active</p>
           </div>
         </div>

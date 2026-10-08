@@ -22,6 +22,7 @@ import {
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { OrganizationMemberTable } from "@/components/dashboard/OrganizationMemberTable";
+import { OrganizationTypeSelect } from "@/components/dashboard/OrganizationTypeSelect";
 import { useLogout } from "@/hooks/useLogout";
 import { OrganizationAccessModal } from "@/components/dashboard/OrganizationAccessModal";
 import { CreateCommitteeModal } from "@/components/dashboard/CreateCommitteeModal";
@@ -47,7 +48,9 @@ import {
 } from "@/services/auth.service";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
+import { AvailabilityBadge } from "@/components/dashboard/AvailabilityBadge";
 import { useAuthStore } from "@/store/authStore";
+import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
 import { useToastStore } from "@/store/toastStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { AnnouncementsView, PostAnnouncementModal } from "@/components/dashboard/AnnouncementsView";
@@ -59,7 +62,7 @@ import {
 
 type OrganizationTab = "overview" | "members" | "committees" | "announcements";
 
-type MemberRow = { id: string; initials: string; name: string; role: string; committee: string; skills: string[]; workload: number; reliability: string; availability: string };
+type MemberRow = { profilePicture?: string | null; id: string; initials: string; name: string; role: string; committee: string; skills: string[]; workload: number; reliability: string; availability: string };
 type GoalRow = { title: string; progress: number; due: string; status: string };
 
 function greetingDate() {
@@ -280,6 +283,7 @@ export default function OrganizationPage() {
               .join("")
               .toUpperCase() || "?",
           name: member.name,
+          profilePicture: member.profilePicture,
           role: member.position || member.role,
           committee:
             member.committeeName ||
@@ -470,7 +474,7 @@ function Overview({
         </div>
         <div className={`grid grid-cols-2 divide-x divide-y divide-[#dce3ed] ${isLeader ? "lg:grid-cols-4 lg:divide-y-0" : "lg:grid-cols-2 lg:divide-y-0"}`}>
           <Stat value={String(memberCount)} label="Total Members" color="text-[#2868ed]" />
-          <Stat value={String(activeGoalsCount)} label="Active Goals" color="text-[#7c3aed]" />
+          <Stat value={String(activeGoalsCount)} label="Active Events" color="text-[#7c3aed]" />
           {isLeader ? (
             <>
               <Stat value={organizationSettings.delegationMode} label="Delegation" color="text-amber-500" />
@@ -518,6 +522,7 @@ function Overview({
                       key={m.id || m.name}
                       initials={initials}
                       name={m.name}
+                      profilePicture={m.profilePicture}
                       role={m.position || m.role}
                       status={m.availability || "Available"}
                       isYou={isYou}
@@ -537,8 +542,8 @@ function Overview({
       <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white">
         <div className="flex min-h-12 items-center justify-between gap-3 px-4 py-3 border-b border-[#e5eaf1]">
           <div>
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">GOALS</h3>
-            <p className="mt-0.5 text-[11px] text-slate-500">Organizational goals - managed in Goals &amp; Tasks</p>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">EVENTS</h3>
+            <p className="mt-0.5 text-[11px] text-slate-500">Organizational events - managed in Events &amp; Tasks</p>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-bold">
             <span className="text-emerald-600">{doneGoalsCount} done</span>
@@ -563,7 +568,7 @@ function Overview({
           </div>
         ) : (
           <div className="px-4 py-6 text-center text-xs font-medium text-slate-500">
-            No organizational goals set yet. Goals will appear here once created in Goals &amp; Tasks.
+            No organizational events yet. Events will appear here once created in Events &amp; Tasks.
           </div>
         )}
       </article>
@@ -591,7 +596,9 @@ function OrganizationDetailsCard({
   const [name, setName] = useState(organization.name);
   const [type, setType] = useState(organization.type);
   const [description, setDescription] = useState(organization.description || "");
-  const [setupStatus, setSetupStatus] = useState(organization.status === "active" ? "Complete" : organization.status || "Complete");
+  const setupStatus = organization.status === "active" ? "Complete" : organization.status || "Not set";
+  const viewerRole = useAuthStore((state) => state.profile?.role);
+  const canEditDetails = viewerRole === "Student Leader" || viewerRole === "Admin";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -602,9 +609,8 @@ function OrganizationDetailsCard({
 
   function handleStartEdit() {
     setName(organization.name || "University Student Council");
-    setType(organization.type || "Governing");
+    setType(organization.type || "");
     setDescription(organization.description || defaultDescription);
-    setSetupStatus(organization.status === "active" ? "Complete" : organization.status || "Complete");
     setError("");
     setIsEditing(true);
   }
@@ -615,18 +621,18 @@ function OrganizationDetailsCard({
   }
 
   async function handleSave() {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canEditDetails) return;
     setSaving(true);
     setError("");
     try {
       const updated = await updateOrganizationDetails(firebaseUser, organization.id, {
         name: name.trim(),
         type: type.trim(),
-        description: description.trim(),
-        setupStatus: setupStatus.trim().toLowerCase() === "complete" ? "active" : setupStatus.trim()
+        description: description.trim()
       });
       onUpdate(updated);
       setIsEditing(false);
+      useToastStore.getState().showToast({ title: "Organization updated", description: "Your changes have been saved successfully.", tone: "success" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update organization details.");
     } finally {
@@ -636,7 +642,7 @@ function OrganizationDetailsCard({
 
   if (isEditing) {
     return (
-      <article className="overflow-hidden rounded-2xl border border-[#dce3ed] bg-white shadow-sm">
+      <article className="rounded-2xl border border-[#dce3ed] bg-white shadow-sm">
         <div className="flex min-h-12 items-center justify-between gap-3 px-5 py-3 border-b border-[#e5eaf1]">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             ORGANIZATION DETAILS
@@ -685,12 +691,9 @@ function OrganizationDetailsCard({
             <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">
               TYPE
             </label>
-            <input
-              type="text"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-[13px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 transition"
-            />
+            <div className="mt-1.5">
+              <OrganizationTypeSelect value={type} onChange={setType} disabled={saving} buttonClassName="rounded-xl text-[13px] font-medium" />
+            </div>
           </div>
 
           <div>
@@ -709,12 +712,7 @@ function OrganizationDetailsCard({
             <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">
               SETUP STATUS
             </label>
-            <input
-              type="text"
-              value={setupStatus}
-              onChange={(e) => setSetupStatus(e.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-[13px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 transition"
-            />
+            <p className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-[13px] font-medium text-slate-600">{setupStatus}</p>
           </div>
         </div>
       </article>
@@ -727,14 +725,14 @@ function OrganizationDetailsCard({
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           ORGANIZATION DETAILS
         </h3>
-        <button
+        {canEditDetails && <button
           onClick={handleStartEdit}
           className="flex items-center gap-1.5 text-[11px] font-semibold text-[#2868ed] hover:text-blue-700 transition"
           type="button"
         >
           <Pencil className="size-3" />
           Edit
-        </button>
+        </button>}
       </div>
 
       <div className="p-5">
@@ -746,19 +744,17 @@ function OrganizationDetailsCard({
 
       <DetailRow label="Org UID" value={organization.id} />
       <DetailRow label="Type" value={organization.type || "Governing"} />
-      <DetailRow label="Setup status" value={organization.status === "active" ? "Complete" : organization.status || "Complete"} />
+      <DetailRow label="Setup status" value={setupStatus} />
       <DetailRow label="Created at" value={formatDate(organization.createdAt)} />
     </article>
   );
 }
 
-function MemberPreviewRow({ initials, name, role, status, isYou }: { initials: string; name: string; role: string; status: string; isYou?: boolean }) {
+function MemberPreviewRow({ name, profilePicture, role, status, isYou }: { profilePicture?: string | null; initials: string; name: string; role: string; status: string; isYou?: boolean }) {
   return (
     <div className={`flex items-center justify-between px-4 py-3 text-[12px] transition ${isYou ? "bg-blue-50/60 font-medium" : ""}`}>
       <div className="flex items-center gap-3">
-        <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${isYou ? "bg-[#2563eb] ring-2 ring-blue-300" : "bg-[#213f68]"}`}>
-          {initials}
-        </span>
+        <MemberAvatar member={{ name, profilePicture }} className={`size-7 ${isYou ? "ring-2 ring-blue-300" : ""}`} fallbackClassName={isYou ? "bg-[#2563eb] text-[9px]" : "text-[9px]"} />
         <div>
           <div className="flex items-center gap-1.5">
             <p className={`font-semibold leading-tight ${isYou ? "text-[#1d4ed8]" : "text-slate-900"}`}>{name}</p>
@@ -771,7 +767,7 @@ function MemberPreviewRow({ initials, name, role, status, isYou }: { initials: s
           <p className="text-[11px] text-slate-500 leading-tight">{role}</p>
         </div>
       </div>
-      <Availability value={status} />
+      <AvailabilityBadge value={status} />
     </div>
   );
 }
@@ -828,11 +824,11 @@ function CommitteeCard({ committee, members, currentUserId, currentUserName }: {
         <p className="mt-1 text-xs leading-relaxed text-slate-500">{committee.description || "No description provided."}</p>
       </div>
       <div className="my-3 border-t border-slate-100" />
-      <p className="text-xs text-slate-700">Head: <span className="font-semibold">{head?.name || "Not assigned"}</span></p>
+      <p className="flex items-center gap-2 text-xs text-slate-700"><MemberAvatar member={head} className="size-6" />Head: <span className="font-semibold">{head?.name || "Not assigned"}</span></p>
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Members ({committeeMembers.length})</p>
       <div className="mt-2 flex flex-wrap gap-2">{committeeMembers.length ? committeeMembers.map((member) => {
         const isYou = Boolean((currentUserId && member.id === currentUserId) || (currentUserName && member.name.trim().toLowerCase() === currentUserName.trim().toLowerCase()));
-        return <span key={member.id} className={"flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium " + (isYou ? "bg-blue-100 font-bold text-[#1d4ed8] ring-1 ring-blue-300" : "bg-[#e8eef7] text-[#213f68]")}><span className={"flex size-4 items-center justify-center rounded-full text-[7px] text-white " + (isYou ? "bg-[#2563eb]" : "bg-[#213f68]")}>{member.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("")}</span>{member.name.split(" ")[0]}{isYou ? " (You)" : ""}</span>;
+        return <span key={member.id} className={"flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium " + (isYou ? "bg-blue-100 font-bold text-[#1d4ed8] ring-1 ring-blue-300" : "bg-[#e8eef7] text-[#213f68]")}><MemberAvatar member={member} className="size-4" fallbackClassName={isYou ? "bg-[#2563eb] text-[7px]" : "text-[7px]"} />{member.name.split(" ")[0]}{isYou ? " (You)" : ""}</span>;
       }) : <span className="text-xs text-slate-400">No members assigned.</span>}</div>
     </Link>
   );
@@ -845,5 +841,4 @@ function CardTitle({ title, subtitle, action, onActionClick }: { title: string; 
 function DetailRow({ label, value }: { label: string; value: string }) { return <div className="flex min-h-9 items-center justify-between gap-6 border-t border-[#e5eaf1] px-4 py-2.5 text-[11px]"><span className="uppercase font-semibold text-slate-500">{label}</span><span className="max-w-[65%] truncate font-medium text-slate-700">{value}</span></div>; }
 function ConfigRow({ label, value, tone }: { label: string; value: string; tone: "purple" | "green" | "gray" }) { return <div className="flex items-center justify-between border-t border-[#e5eaf1] px-4 py-4 text-[12px]"><span className="font-medium text-slate-800">{label}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${tone === "purple" ? "bg-violet-100 text-violet-700" : tone === "green" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{value}</span></div>; }
 function Stat({ value, label, color }: { value: string; label: string; color: string }) { return <div className="py-3 text-center"><p className={`text-[15px] font-bold ${color}`}>{value}</p><p className="mt-1 text-[10px] text-slate-500">{label}</p></div>; }
-function Availability({ value }: { value: string }) { const tone = value === "Available" ? "bg-emerald-50 text-emerald-600" : value === "Busy" ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-500"; return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${tone}`}><i className="size-1 rounded-full bg-current" />{value}</span>; }
 function GoalStatus({ status, customStatuses }: { status: string; customStatuses?: CustomStatusConfig[] }) { const tone = getStatusTheme(status, customStatuses).badge; return <span className={`rounded-full border px-2 py-0.5 text-[10px] ${tone}`}>{status}</span>; }

@@ -482,6 +482,8 @@ import { useRouter } from "next/navigation";
 import { Bell, Check, LogOut, Menu, Settings, User } from "lucide-react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 
+import { MemberAvatar } from "./MemberAvatar";
+import { getAvailabilityTheme } from "@/utils/availabilityTheme";
 import { getFirebaseDb } from "@/firebase/config";
 import { getOrganization } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
@@ -499,33 +501,12 @@ type TopHeaderProps = {
   onMenuToggle: () => void;
 };
 
-function Avatar({ name, role, availability }: { name: string; role: UserRole; availability?: string }) {
-  const initials = name
-    .split(" ")
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("");
-
-  const statusDotColor =
-    availability === "Busy"
-      ? "bg-amber-400"
-      : availability === "On Leave"
-      ? "bg-slate-400"
-      : "bg-emerald-500";
-
+function Avatar({ name, role, availability, profilePicture }: { name: string; role: UserRole; availability?: string; profilePicture?: string | null }) {
+  const statusDotColor = getAvailabilityTheme(availability).dot;
   return (
-    <div
-      className={`relative flex size-12 items-center justify-center rounded-full text-base font-extrabold text-white ${
-        role === "Admin" ? "bg-[#ef2360]" : "bg-[#213f68]"
-      }`}
-    >
-      {initials}
-      {role !== "Admin" ? (
-        <span
-          className={`absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-[#f1f4f8] ${statusDotColor} transition-colors duration-200`}
-        />
-      ) : null}
+    <div className="relative shrink-0">
+      <MemberAvatar member={{ name, profilePicture }} className="size-12" fallbackClassName={role === "Admin" ? "bg-[#ef2360] text-base font-extrabold" : "text-base font-extrabold"} />
+      {role !== "Admin" ? <span className={`absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-[#f1f4f8] ${statusDotColor} transition-colors duration-200`} /> : null}
     </div>
   );
 }
@@ -550,6 +531,7 @@ export function TopHeader({
   const [liveUser, setLiveUser] = useState({
     name,
     role,
+    profilePicture: profile?.profilePicture || firebaseUser?.photoURL || null,
     position: profile?.position || "",
     organizationId: profile?.organizationId || (null as string | null),
     email: profile?.email || firebaseUser?.email || "",
@@ -625,6 +607,7 @@ export function TopHeader({
         setLiveUser({
           name: liveName,
           role: liveRole,
+          profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : firebaseUser?.photoURL || null,
           position: typeof data.position === "string" ? data.position : "",
           organizationId: liveOrgId,
           email: liveEmail,
@@ -642,7 +625,7 @@ export function TopHeader({
     );
 
     return () => unsubscribe();
-  }, [userId, firebaseUser?.uid, firebaseUser?.email]);
+  }, [userId, firebaseUser?.uid, firebaseUser?.email, firebaseUser?.photoURL]);
 
   useEffect(() => {
     if (profile?.organizationId) {
@@ -651,6 +634,7 @@ export function TopHeader({
     if (profile?.organizationName && profile.organizationName.trim()) {
       setLiveOrganizationName(profile.organizationName);
     }
+    setLiveUser((prev) => ({ ...prev, profilePicture: profile?.profilePicture || firebaseUser?.photoURL || null }));
     if (profile?.email) {
       setLiveUser((prev) => ({ ...prev, email: profile.email }));
     }
@@ -658,7 +642,7 @@ export function TopHeader({
       const avail = profile.availability || profile.status || "Available";
       setLiveUser((prev) => ({ ...prev, availability: avail, status: avail }));
     }
-  }, [profile]);
+  }, [profile, firebaseUser?.photoURL]);
 
   // Fallback: If organizationId is present but organizationName is not yet set, fetch via API
   useEffect(() => {
@@ -807,7 +791,7 @@ export function TopHeader({
             onClick={() => setMenuOpen((current) => !current)}
             type="button"
           >
-            <Avatar availability={currentAvailability} name={liveUser.name} role={liveUser.role} />
+            <Avatar availability={currentAvailability} name={liveUser.name} role={liveUser.role} profilePicture={liveUser.profilePicture} />
           </button>
 
           {menuOpen ? (
@@ -834,14 +818,14 @@ export function TopHeader({
                 <button
                   className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
                     currentAvailability === "Available"
-                      ? "border-emerald-300/90 bg-emerald-50/70"
+                      ? getAvailabilityTheme("Available").badge
                       : "border-transparent hover:bg-slate-50"
                   }`}
                   onClick={() => handleAvailabilityChange("Available")}
                   type="button"
                 >
                   <div className="flex items-start gap-2.5">
-                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-emerald-500" />
+                    <span className={`mt-1 size-2.5 shrink-0 rounded-full ${getAvailabilityTheme("Available").dot}`} />
                     <div>
                       <p className="text-xs font-bold text-slate-900 leading-tight">Available</p>
                       <p className="mt-0.5 text-[11px] font-medium text-slate-400">
@@ -850,7 +834,7 @@ export function TopHeader({
                     </div>
                   </div>
                   {currentAvailability === "Available" ? (
-                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                    <div className={`flex size-5 shrink-0 items-center justify-center rounded-full ${getAvailabilityTheme("Available").bg} ${getAvailabilityTheme("Available").text}`}>
                       <Check className="size-3.5 stroke-[3]" />
                     </div>
                   ) : null}
@@ -860,14 +844,14 @@ export function TopHeader({
                 <button
                   className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
                     currentAvailability === "Busy"
-                      ? "border-amber-300/90 bg-amber-50/70"
+                      ? getAvailabilityTheme("Busy").badge
                       : "border-transparent hover:bg-slate-50"
                   }`}
                   onClick={() => handleAvailabilityChange("Busy")}
                   type="button"
                 >
                   <div className="flex items-start gap-2.5">
-                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-amber-400" />
+                    <span className={`mt-1 size-2.5 shrink-0 rounded-full ${getAvailabilityTheme("Busy").dot}`} />
                     <div>
                       <p className="text-xs font-bold text-slate-900 leading-tight">Busy</p>
                       <p className="mt-0.5 text-[11px] font-medium text-slate-400">
@@ -876,7 +860,7 @@ export function TopHeader({
                     </div>
                   </div>
                   {currentAvailability === "Busy" ? (
-                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                    <div className={`flex size-5 shrink-0 items-center justify-center rounded-full ${getAvailabilityTheme("Busy").bg} ${getAvailabilityTheme("Busy").text}`}>
                       <Check className="size-3.5 stroke-[3]" />
                     </div>
                   ) : null}
@@ -886,14 +870,14 @@ export function TopHeader({
                 <button
                   className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
                     currentAvailability === "On Leave"
-                      ? "border-slate-300/90 bg-slate-100/90"
+                      ? getAvailabilityTheme("On Leave").badge
                       : "border-transparent hover:bg-slate-50"
                   }`}
                   onClick={() => handleAvailabilityChange("On Leave")}
                   type="button"
                 >
                   <div className="flex items-start gap-2.5">
-                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-slate-400" />
+                    <span className={`mt-1 size-2.5 shrink-0 rounded-full ${getAvailabilityTheme("On Leave").dot}`} />
                     <div>
                       <p className="text-xs font-bold text-slate-900 leading-tight">On Leave</p>
                       <p className="mt-0.5 text-[11px] font-medium text-slate-400">
@@ -902,7 +886,7 @@ export function TopHeader({
                     </div>
                   </div>
                   {currentAvailability === "On Leave" ? (
-                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700">
+                    <div className={`flex size-5 shrink-0 items-center justify-center rounded-full ${getAvailabilityTheme("On Leave").bg} ${getAvailabilityTheme("On Leave").text}`}>
                       <Check className="size-3.5 stroke-[3]" />
                     </div>
                   ) : null}

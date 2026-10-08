@@ -267,7 +267,9 @@ export function KanbanBoard({
     const update = isLeader
       ? { status: finalStatus, progress: finalProgress, tasks: updatedTasks }
       : { tasks: updatedTasks };
-    void updateEventFirestore(firebaseUser, event.id, update).catch((error) => {
+    void updateEventFirestore(firebaseUser, event.id, update).then(() => {
+      showToast({ title: "Changes saved", description: "Your changes have been saved successfully.", tone: "success" });
+    }).catch((error) => {
       console.error("Failed to update event:", error);
       setCurrentEvent(currentEvent);
       setTasks(tasks);
@@ -336,7 +338,10 @@ export function KanbanBoard({
     setTasks(updatedTasks);
     setCurrentEvent(updatedEvent);
     onUpdateEvent?.(updatedEvent);
-    void updateTaskStatus(firebaseUser, event.id, taskId, targetStatus).then(handleSavedTask).catch((error) => {
+    void updateTaskStatus(firebaseUser, event.id, taskId, targetStatus).then((savedTask) => {
+      handleSavedTask(savedTask);
+      showToast({ title: "Status updated", description: "Your task status has been saved successfully.", tone: "success" });
+    }).catch((error) => {
       setTasks(tasks);
       setCurrentEvent(currentEvent);
       onUpdateEvent?.(currentEvent);

@@ -4,6 +4,7 @@ import { getStatusTheme } from "@/components/events/statusUtils";
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
+import { AvailabilityBadge } from "./AvailabilityBadge";
 import { Award, ChevronLeft, ChevronRight, Edit2, Star } from "lucide-react";
 import {
   getProfileMetrics, getProfileTaskStatus, PROFILE_TASK_CAPACITY,
@@ -36,7 +37,7 @@ function formatBirthdate(value: string): string {
     : "Not set";
 }
 
-export function ProfileOverview({ user, tasks, loading, tasksLoading, profileError, tasksError, onEdit, title = "My Profile", showPerformance = true, showPersonalDetails = true, committee }: {
+export function ProfileOverview({ user, tasks, loading, tasksLoading, profileError, tasksError, onEdit, title = "My Profile", showPerformance = true, showTasks = true, showPersonalDetails = true, committee }: {
   user: ProfileOverviewUser;
   tasks: ProfileTask[];
   loading: boolean;
@@ -46,6 +47,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
   onEdit?: () => void;
   title?: string;
   showPerformance?: boolean;
+  showTasks?: boolean;
   showPersonalDetails?: boolean;
   committee?: string;
 }) {
@@ -61,12 +63,6 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
   const pages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
   const ready = !loading && !tasksLoading && !tasksError && !profileError;
   const initials = user.fullName.trim().split(/\s+/).slice(0, 2).map((name) => name[0]).join("").toUpperCase();
-  const availability = user.status.trim().toLowerCase();
-  const availabilityClass = availability === "available"
-    ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-300"
-    : availability === "busy"
-      ? "border-amber-400/30 bg-amber-400/15 text-amber-300"
-      : "border-slate-400/30 bg-slate-400/15 text-slate-300";
   const maxCompletions = Math.max(4, ...metrics.weeks.map((week) => week.count));
   const chartMaximum = Math.ceil(maxCompletions / 4) * 4;
   const topPerformer = metrics.rating !== null && metrics.rating >= 4.5;
@@ -108,9 +104,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
           <div className="min-w-0">
             <h2 className="break-words text-xl font-bold tracking-tight sm:text-2xl">{user.fullName || (loading ? "Loading profile…" : "Your profile")}</h2>
             <p className="mt-1 text-xs text-blue-100">{[user.organizationName, user.position || user.role].filter(Boolean).join(" — ") || "No organization set"}</p>
-            <span className={`mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${availabilityClass}`}>
-              <span className="size-1.5 rounded-full bg-current" />{user.status || "Status not set"}
-            </span>
+            <AvailabilityBadge value={user.status} className="mt-3" />
           </div>
         </div>
       </section>
@@ -127,8 +121,8 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
         </div>)}
       </section>}
 
-      <div className={`grid items-start gap-5 ${showPerformance ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : "grid-cols-1"}`}>
-        <div className={showPerformance ? "min-w-0 space-y-5" : "grid min-w-0 items-start gap-5 sm:grid-cols-2"}>
+      <div className={`grid items-start gap-5 ${showTasks ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : "grid-cols-1"}`}>
+        <div className={showTasks ? "min-w-0 space-y-5" : "grid min-w-0 items-start gap-5 sm:grid-cols-2"}>
           {showPerformance && <section aria-labelledby="performance-heading" className={`${cardClass} p-5`}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -168,8 +162,8 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
           </section>
         </div>
 
-        {showPerformance && <div className="min-w-0 space-y-5">
-          <section aria-labelledby="completion-heading" className={`${cardClass} p-5`}>
+        {showTasks && <div className="min-w-0 space-y-5">
+          {showPerformance && <section aria-labelledby="completion-heading" className={`${cardClass} p-5`}>
             <h3 id="completion-heading" className={labelClass}>Sub-task completion — this month</h3>
             <p className="sr-only">{new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}. {ready ? metrics.weeks.map((week) => `${week.label}: ${week.count}`).join(". ") : "Completion data unavailable."}</p>
             {ready && metrics.weeks.every((week) => week.count === 0) ? <p className="mt-3 text-xs text-slate-400">No recorded completions this month.</p> : null}
@@ -187,7 +181,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
               </div>
             </div>
             {ready && metrics.undatedCompletions > 0 ? <p className="mt-3 text-[10px] leading-relaxed text-slate-400">{metrics.undatedCompletions} completed {metrics.undatedCompletions === 1 ? "task has" : "tasks have"} no recorded completion date and {metrics.undatedCompletions === 1 ? "is" : "are"} excluded from the chart.</p> : null}
-          </section>
+          </section>}
 
           <section aria-labelledby="subtasks-heading" aria-busy={loading || tasksLoading} className={`${cardClass} p-5`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -210,8 +204,8 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
                         <h4 className="break-words text-xs font-medium leading-relaxed">{task.title}</h4>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
                           <span className="text-slate-400">• {task.eventTitle}</span>
-                          {typeof match === "number" && Number.isFinite(match) && match >= 0 && match <= 100 ? <span className="font-medium text-blue-600">{match}% match</span> : null}
-                          {task.performanceReview && <span className="font-medium text-amber-600">Leader rating: {task.performanceReview.rating}/5</span>}
+                          {showPerformance && typeof match === "number" && Number.isFinite(match) && match >= 0 && match <= 100 ? <span className="font-medium text-blue-600">{match}% match</span> : null}
+                          {showPerformance && task.performanceReview && <span className="font-medium text-amber-600">Leader rating: {task.performanceReview.rating}/5</span>}
                         </div>
                       </div>
                       <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] ${tone}`}>{task.status || "Pending"}</span>

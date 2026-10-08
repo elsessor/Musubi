@@ -300,7 +300,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
       setActiveGoalDraft(draft);
     } catch (err: unknown) {
       console.error("[Atomizer] Error running Genkit flow:", err);
-      const rawMsg = err instanceof Error ? err.message : "Failed to atomize goal using Genkit AI.";
+      const rawMsg = err instanceof Error ? err.message : "Failed to atomize event using Genkit AI.";
       if (rawMsg.includes("429") || rawMsg.includes("quota") || rawMsg.includes("Too Many Requests")) {
         setErrorMsg("Gemini API rate limit reached (5 requests/min on Free Tier). Please wait ~30 seconds before trying again.");
       } else {
@@ -386,7 +386,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Describe an event or task goal and the AI will break it into specific, actionable tasks with suggested assignees, deadlines, and priorities.
+              Describe an event and the AI will break it into specific, actionable tasks with suggested assignees, deadlines, and priorities.
             </p>
           </div>
         </div>
@@ -448,10 +448,10 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           </div>
         </div>
 
-        {/* Goal description */}
+        {/* Event description */}
         <div className="mt-5">
           <label className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
-            Goal Description
+            Event Description
           </label>
           <textarea
             value={goalDescription}
@@ -481,7 +481,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
             ) : (
               <Zap size={16} />
             )}
-            {isAtomizing ? "Atomizing with Genkit..." : "Atomize Goal with AI"}
+            {isAtomizing ? "Atomizing with Genkit..." : "Atomize Event with AI"}
           </button>
         </div>
       </div>

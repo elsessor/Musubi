@@ -32,6 +32,11 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
     .map((task: TaskRecord) => ({ ...task, eventId: event.id, eventTitle: event.title, customStatuses: event.customStatuses })));
   const unfinished = tasks.filter((task: TaskRecord) => !["completed", "done", "cancelled", "canceled"].includes(String(task.status).trim().toLowerCase()));
   const savedAvailability = data.availability || data.status;
+  const assignedTasks = tasks.map((task: TaskRecord) => ({
+    id: task.id, title: task.title || task.description || "Untitled Subtask", eventTitle: task.eventTitle, eventId: task.eventId,
+    dueDate: task.dueDate || "", deadline: task.deadline,
+    status: task.status, customStatuses: task.customStatuses || []
+  }));
   const publicProfile = {
     id, name,
     role: typeof data.role === "string" ? data.role : "Organization Member",
@@ -40,6 +45,7 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
     committeeId: typeof data.committeeId === "string" ? data.committeeId : null,
     committeeName: typeof data.committeeName === "string" ? data.committeeName : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
+    assignedTasks,
     availability: ["Available", "Busy", "On Leave"].includes(savedAvailability) ? savedAvailability : unfinished.length >= 4 ? "Busy" : "Available"
   };
   if (!canViewMemberPerformance(user, id)) return publicProfile;
@@ -59,10 +65,8 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
     ...publicProfile,
     workload: Math.min(100, Math.round(unfinished.length / 5 * 100)),
     reliability: dated ? `${Math.round(onTime / dated * 100)}%` : "—",
-    assignedTasks: tasks.map((task: TaskRecord) => ({
-      id: task.id, title: task.title || task.description || "Untitled Subtask", eventTitle: task.eventTitle, eventId: task.eventId,
-      dueDate: task.dueDate || "", deadline: task.deadline, completedAt: task.completedAt || null,
-      status: task.status, customStatuses: task.customStatuses || [], matchPercentage: task.matchPercentage,
+    assignedTasks: tasks.map((task: TaskRecord, index: number) => ({
+      ...assignedTasks[index], completedAt: task.completedAt || null, matchPercentage: task.matchPercentage,
       performanceReview: task.performanceReview || null
     }))
   };

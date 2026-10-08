@@ -4,11 +4,14 @@ import { getStatusTheme, type CustomStatusConfig } from "@/components/events/sta
 import { X } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import Link from "next/link";
+import { AvailabilityBadge } from "./AvailabilityBadge";
+import { MemberAvatar } from "./MemberAvatar";
 
 export type MemberProfile = {
   id?: string;
   initials: string;
   name: string;
+  profilePicture?: string | null;
   role: string;
   committee: string;
   skills: string[];
@@ -43,7 +46,7 @@ export function MemberProfileModal({
   const workloadColor =
     member.workload >= 80 ? "bg-rose-500" : member.workload >= 50 ? "bg-amber-400" : "bg-emerald-500";
   const assignedTasks = member.assignedTasks ?? [];
-  const visibleTasks = canViewPerformance ? assignedTasks.slice(0, 3) : [];
+  const visibleTasks = assignedTasks.slice(0, 3);
   const remainingTaskCount = Math.max(0, assignedTasks.length - visibleTasks.length);
   const returnTo = typeof window === "undefined" ? "/dashboard/organization?tab=members" : window.location.pathname + window.location.search;
   const fullProfileHref = viewerUID === member.id ? `/dashboard/profile?${new URLSearchParams({ returnTo })}`
@@ -60,9 +63,7 @@ export function MemberProfileModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 p-5 bg-slate-50/50">
           <div className="flex items-center gap-3">
-            <span className="flex size-12 items-center justify-center rounded-2xl bg-[#1e3a5f] text-base font-bold font-mono text-white shadow-sm">
-              {member.initials}
-            </span>
+            <MemberAvatar member={member} className="size-12 rounded-2xl shadow-sm" fallbackClassName="rounded-2xl text-base" />
             <div>
               <h2 id="member-profile-title" className="text-base font-bold text-slate-900 leading-tight">
                 {member.name}
@@ -126,26 +127,13 @@ export function MemberProfileModal({
             </div></>}
 
             <div>
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
-                  member.availability === "Available"
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-rose-100 text-rose-800"
-                }`}
-              >
-                <span
-                  className={`size-1.5 rounded-full ${
-                    member.availability === "Available" ? "bg-emerald-500" : "bg-rose-500"
-                  }`}
-                />
-                {member.availability}
-              </span>
+              <AvailabilityBadge value={member.availability} className="text-xs" />
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">Availability</p>
             </div>
           </div>
 
           {/* Member Assigned Subtasks */}
-          {canViewPerformance && assignedTasks.length > 0 && (
+          {assignedTasks.length > 0 && (
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -160,7 +148,7 @@ export function MemberProfileModal({
                     className="p-3 rounded-xl border border-slate-200/80 bg-white text-xs space-y-1"
                   >
                     <p className="font-bold text-slate-900">{task.title}</p>
-                    {task.performanceReview && <p className="text-[11px] text-slate-500">Leader performance rating: {task.performanceReview.rating}/5</p>}
+                    {canViewPerformance && task.performanceReview && <p className="text-[11px] text-slate-500">Leader performance rating: {task.performanceReview.rating}/5</p>}
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-slate-400 font-medium">• {task.eventTitle || "Campus Event"}</span>
                       <span

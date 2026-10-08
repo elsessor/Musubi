@@ -152,7 +152,7 @@ export default function AnalyticsPage() {
           />
           <StatCard
             title="AI Atomizations"
-            value={`${aiEventsCount} Goal${aiEventsCount === 1 ? "" : "s"}`}
+            value={`${aiEventsCount} Event${aiEventsCount === 1 ? "" : "s"}`}
             change={`${aiSubtasksCount} subtask${aiSubtasksCount === 1 ? "" : "s"} generated`}
             icon={Zap}
             color="text-amber-500"
@@ -170,7 +170,7 @@ export default function AnalyticsPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">Event &amp; Task Velocity</h3>
-                  <p className="text-xs text-slate-400">Real-time status breakdown across all active organizational goals</p>
+                  <p className="text-xs text-slate-400">Real-time status breakdown across all active organizational events</p>
                 </div>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
@@ -212,7 +212,7 @@ export default function AnalyticsPage() {
               </h4>
               {events.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400">
-                  No published events found. Create an event or atomize a goal to track analytics.
+                  No published events found. Create an event or atomize an event to track analytics.
                 </div>
               ) : (
                 events.map((event) => {
@@ -289,7 +289,7 @@ export default function AnalyticsPage() {
 
                 <div className="flex items-center justify-between rounded-xl bg-blue-50/50 p-3.5 border border-blue-100">
                   <div>
-                    <span className="text-xs font-semibold text-slate-600 block">AI Goal Runs</span>
+                    <span className="text-xs font-semibold text-slate-600 block">AI Event Runs</span>
                     <span className="text-lg font-extrabold text-slate-900">{aiEventsCount}</span>
                   </div>
                   <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
