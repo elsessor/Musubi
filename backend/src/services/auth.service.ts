@@ -30,6 +30,12 @@ function createAppJwt(payload: JwtPayload): string {
 
 function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData): FirestoreUser {
   const role = isUserRole(data.role) ? data.role : DEFAULT_ROLE;
+  const rawAvail = typeof data.availability === "string" && data.availability.trim()
+    ? data.availability.trim()
+    : typeof data.status === "string" && data.status.trim()
+    ? data.status.trim()
+    : "Available";
+  const validAvail = ["Available", "Busy", "On Leave"].find((v) => v.toLowerCase() === rawAvail.toLowerCase()) || "Available";
 
   return {
     uid,
@@ -44,8 +50,8 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
     birthdate: typeof data.birthdate === "string" ? data.birthdate : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
     skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
-    availability: typeof data.availability === "string" ? data.availability : null,
-    status: typeof data.status === "string" ? data.status : null,
+    availability: validAvail,
+    status: validAvail,
     onboardingCompleted: data.onboardingCompleted === true,
     createdAt: data.createdAt ?? firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     lastLogin: data.lastLogin ?? firebaseAdmin.firestore.FieldValue.serverTimestamp()
