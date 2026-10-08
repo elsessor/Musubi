@@ -54,7 +54,7 @@ function AvatarFallback({ name, role, profilePicture }: { name: string; role: Si
 
   return (
     <div className={cn(
-      "relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full text-base font-extrabold text-white",
+      "relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-extrabold text-white",
       role === "Admin" ? "bg-[#ef2360]" : "bg-[#385779]"
     )}>
       {initial || "?"}
@@ -69,7 +69,7 @@ export function Sidebar({
   role,
   roleLabel,
   mobileOpen,
-  collapsed = false,
+  collapsed: desktopCollapsed = false,
   navItems,
   activeNavId,
   onLogout,
@@ -77,6 +77,7 @@ export function Sidebar({
   onToggleCollapse
 }: SidebarProps) {
   const { startNavigation } = useNavigationLoading();
+  const collapsed = desktopCollapsed && !mobileOpen;
   const uniqueNavItems = navItems.filter(
     (item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index
   );
@@ -84,9 +85,9 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex flex-col bg-[#213f68] text-white shadow-xl transition-all duration-300 md:z-30 md:translate-x-0 md:shadow-none",
+        "fixed inset-y-0 left-0 z-40 flex -translate-x-full flex-col bg-[#213f68] text-white shadow-xl transition-all duration-300 md:z-30 md:translate-x-0 md:shadow-none",
         mobileOpen && "translate-x-0",
-        collapsed ? "w-20 md:w-20" : "w-72 max-w-[85vw] -translate-x-full md:w-[354px] md:max-w-none"
+        collapsed ? "w-20 md:w-20" : "w-72 max-w-[85vw] md:w-64 md:max-w-none"
       )}
     >
       {/* Toggle Button on Sidebar Border */}
@@ -95,6 +96,8 @@ export function Sidebar({
           type="button"
           onClick={onToggleCollapse}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!desktopCollapsed}
+          aria-controls="dashboard-sidebar-navigation"
           className="hidden md:flex absolute top-1/2 -right-3.5 -translate-y-1/2 size-7 rounded-full bg-white text-slate-600 shadow-md border border-slate-200 items-center justify-center hover:bg-slate-100 transition-all cursor-pointer z-50"
         >
           {collapsed ? (
@@ -107,19 +110,19 @@ export function Sidebar({
 
       {/* Top Header Logo */}
       <div className={cn(
-        "flex min-h-[100px] items-center border-b border-white/10 py-5 md:min-h-[108px]",
-        collapsed ? "justify-center px-2" : "px-5"
+        "flex min-h-[88px] shrink-0 items-center border-b border-white/10 py-4",
+        collapsed ? "justify-center px-2" : "px-4"
       )}>
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#2868ed] shadow-[0_10px_24px_rgba(20,80,192,0.3)]">
-            <Zap className="size-6 text-white" strokeWidth={2.25} />
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#2868ed] shadow-[0_10px_24px_rgba(20,80,192,0.3)]">
+            <Zap className="size-5 text-white" strokeWidth={2.25} />
           </div>
           {!collapsed ? (
             <div className="min-w-0">
-              <p className="truncate text-[18px] font-extrabold leading-tight tracking-[-0.02em]">
+              <p className="truncate text-base font-extrabold leading-tight tracking-[-0.02em]">
                 {role === "Admin" ? "AI Workflow & Task Orchestr" : "Musubi"}
               </p>
-              <p className="mt-1 text-[16px] font-semibold leading-tight text-[#aebdd0]">
+              <p className="mt-1 text-xs font-semibold leading-tight text-[#aebdd0]">
                 {role === "Admin" ? "Admin Panel" : "Campus Organizations"}
               </p>
             </div>
@@ -129,28 +132,28 @@ export function Sidebar({
 
       {/* User Profile Header */}
       <div className={cn(
-        "flex min-h-[104px] items-center border-b border-white/10 py-5 md:min-h-[115px]",
-        collapsed ? "justify-center px-2" : "px-5"
+        "flex min-h-[88px] shrink-0 items-center border-b border-white/10 py-4",
+        collapsed ? "justify-center px-2" : "px-4"
       )}>
         <Link
           href="/dashboard/profile"
           onClick={onNavigate}
           aria-label={`View and edit profile for ${userName}`}
-          className="flex min-w-0 items-center gap-4 rounded-xl outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-white/70"
+          className="flex min-w-0 items-center gap-3 rounded-xl outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-white/70"
           title={collapsed ? `${userName} · View profile` : undefined}
         >
           <AvatarFallback name={userName} role={role} profilePicture={profilePicture} />
           {!collapsed ? (
             <div className="min-w-0">
-              <p className="truncate text-base font-extrabold leading-tight">{userName}</p>
-              <p className="mt-1 truncate text-sm font-semibold leading-tight text-[#aebdd0]">{roleLabel}</p>
+              <p className="truncate text-sm font-extrabold leading-tight">{userName}</p>
+              <p className="mt-1 truncate text-xs font-semibold leading-tight text-[#aebdd0]">{roleLabel}</p>
             </div>
           ) : null}
         </Link>
       </div>
 
       {/* Navigation List */}
-      <nav className="flex-1 px-3 py-4 md:py-[14px]">
+      <nav id="dashboard-sidebar-navigation" className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <ul className="space-y-1">
           {uniqueNavItems.map((item) => {
             const Icon = navIconMap[item.id as keyof typeof navIconMap] ?? LayoutGrid;
@@ -161,11 +164,11 @@ export function Sidebar({
                 <Link
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "group relative flex h-12 items-center gap-4 rounded-xl text-[17px] font-bold transition md:h-[60px] md:rounded-[17px] md:text-[18px]",
+                    "group relative flex h-11 items-center gap-3 rounded-xl text-sm font-semibold transition",
                     active
                       ? "bg-[#385779] text-white"
                       : "text-[#b4c1d3] hover:bg-white/[0.07] hover:text-white",
-                    collapsed ? "justify-center px-0" : "px-4 md:px-5"
+                    collapsed ? "justify-center px-0" : "px-3"
                   )}
                   href={item.href}
                   onClick={() => {
@@ -174,7 +177,7 @@ export function Sidebar({
                   }}
                   title={collapsed ? item.label : undefined}
                 >
-                  <Icon className={cn("size-6 shrink-0 md:size-[26px]", active ? "text-white" : "text-[#afbed0]")} strokeWidth={1.8} />
+                  <Icon className={cn("size-5 shrink-0", active ? "text-white" : "text-[#afbed0]")} strokeWidth={1.8} />
                   {!collapsed ? <span className="flex-1 truncate">{item.label}</span> : null}
 
                   {item.badge ? (
@@ -195,17 +198,17 @@ export function Sidebar({
       </nav>
 
       {/* Logout Footer */}
-      <div className="border-t border-white/10 px-3 py-4 md:py-[13px]">
+      <div className="shrink-0 border-t border-white/10 px-3 py-3">
         <button
           className={cn(
-            "flex h-12 w-full items-center gap-4 rounded-xl text-[17px] font-bold text-[#b4c1d3] transition hover:bg-white/[0.07] hover:text-white md:h-[60px] md:rounded-[17px] md:text-[18px]",
-            collapsed ? "justify-center px-0" : "px-4 md:px-5"
+            "flex h-11 w-full items-center gap-3 rounded-xl text-sm font-semibold text-[#b4c1d3] transition hover:bg-white/[0.07] hover:text-white",
+            collapsed ? "justify-center px-0" : "px-3"
           )}
           onClick={onLogout}
           type="button"
           title={collapsed ? "Logout" : undefined}
         >
-          <LogOut className="size-6 shrink-0" strokeWidth={1.8} />
+          <LogOut className="size-5 shrink-0" strokeWidth={1.8} />
           {!collapsed ? <span>Logout</span> : null}
         </button>
       </div>

@@ -20,6 +20,8 @@ export type NotificationRecord = {
   nudgeCategory?: "deadline" | "followup" | "system";
   dueDate?: string;
   targetAudience?: string;
+  committeeId?: string | null;
+  committeeName?: string | null;
   content?: string;
 };
 
@@ -182,7 +184,9 @@ export function subscribeNotificationsFirestore(
       createdAt: ann.createdAt || new Date().toISOString(),
       isPinned: Boolean(ann.isPinned),
       authorName: ann.authorName,
-      targetAudience: ann.targetAudience
+      targetAudience: ann.targetAudience,
+      committeeId: ann.committeeId,
+      committeeName: ann.committeeName
     }));
     emitMerged();
   });

@@ -290,7 +290,9 @@ export function PostAnnouncementModal({
                   placeholder="Specific committee"
                   disabled={submitting || !committees.length}
                   portal
-                  buttonClassName="rounded-xl bg-[#f1f4f8] text-xs"
+                  buttonClassName={targetAudience === "Committee"
+                    ? "rounded-xl border-transparent !bg-[#1e3a5f] text-xs font-bold text-white shadow-xs hover:!bg-[#152a45] [&_svg]:text-white"
+                    : "rounded-xl bg-[#f1f4f8] text-xs"}
                 />
               </div>
               {targetAudience === "Committee" && <p className="mt-2 text-[11px] text-slate-500">Visible to members of this committee and organization leaders.</p>}

@@ -1,15 +1,20 @@
+"use client";
+
+import { useDashboardUIStore } from "@/store/dashboardUIStore";
+
 function Pulse({ className }: { className: string }) {
   return <div className={`animate-pulse rounded-md bg-slate-200 ${className}`} />;
 }
 
 export function DashboardRouteSkeleton({ events = false }: { events?: boolean }) {
+  const sidebarCollapsed = useDashboardUIStore((state) => state.sidebarCollapsed);
   return (
     <div className="min-h-screen bg-[#eef1f5]" aria-label="Loading page" role="status">
-      <aside className="fixed inset-y-0 left-0 hidden w-[354px] bg-[#213f68] p-7 md:block">
-        <Pulse className="h-10 w-36 bg-white/20" />
+      <aside className={`fixed inset-y-0 left-0 hidden bg-[#213f68] p-4 md:block ${sidebarCollapsed ? "w-20" : "w-64"}`}>
+        <Pulse className={`h-10 bg-white/20 ${sidebarCollapsed ? "w-10" : "w-36"}`} />
         <div className="mt-12 space-y-3">{Array.from({ length: 7 }).map((_, i) => <Pulse key={i} className="h-12 w-full bg-white/10" />)}</div>
       </aside>
-      <div className="md:ml-[354px]">
+      <div className={sidebarCollapsed ? "md:ml-20" : "md:ml-64"}>
         <header className="flex min-h-[76px] items-center justify-between border-b border-slate-200 bg-[#f1f4f8] px-5 sm:px-8 lg:min-h-[108px]">
           <div className="space-y-2"><Pulse className="h-7 w-64" /><Pulse className="h-4 w-80" /></div>
           <Pulse className="size-12 rounded-full" />

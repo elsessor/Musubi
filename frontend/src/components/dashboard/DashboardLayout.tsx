@@ -18,6 +18,7 @@ import type {
 } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
 import { useAuthStore } from "@/store/authStore";
+import { useDashboardUIStore } from "@/store/dashboardUIStore";
 import { useNavigationLoading } from "@/app/navigationLoading";
 import { DashboardContentSkeleton } from "@/components/ui/RouteSkeleton";
 
@@ -54,7 +55,8 @@ export function DashboardLayout({
   children
 }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarCollapsed = useDashboardUIStore((state) => state.sidebarCollapsed);
+  const toggleSidebar = useDashboardUIStore((state) => state.toggleSidebar);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const profilePicture = useAuthStore((state) => state.profile?.profilePicture ?? null);
   const { navigating } = useNavigationLoading();
@@ -83,7 +85,7 @@ export function DashboardLayout({
         collapsed={sidebarCollapsed}
         onLogout={requestLogoutConfirmation}
         onNavigate={() => setMobileSidebarOpen(false)}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onToggleCollapse={toggleSidebar}
         navItems={navItems}
         role={user.role}
         roleLabel={user.roleLabel}
@@ -91,7 +93,7 @@ export function DashboardLayout({
         profilePicture={profilePicture}
       />
 
-      <div className={cn("flex h-full min-w-0 flex-col overflow-hidden transition-all duration-300", sidebarCollapsed ? "md:ml-20" : "md:ml-[354px]")}>
+      <div className={cn("flex h-full min-w-0 flex-col overflow-hidden transition-all duration-300", sidebarCollapsed ? "md:ml-20" : "md:ml-64")}>
         <TopHeader
           academicYear={user.academicYear}
           greetingDate={user.greetingDate}
