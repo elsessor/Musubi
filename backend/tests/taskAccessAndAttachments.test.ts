@@ -21,11 +21,23 @@ test("status controls are read-only for other members, even with the same displa
   assert.equal(canUpdateTaskStatus(task, "admin", "Admin", "Admin"), true);
 });
 
-test("priority controls require both an existing permission and the current user's assignment", () => {
+test("priority controls retain assignment requirements when no leader role is provided", () => {
   assert.equal(canUseTaskPriorityControl(task, "member", "Team Member", true), true);
   assert.equal(canUseTaskPriorityControl(task, "member", "Team Member", false), false);
   assert.equal(canUseTaskPriorityControl(task, "leader", "Team Leader", true), false);
   assert.equal(canUseTaskPriorityControl({ ...task, assignedMemberUID: "leader" }, "leader", "Team Leader", true), true);
+});
+
+test("leaders and admins can use priority dropdowns for all assignments with an existing permission", () => {
+  const unassigned = { ...task, assignedMemberUID: null, assignedMemberName: null, assignee: { initials: "UA", color: "bg-slate-400" } };
+  for (const role of ["Student Leader", "Admin"]) {
+    assert.equal(canUseTaskPriorityControl(task, "leader", "Team Leader", true, role), true);
+    assert.equal(canUseTaskPriorityControl(unassigned, "leader", "Team Leader", true, role), true);
+    assert.equal(canUseTaskPriorityControl(task, "leader", "Team Leader", false, role), false);
+    assert.equal(canUseTaskPriorityControl(task, null, "Team Leader", true, role), false);
+  }
+  assert.equal(canUseTaskPriorityControl(task, "other-member", "Team Member", true, "Organization Member"), false);
+  assert.equal(canUseTaskPriorityControl(task, "member", "Team Member", false, "Organization Member"), false);
 });
 
 test("priority control ownership uses UID first and supports exact legacy names", () => {

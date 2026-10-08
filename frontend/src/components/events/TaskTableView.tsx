@@ -26,7 +26,7 @@ export function TaskTableView({ tasks, onUpdateStatus, onUpdatePriority, onSelec
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
   const role = useAuthStore((state) => state.profile?.role);
   function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
-  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority)); }
+  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority), role); }
   // Status Dropdown State
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{

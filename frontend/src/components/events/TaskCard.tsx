@@ -21,7 +21,7 @@ type TaskCardProps = {
 export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdatePriority }: TaskCardProps) {
   const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
-  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority)); }
+  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority), role); }
   const role = useAuthStore((state) => state.profile?.role);
   const canDrag = Boolean(onDragStart) && canUpdateTaskStatus(task, uid, fullName, role);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);

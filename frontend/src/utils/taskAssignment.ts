@@ -15,8 +15,10 @@ export function isTaskAssignedToUser(task: TaskAssignment, uid: string | null | 
   return Boolean(userName && getTaskAssigneeName(task).toLowerCase() === userName);
 }
 
-export function canUseTaskPriorityControl(task: TaskAssignment, uid: string | null | undefined, fullName: string, permitted: boolean): boolean {
-  return permitted && isTaskAssignedToUser(task, uid, fullName);
+export function canUseTaskPriorityControl(task: TaskAssignment, uid: string | null | undefined, fullName: string, permitted: boolean, role?: string | null): boolean {
+  if (!uid || !permitted) return false;
+  if (role === "Student Leader" || role === "Admin") return true;
+  return isTaskAssignedToUser(task, uid, fullName);
 }
 
 export function canUpdateTaskStatus(task: TaskAssignment, uid: string | null | undefined, fullName: string, role: string | null | undefined): boolean {

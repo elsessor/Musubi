@@ -2,11 +2,12 @@
 
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2, Clock, Plus } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
-import { PRIORITY_CONFIG } from "./priorityUtils";
+import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useState } from "react";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { useAuthStore } from "@/store/authStore";
-import { canUpdateTaskStatus } from "@/utils/taskAssignment";
+import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -27,7 +28,8 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
   function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
   // Default to August 2026 (matching event timelines in mock data)
   const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 7, 1)); // Aug 2026
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTaskSnapshot, setSelectedTask] = useState<Task | null>(null);
+  const selectedTask = tasks.find((task) => task.id === selectedTaskSnapshot?.id) || null;
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth(); // 0-indexed
@@ -242,7 +244,16 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
 
               <div className="flex items-center justify-between text-xs pt-2">
                 <span className="text-slate-400">Due: <strong className="text-slate-700">{selectedTask.dueDate}</strong></span>
-                <span className="text-slate-400">Priority: <strong className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset ${PRIORITY_CONFIG[selectedTask.priority || "Medium"].classes}`}><span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[selectedTask.priority || "Medium"].dot}`} />{selectedTask.priority || "Medium"}</strong></span>
+                <div className="flex min-w-0 items-center gap-2"><span className="text-slate-400">Priority:</span>
+                  {canUseTaskPriorityControl(selectedTask, uid, fullName, Boolean(onUpdatePriority), role) ? (
+                    <div className="w-36 max-w-full">
+                      <CustomSelect value={selectedTask.priority || "Medium"} portal onChange={(value) => {
+                        const priority = value as TaskPriority;
+                        onUpdatePriority?.(selectedTask.id, priority);
+                      }} options={ALL_PRIORITIES.map((value) => ({ value, label: value, indicatorClass: PRIORITY_CONFIG[value].dot, selectedClass: PRIORITY_CONFIG[value].classes }))} buttonClassName="py-1 text-xs" />
+                    </div>
+                  ) : <strong className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset ${PRIORITY_CONFIG[selectedTask.priority || "Medium"].classes}`}><span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[selectedTask.priority || "Medium"].dot}`} />{selectedTask.priority || "Medium"}</strong>}
+                </div>
               </div>
             </div>
 
