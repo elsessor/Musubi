@@ -258,7 +258,7 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
 
 export async function updateUserProfile(
   uid: string,
-  input: { fullName?: string; position?: string; yearLevel?: string; program?: string; birthdate?: string; skills?: string[] }
+  input: { fullName?: string; position?: string; yearLevel?: string; program?: string; birthdate?: string; skills?: string[]; availability?: string; status?: string }
 ): Promise<LoginResponse["user"]> {
   const userRef = firestore.collection("users").doc(uid);
   const snap = await userRef.get();
@@ -283,6 +283,13 @@ export async function updateUserProfile(
   if (typeof input.program === "string") updates.program = input.program.trim();
   if (typeof input.birthdate === "string") updates.birthdate = input.birthdate.trim();
   if (Array.isArray(input.skills)) updates.skills = input.skills.filter((s): s is string => typeof s === "string");
+  if (typeof input.availability === "string" && input.availability.trim()) {
+    updates.availability = input.availability.trim();
+    updates.status = input.availability.trim();
+  } else if (typeof input.status === "string" && input.status.trim()) {
+    updates.status = input.status.trim();
+    updates.availability = input.status.trim();
+  }
 
   await userRef.set(updates, { merge: true });
 

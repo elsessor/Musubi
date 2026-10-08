@@ -730,6 +730,24 @@ export function TopHeader({
         status: newStatus
       });
     }
+
+    const activeUser = firebaseUser || useAuthStore.getState().firebaseUser;
+    if (activeUser) {
+      try {
+        const token = await activeUser.getIdToken();
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
+        await fetch(`${API_BASE_URL}/auth/profile`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ availability: newStatus, status: newStatus })
+        });
+      } catch (err) {
+        console.warn("[TopHeader] Error updating backend availability:", err);
+      }
+    }
   };
 
   const effectiveOrgId = liveUser.organizationId || profile?.organizationId || null;

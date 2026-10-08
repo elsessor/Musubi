@@ -191,11 +191,11 @@ export default function OrganizationPage() {
     if (!profile?.organizationId) return;
     const unsubscribe = subscribeOrganizationMembersFirestore(profile.organizationId, (realtimeMembers) => {
       setMembers(realtimeMembers);
-    });
+    }, firebaseUser);
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
     };
-  }, [profile?.organizationId]);
+  }, [profile?.organizationId, firebaseUser]);
 
   useEffect(() => {
     if (!firebaseUser || !profile?.organizationId) {
@@ -273,6 +273,10 @@ export default function OrganizationPage() {
   const memberRows = useMemo<MemberRow[]>(
     () =>
       members.map((member) => {
+        const isYou = Boolean(profile?.uid && member.id === profile.uid);
+        const availability = isYou
+          ? profile?.availability || profile?.status || member.availability || "Available"
+          : member.availability || "Available";
         return {
           id: member.id,
           initials:
@@ -293,11 +297,11 @@ export default function OrganizationPage() {
           skills: member.skills,
           workload: member.workload ?? 0,
           reliability: member.reliability ?? "?",
-          availability: member.availability || "Available",
+          availability,
           assignedTasks: member.assignedTasks
         } as any;
       }),
-    [committees, members]
+    [committees, members, profile?.uid, profile?.availability, profile?.status]
   );
 
   const filteredMembers = useMemo(() => {
@@ -443,6 +447,7 @@ function Overview({
   onSaveSettings: (settings: OrganizationSettings) => Promise<void>;
   onNavigateMembers: () => void;
 }) {
+  const profile = useAuthStore((state) => state.profile);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const doneGoalsCount = useMemo(() => events.filter((e) => e.status === "Completed").length, [events]);
   const activeGoalsCount = useMemo(() => events.filter((e) => e.status === "Active").length, [events]);
@@ -519,6 +524,9 @@ function Overview({
                     .join("")
                     .toUpperCase() || "?";
                   const isYou = Boolean(firebaseUser?.uid && m.id === firebaseUser.uid);
+                  const currentStatus = isYou
+                    ? profile?.availability || profile?.status || m.availability || "Available"
+                    : m.availability || "Available";
                   return (
                     <MemberPreviewRow
                       key={m.id || m.name}
@@ -526,7 +534,7 @@ function Overview({
                       name={m.name}
                       profilePicture={m.profilePicture}
                       role={m.position || m.role}
-                      status={m.availability || "Available"}
+                      status={currentStatus}
                       isYou={isYou}
                     />
                   );

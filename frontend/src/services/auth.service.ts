@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 
 import { getFirebaseDb } from "../firebase/config";
 import type { BackendLoginResponse, UserRole } from "@/types/auth";
+import { useAuthStore } from "@/store/authStore";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 const roles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -438,12 +439,14 @@ export function subscribeOrganizationMembersFirestore(
   }
 
   let isMounted = true;
+  let unsubscribeSnapshot: (() => void) | null = null;
   let intervalId: ReturnType<typeof setInterval> | null = null;
 
   const loadMembers = () => {
-    if (!user) return;
+    const currentUser = user || useAuthStore.getState().firebaseUser;
+    if (!currentUser) return;
     if (typeof document !== "undefined" && document.hidden) return;
-    void getOrganizationMembers(user, targetOrgId)
+    void getOrganizationMembers(currentUser, targetOrgId)
       .then((members) => {
         if (isMounted) onData(members);
       })
@@ -453,10 +456,24 @@ export function subscribeOrganizationMembersFirestore(
   };
 
   loadMembers();
-  intervalId = setInterval(loadMembers, 25000);
+
+  try {
+    const db = getFirebaseDb();
+    const q = query(collection(db, "users"), where("organizationId", "==", targetOrgId));
+    unsubscribeSnapshot = onSnapshot(q, () => {
+      loadMembers();
+    }, (error) => {
+      console.warn("onSnapshot users error:", error);
+    });
+  } catch (err) {
+    console.warn("Firestore snapshot error:", err);
+  }
+
+  intervalId = setInterval(loadMembers, 15000);
 
   return () => {
     isMounted = false;
+    if (unsubscribeSnapshot) unsubscribeSnapshot();
     if (intervalId) clearInterval(intervalId);
   };
 }
