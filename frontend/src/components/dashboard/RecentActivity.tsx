@@ -1,13 +1,14 @@
 "use client";
 
 import { Check, Clock3, Target, Users, Zap } from "lucide-react";
-import { useState } from "react";
+import Link from "next/link";
 
 import type { DashboardActivity } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
 
 type RecentActivityProps = {
   activities: DashboardActivity[];
+  viewAllHref?: string;
 };
 
 const iconMap = {
@@ -44,9 +45,8 @@ function ActivityItem({ title, time, icon }: DashboardActivity) {
   );
 }
 
-export function RecentActivity({ activities }: RecentActivityProps) {
-  const [showAll, setShowAll] = useState(false);
-  const visibleActivities = showAll ? activities : activities.slice(0, 4);
+export function RecentActivity({ activities, viewAllHref }: RecentActivityProps) {
+  const visibleActivities = activities.slice(0, 4);
   const remainingCount = Math.max(0, activities.length - 4);
 
   return (
@@ -57,20 +57,18 @@ export function RecentActivity({ activities }: RecentActivityProps) {
           <h2 className="min-w-0 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
             Recent Activity
           </h2>
-          {remainingCount > 0 && !showAll && (
+          {remainingCount > 0 && (
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[10px] font-semibold text-blue-600" aria-label={`${remainingCount} more activities`}>+{remainingCount}</span>
           )}
         </div>
-        {remainingCount > 0 && (
+        {remainingCount > 0 && viewAllHref && (
           <div className="flex shrink-0 flex-col items-end gap-1 text-xs font-semibold text-blue-600 sm:flex-row sm:items-center sm:gap-2">
-            <button
-              type="button"
-              aria-expanded={showAll}
-              onClick={() => setShowAll((current) => !current)}
+            <Link
+              href={viewAllHref}
               className="rounded-lg px-2 py-1 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
             >
-              {showAll ? "Show less" : "View all"}
-            </button>
+              View all
+            </Link>
           </div>
         )}
       </div>

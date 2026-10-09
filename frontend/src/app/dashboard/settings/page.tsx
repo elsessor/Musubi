@@ -12,7 +12,7 @@ import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { subscribeNotificationsFirestore } from "@/services/notifications.service";
-import { updateOrganizationDetails, updateUserProfile } from "@/services/auth.service";
+import { getOrganization, updateOrganizationDetails, updateUserProfile } from "@/services/auth.service";
 
 function greetingDate() {
   return new Intl.DateTimeFormat("en-US", {
@@ -134,6 +134,13 @@ export default function DashboardSettingsPage() {
     }
   }, [authLoading, profile, router]);
 
+  // Auth can finish after this page mounts. Keep membership in sync with
+  // the authenticated profile even when direct Firestore reads are denied.
+  useEffect(() => {
+    setOrgId(profile?.organizationId?.trim() || null);
+    setOrganizationName(profile?.organizationId ? profile.organizationName?.trim() || "" : "");
+  }, [profile?.uid, profile?.organizationId, profile?.organizationName]);
+
   // Hydrate preferences from localStorage on mount
   useEffect(() => {
     const uid = profile?.uid ?? firebaseUser?.uid;
@@ -166,7 +173,11 @@ export default function DashboardSettingsPage() {
         }
         const membershipId = typeof data.organizationId === "string" ? data.organizationId.trim() : "";
         setOrgId(membershipId || null);
-        setOrganizationName(membershipId && typeof data.organizationName === "string" ? data.organizationName : "");
+        if (!membershipId) {
+          setOrganizationName("");
+        } else if (typeof data.organizationName === "string" && data.organizationName.trim()) {
+          setOrganizationName(data.organizationName.trim());
+        }
         if (typeof data.position === "string" && data.position.trim()) {
           setPosition(data.position);
         }
@@ -194,19 +205,37 @@ export default function DashboardSettingsPage() {
       return;
     }
 
+    let cancelled = false;
+    async function loadOrganizationFallback() {
+      if (!firebaseUser) return;
+      try {
+        const organization = await getOrganization(firebaseUser, targetOrgId!);
+        if (!cancelled) setOrganizationName(organization.name);
+      } catch {
+        // Keep the authenticated profile's name when the API is unavailable.
+      }
+    }
+
     const unsubscribe = onSnapshot(
       doc(getFirebaseDb(), "organizations", targetOrgId),
       (snapshot) => {
         const data = snapshot.data();
-        setOrganizationName(typeof data?.name === "string" ? data.name.trim() : "");
+        if (typeof data?.name === "string" && data.name.trim()) {
+          setOrganizationName(data.name.trim());
+        } else {
+          void loadOrganizationFallback();
+        }
       },
       () => {
-        // Silent fallback when client-side rules restrict direct listener
+        void loadOrganizationFallback();
       }
     );
 
-    return () => unsubscribe();
-  }, [orgId, profile]);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [orgId, firebaseUser]);
 
   // Subscribe to real-time notifications for badge
   useEffect(() => {

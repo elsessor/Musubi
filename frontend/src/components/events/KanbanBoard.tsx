@@ -10,22 +10,18 @@ import {
   Edit3,
   LayoutGrid,
   Plus,
-  MoreHorizontal,
   Rows,
-  Save,
   Search,
   SlidersHorizontal,
   Table,
-  Trash2,
-  Users,
-  XCircle
+  Users
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Event, EventStatus, Task, TaskPriority, TaskStatus } from "./types";
 import type { OrganizationMember } from "@/services/auth.service";
 import { AddTaskModal, mapOrgMemberToItem, type OrgMemberItem } from "./AddTaskModal";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
-import { EventStatusModal } from "./EventStatusModal";
+import { EditEventModal } from "./EditEventModal";
 import { KanbanColumn } from "./KanbanColumn";
 import { ReassignTaskModal } from "./ReassignTaskModal";
 import { TaskDetailModal } from "./TaskDetailModal";
@@ -35,7 +31,6 @@ import { TaskExpandedView } from "./TaskExpandedView";
 import { TaskCalendarView } from "./TaskCalendarView";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { useAuthStore } from "@/store/authStore";
@@ -86,20 +81,24 @@ export function KanbanBoard({
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const mobileFiltersRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (!mobileFiltersOpen) return;
+    const dialog = mobileFiltersRef.current;
+    dialog?.showModal();
+    return () => dialog?.close();
+  }, [mobileFiltersOpen]);
 
   // Modals state
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
-  const [statusModalTarget, setStatusModalTarget] = useState<"Completed" | "Cancelled" | null>(null);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
-  const [isSavingEventStatus, setIsSavingEventStatus] = useState(false);
-  const [isEditingEventDetails, setIsEditingEventDetails] = useState(false);
-  const [eventTitleDraft, setEventTitleDraft] = useState(event.title);
-  const [eventDescriptionDraft, setEventDescriptionDraft] = useState(event.description);
-  const [isSavingEventDetails, setIsSavingEventDetails] = useState(false);
-  const [eventDetailsError, setEventDetailsError] = useState("");
+  const [editEventModalOpen, setEditEventModalOpen] = useState(false);
 
   // Custom task statuses state & localStorage (scoped per event)
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
@@ -317,32 +316,6 @@ export function KanbanBoard({
     setReassignTaskTarget(null);
   }
 
-  async function handleEventStatusChange(targetStatus: EventStatus) {
-    if (!isLeader || isSavingEventStatus || targetStatus === currentEvent.status) return;
-    const isCompleted = targetStatus === "Completed";
-    const updatedTasks = isCompleted ? tasks.map((task) => ({ ...task, status: "Completed" as TaskStatus })) : tasks;
-    const updated = { ...currentEvent, status: targetStatus, tasks: updatedTasks, progress: isCompleted ? 100 : currentEvent.progress };
-    setIsSavingEventStatus(true);
-    try {
-      await updateEventFirestore(firebaseUser, currentEvent.id, isCompleted
-        ? { status: targetStatus, tasks: updatedTasks, progress: 100 }
-        : { status: targetStatus });
-      setCurrentEvent(updated);
-      setTasks(updatedTasks);
-      onUpdateEvent?.(updated);
-      showToast({ title: "Event status updated", description: `The event is now ${targetStatus}.`, tone: "success" });
-    } catch (error) {
-      showToast({ title: "Status not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
-      throw error;
-    } finally { setIsSavingEventStatus(false); }
-  }
-
-  function requestEventStatusChange(status: EventStatus) {
-    if (!isLeader || isSavingEventStatus || status === currentEvent.status) return;
-    if (status === "Completed" || status === "Cancelled") setStatusModalTarget(status === "Completed" ? "Completed" : "Cancelled");
-    else void handleEventStatusChange(status).catch(() => {});
-  }
-
   function handleUpdateTaskStatus(taskId: string, targetStatus: TaskStatus) {
     const target = tasks.find((task) => task.id === taskId);
     if (!target || !canEditTask(target)) return;
@@ -412,33 +385,6 @@ export function KanbanBoard({
     setSelectedDetailTask(null);
   }
 
-  async function handleSaveEventDetails() {
-    if (!isLeader) return;
-    const title = eventTitleDraft.trim();
-    if (!title) {
-      setEventDetailsError("Event title is required.");
-      return;
-    }
-
-    setIsSavingEventDetails(true);
-    setEventDetailsError("");
-    const updatedEvent = { ...currentEvent, title, description: eventDescriptionDraft.trim() };
-    try {
-      await updateEventFirestore(firebaseUser, currentEvent.id, {
-        title: updatedEvent.title,
-        description: updatedEvent.description
-      });
-      setCurrentEvent(updatedEvent);
-      onUpdateEvent?.(updatedEvent);
-      setIsEditingEventDetails(false);
-    } catch (error) {
-      console.error("Failed to update event details:", error);
-      setEventDetailsError("Could not save event details. Please try again.");
-    } finally {
-      setIsSavingEventDetails(false);
-    }
-  }
-
   function handleDrop(targetStatus: TaskStatus) {
     if (!draggedId) return;
     const draggedTask = tasks.find((task) => task.id === draggedId);
@@ -481,7 +427,7 @@ export function KanbanBoard({
   const completedCount = tasks.filter((t) => t.status === "Completed").length;
 
   return (
-    <div className="flex h-full min-w-0 flex-col animate-in fade-in duration-200">
+    <div className="flex min-h-full min-w-0 flex-col animate-in fade-in duration-200">
       {/* Breadcrumb Navigation */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-slate-500">
@@ -497,113 +443,38 @@ export function KanbanBoard({
           <span className="min-w-0 truncate font-semibold text-slate-900">{currentEvent.title}</span>
         </div>
 
-        {isLeader && (
-          <div className="flex max-w-full flex-wrap items-end gap-2">
-            <div className="w-48 max-w-full">
-              <p className="mb-1 text-[11px] font-semibold text-slate-500">Change event status</p>
-              <CustomSelect
-                value={currentEvent.status}
-                onChange={requestEventStatusChange}
-                disabled={isSavingEventStatus || isDeletingEvent}
-                portal
-                options={Array.from(new Set(["Active", "Planning", "Completed", "Cancelled", "Archived", ...(currentEvent.eventCustomStatuses || []).map((status) => status.name), currentEvent.status])).map((value) => {
-                  const theme = getStatusTheme(value, currentEvent.eventCustomStatuses);
-                  return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
-                })}
-                buttonClassName="rounded-xl py-2 text-xs"
-              />
-            </div>
-            {onDeleteEvent && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" aria-label="More event actions" disabled={isSavingEventStatus || isDeletingEvent} className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50">
-                    <MoreHorizontal size={18} />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-40 rounded-xl border-slate-200 bg-white p-1.5 shadow-xl">
-                  <DropdownMenuItem onSelect={() => setConfirmDeleteEvent(true)} className="cursor-pointer gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 focus:bg-rose-50 focus:text-rose-700">
-                    <Trash2 size={14} className="text-rose-600" /> Delete Event
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        )}
+
       </div>
 
       {/* Event Header Summary Card */}
-      <div className="mb-5 min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mb-3 min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs sm:mb-5 sm:p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2.5">
-              {isEditingEventDetails ? (
-                <input
-                  autoFocus
-                  value={eventTitleDraft}
-                  onChange={(e) => setEventTitleDraft(e.target.value)}
-                  aria-label="Event title"
-                  className="w-full max-w-xl rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-lg font-extrabold text-slate-900 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                />
-              ) : (
-                <h1 className="min-w-0 break-words text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">{currentEvent.title}</h1>
-              )}
-              {isLeader && !isEditingEventDetails && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEventTitleDraft(currentEvent.title);
-                    setEventDescriptionDraft(currentEvent.description);
-                    setEventDetailsError("");
-                    setIsEditingEventDetails(true);
-                  }}
-                  aria-label="Edit event title and description"
-                  title="Edit event details"
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-blue-50 hover:text-blue-600"
-                >
-                  <Edit3 size={15} />
-                  Edit
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+              <h1 className="min-w-0 break-words text-base font-semibold tracking-tight text-slate-900 sm:text-xl">{currentEvent.title}</h1>
+              {isLeader && (
+                <button type="button" onClick={() => setEditEventModalOpen(true)} aria-label="Edit event details" className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-slate-500 hover:bg-blue-50 hover:text-blue-600">
+                  <Edit3 size={15} /> Edit
                 </button>
-              )}
-              {isEditingEventDetails && (
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => void handleSaveEventDetails()} disabled={isSavingEventDetails} aria-label="Save event details" title="Save" className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50">
-                    <Save size={15} />
-                  </button>
-                  <button type="button" onClick={() => { setIsEditingEventDetails(false); setEventDetailsError(""); }} disabled={isSavingEventDetails} aria-label="Cancel editing event details" title="Cancel" className="rounded-lg bg-rose-50 p-1.5 text-rose-500 hover:bg-rose-100 disabled:opacity-50">
-                    <XCircle size={15} />
-                  </button>
-                </div>
               )}
               <span className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-extrabold ${getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).badge}`}>
                 {currentEvent.status}
               </span>
               {currentEvent.committee && (
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
+                <span className={`${summaryExpanded ? "inline-flex" : "hidden sm:inline-flex"} rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600`}>
                   {currentEvent.committee} Committee
                 </span>
               )}
             </div>
 
-            {isEditingEventDetails ? (
-              <textarea
-                value={eventDescriptionDraft}
-                onChange={(e) => setEventDescriptionDraft(e.target.value)}
-                aria-label="Event description"
-                rows={3}
-                placeholder="Add an event description"
-                className="mt-2 w-full max-w-2xl resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-              />
-            ) : (
-              <p className="mt-2 max-w-2xl break-words text-sm leading-6 text-slate-500">{currentEvent.description}</p>
-            )}
-            {eventDetailsError && <p role="alert" className="mt-1 text-xs font-semibold text-rose-600">{eventDetailsError}</p>}
+            <p className={`${summaryExpanded ? "block" : "hidden sm:block"} mt-1 max-w-2xl break-words text-xs leading-5 text-slate-500 sm:mt-2 sm:text-sm sm:leading-6`}>{currentEvent.description}</p>
 
-            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-500">
-              <span className="flex items-center gap-1.5">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs font-semibold text-slate-500 sm:mt-3 sm:gap-4">
+              <span className={`${summaryExpanded ? "flex" : "hidden sm:flex"} items-center gap-1.5`}>
                 <Calendar size={13} className="text-slate-400" />
                 {currentEvent.startDate} – {currentEvent.endDate}
               </span>
-              <span className="flex items-center gap-1.5">
+              <span className={`${summaryExpanded ? "flex" : "hidden sm:flex"} items-center gap-1.5`}>
                 <Users size={13} className="text-slate-400" />
                 {currentEvent.memberCount} members
               </span>
@@ -613,14 +484,20 @@ export function KanbanBoard({
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-slate-100 pt-3 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0 sm:text-right">
-            <p className="text-2xl font-semibold tracking-tight text-slate-900">{currentEvent.progress}%</p>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:flex-col sm:items-end sm:border-l sm:border-slate-100 sm:pl-5 sm:text-right">
+            <div className="flex items-center gap-2 sm:flex-col sm:items-end sm:gap-0">
+            <p className="text-sm font-semibold tracking-tight text-slate-900 sm:text-2xl">{currentEvent.progress}%</p>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Progress</p>
+            </div>
           </div>
         </div>
 
+        <button type="button" aria-expanded={summaryExpanded} onClick={() => setSummaryExpanded((value) => !value)} className="mt-1 min-h-11 text-xs font-semibold text-blue-600 sm:hidden">
+          {summaryExpanded ? "Hide event details" : "Show event details"}
+        </button>
+
         {/* Progress bar */}
-        <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 sm:mt-4 sm:h-2.5">
           <div
             className={`h-full rounded-full transition-all ${
               getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).dot
@@ -631,23 +508,26 @@ export function KanbanBoard({
       </div>
 
       {/* Filter bar & View toggles */}
-      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 space-y-3 sm:hidden">
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setMobileFiltersOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold">
+            <Filter size={16} /> Filters{statusFilter !== "All" || selectedCommittee !== "All" ? ` (${Number(statusFilter !== "All") + Number(selectedCommittee !== "All")})` : ""}
+          </button>
+          <div className="min-w-0 flex-1">
+            <CustomSelect value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[{ value: "grid", label: "Grid" }, { value: "table", label: "Table" }, { value: "expanded", label: "Expanded" }, { value: "kanban", label: "Kanban" }, { value: "calendar", label: "Calendar" }]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11" portal />
+          </div>
+          {isLeader && <button type="button" onClick={() => setShowAddTaskModal(true)} className="flex min-h-11 items-center gap-1 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white"><Plus size={16} /> Task</button>}
+        </div>
+        <div className="relative">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input aria-label="Search tasks" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks..." className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" />
+        </div>
+      </div>
+      <div className="mb-4 hidden min-w-0 flex-wrap items-center justify-between gap-3 sm:flex">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <div className="relative flex items-center">
-            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
-            <select
-              value={selectedCommittee}
-              onChange={(e) => setSelectedCommittee(e.target.value)}
-              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
-            >
-              <option value="All">All Committees</option>
-              {allCommitteeNames.map((commName) => (
-                <option key={commName} value={commName}>
-                  {commName}
-                </option>
-              ))}
-            </select>
+          <div className="w-44 max-w-full">
+            <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white sm:min-h-9" dropdownClassName="[&_button]:min-h-11" portal />
           </div>
 
           {/* Status filter pills */}
@@ -770,7 +650,7 @@ export function KanbanBoard({
       </div>
 
       {/* Main View Area */}
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <div className="min-w-0">
         {viewMode === "grid" && (
           <TaskGridView
             tasks={visibleTasks}
@@ -868,6 +748,39 @@ export function KanbanBoard({
       </p>
 
       {/* Task Detail Modal */}
+      {editEventModalOpen && isLeader && (
+        <EditEventModal event={currentEvent} committees={committees} onDelete={onDeleteEvent ? () => { setEditEventModalOpen(false); setConfirmDeleteEvent(true); } : undefined} onClose={() => setEditEventModalOpen(false)} onSave={async (details) => {
+          if (!isLeader) throw new Error("Only a student leader can edit event details.");
+          const completing = details.status === "Completed" && currentEvent.status !== "Completed";
+          const updatedTasks = completing ? tasks.map((task) => ({ ...task, status: "Completed" as TaskStatus })) : tasks;
+          const update = { ...details, ...(completing ? { tasks: updatedTasks, progress: 100 } : {}) };
+          await updateEventFirestore(firebaseUser, currentEvent.id, update);
+          setCurrentEvent((current) => ({ ...current, ...update }));
+          if (completing) setTasks(updatedTasks);
+          onUpdateEvent?.({ ...currentEvent, ...update });
+          showToast({ title: "Event updated", description: "Your event details were saved.", tone: "success" });
+        }} />
+      )}
+      {mobileFiltersOpen && (
+        <dialog ref={mobileFiltersRef} onCancel={() => setMobileFiltersOpen(false)} aria-labelledby="mobile-task-filters-title" className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 id="mobile-task-filters-title" className="text-lg font-bold">Filter tasks</h2>
+            <button type="button" onClick={() => setMobileFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
+          </div>
+          <div className="space-y-4">
+            <div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Committee</p>
+              <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white" dropdownClassName="[&_button]:min-h-11" />
+            </div>
+            <div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Status</p>
+              <CustomSelect value={statusFilter} onChange={setStatusFilter} options={allTaskFilters.map(({ key, label }) => ({ value: key, label: `${label} (${key === "All" ? tasks.length : tasks.filter((task) => task.status === key).length})`, indicatorClass: key === "All" ? undefined : getStatusTheme(key, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white" dropdownClassName="[&_button]:min-h-11" />
+            </div>
+            <div className="flex flex-wrap justify-between gap-2">
+              <button type="button" onClick={() => { setSelectedCommittee("All"); setStatusFilter("All"); setSearch(""); }} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
+              {isLeader && <button type="button" onClick={() => { setMobileFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600">Manage statuses</button>}
+            </div>
+          </div>
+        </dialog>
+      )}
       {selectedDetailTask && (
         <TaskDetailModal
           eventId={currentEvent.id}
@@ -911,15 +824,6 @@ export function KanbanBoard({
       )}
 
       {/* Event Lifecycle Status Confirmation Modal */}
-      {isLeader && statusModalTarget && (
-        <EventStatusModal
-          eventTitle={currentEvent.title}
-          targetStatus={statusModalTarget}
-          unfinishedTaskCount={tasks.filter((task) => task.status !== "Completed").length}
-          onClose={() => setStatusModalTarget(null)}
-          onConfirm={handleEventStatusChange}
-        />
-      )}
 
       {/* Add & Manage Custom Task Status Modal */}
       <AddCustomStatusModal

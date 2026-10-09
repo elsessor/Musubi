@@ -42,7 +42,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
   }
 
   return (
-    <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <div className="grid min-w-0 grid-cols-2 items-stretch gap-[clamp(0.375rem,2vw,0.625rem)] sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
       {tasks.map((task) => {
         const pCfg = priorityConfig[task.priority || "Medium"];
         const theme = getStatusTheme(task.status, customStatuses);
@@ -52,11 +52,19 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
           <div
             key={task.id}
             onClick={() => onSelectTask?.(task)}
-            className="group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:border-blue-300 hover:shadow-md"
+            className="group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border border-slate-200 bg-white p-[clamp(0.5rem,2.4vw,0.75rem)] shadow-xs transition-all hover:border-blue-300 hover:shadow-md sm:p-4"
           >
-            <div>
+            <div className="min-w-0">
               {/* Header Badges & Status/Priority Dropdowns */}
-              <div className="flex flex-wrap items-start justify-between gap-2 pb-3">
+              <div className="mb-2 grid h-11 grid-rows-2 justify-items-start gap-1 sm:hidden">
+                <span title={pCfg.label} className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1.5 text-[10px] font-semibold leading-4 ring-1 ring-inset ${pCfg.classes}`}>
+                  <span className="size-1.5 shrink-0 rounded-full bg-current" /><span className="truncate">{pCfg.label}</span>
+                </span>
+                <span title={task.status} className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1.5 text-[10px] font-semibold leading-4 ring-1 ring-inset ${theme.badge}`}>
+                  <span className={`size-1.5 shrink-0 rounded-full ${theme.dot}`} /><span className="truncate">{task.status}</span>
+                </span>
+              </div>
+              <div className="hidden flex-wrap items-start justify-between gap-2 pb-3 sm:flex">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   {/* Priority Dropdown Trigger */}
                   <div className="relative">
@@ -68,7 +76,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                           setOpenDropdownId(null);
                           setOpenPriorityDropdownId(isPriorityOpen ? null : task.id);
                         }}
-                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset transition cursor-pointer ${pCfg.classes}`}
+                        className={`inline-flex min-h-11 items-center gap-1 rounded-xl px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset transition cursor-pointer sm:min-h-0 sm:rounded-full ${pCfg.classes}`}
                         title="Click to modify priority level"
                       >
                         <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -132,7 +140,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                       setOpenPriorityDropdownId(null);
                       setOpenDropdownId(openDropdownId === task.id ? null : task.id);
                     }}
-                    className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition-colors ${theme.badge}`}
+                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition-colors sm:min-h-0 ${theme.badge}`}
                   >
                     <span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />
                     {task.status}
@@ -172,16 +180,16 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
               </div>
 
               {/* Title & Description */}
-              <h3 className="min-h-10 break-words text-sm font-semibold leading-5 text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2">
+              <h3 title={task.title || task.description} className="line-clamp-2 h-9 break-words text-[clamp(0.6875rem,2.9vw,0.75rem)] font-semibold leading-[18px] text-slate-900 transition-colors [overflow-wrap:anywhere] group-hover:text-blue-600 sm:h-auto sm:min-h-10 sm:text-sm sm:leading-5">
                 {task.title || task.description}
               </h3>
 
               {task.description && task.title && task.description.trim() !== task.title.trim() && (
-                <p className="mt-1 break-words text-xs leading-5 text-slate-500 line-clamp-2">{task.description}</p>
+                <p className="mt-1 hidden break-words text-xs leading-5 text-slate-500 sm:line-clamp-2">{task.description}</p>
               )}
 
               {/* Badges / Nudges / Leader Only */}
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <div className="mt-3 hidden flex-wrap items-center gap-1.5 sm:flex">
                 {task.isLeaderOnly && (
                   <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-200/80">
                     <ShieldAlert size={11} className="text-amber-500" />
@@ -204,14 +212,19 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
             </div>
 
             {/* Card Footer */}
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-              <TaskAssignee task={task} className="max-w-[180px]" />
+            <div className="mt-2 flex min-w-0 flex-col gap-1 border-t border-slate-100 pt-2 sm:mt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2 sm:pt-3">
+              <TaskAssignee task={task} compactMobile className="h-6 w-full sm:h-auto sm:w-auto sm:max-w-[180px]" />
 
-              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span className="flex items-center gap-1">
+              <div className="flex h-6 min-w-0 items-center justify-between gap-1 text-[10px] text-slate-500 sm:h-auto sm:flex-wrap sm:justify-start sm:gap-2 sm:text-xs">
+                <span title={task.dueDate || "No deadline"} className="flex min-w-0 items-center gap-1">
                   <Calendar size={12} className="shrink-0" />
-                  <span className="break-words">{task.dueDate || "No deadline"}</span>
+                  <span className="truncate sm:whitespace-normal sm:break-words">{task.dueDate || "No deadline"}</span>
                 </span>
+                {task.status === "Completed" && (
+                  <span role="img" aria-label="Completed" title="Completed" className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 sm:hidden">
+                    <CheckCircle2 size={13} />
+                  </span>
+                )}
                 {canEditStatus(task) && task.status !== "Completed" && (
                   <button
                     type="button"
@@ -220,7 +233,7 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                       if (canEditStatus(task)) onUpdateStatus(task.id, "Completed");
                     }}
                     title="Mark Completed"
-                    className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
                   >
                     <CheckCircle2 size={13} />
                   </button>

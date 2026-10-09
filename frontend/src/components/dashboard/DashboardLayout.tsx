@@ -133,7 +133,10 @@ export function DashboardLayout({
 
           <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(340px,1fr)]">
             <RecentGoals goals={goals} />
-            <RecentActivity activities={activities} />
+            <RecentActivity
+              activities={activities}
+              viewAllHref={navItems.find((item) => item.id === "audit-logs")?.href ?? navItems.find((item) => item.id === "events")?.href}
+            />
           </section>
           </>}
         </main>

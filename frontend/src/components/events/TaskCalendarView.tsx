@@ -28,6 +28,7 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
   const role = useAuthStore((state) => state.profile?.role);
   function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
   const today = new Date();
   const [selectedTaskSnapshot, setSelectedTask] = useState<Task | null>(null);
   const selectedTask = tasks.find((task) => task.id === selectedTaskSnapshot?.id) || null;
@@ -43,14 +44,17 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
 
   function prevMonth() {
     setCurrentDate(new Date(year, month - 1, 1));
+    setSelectedDay(1);
   }
 
   function nextMonth() {
     setCurrentDate(new Date(year, month + 1, 1));
+    setSelectedDay(1);
   }
 
   function resetToday() {
     setCurrentDate(new Date());
+    setSelectedDay(new Date().getDate());
   }
 
   function getTasksForDay(dayNum: number): Task[] {
@@ -68,12 +72,12 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:gap-4 sm:p-5">
       {/* Calendar Header / Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div className="flex items-center gap-2">
           <CalendarIcon size={18} className="text-blue-600" />
-          <h2 className="text-lg font-bold text-slate-900">
+          <h2 className="text-base font-bold text-slate-900 sm:text-lg">
             {monthName} {year}
           </h2>
         </div>
@@ -82,7 +86,7 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
           <button
             type="button"
             onClick={resetToday}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+            className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors sm:min-h-0"
           >
             Today
           </button>
@@ -90,7 +94,8 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
             <button
               type="button"
               onClick={prevMonth}
-              className="p-1.5 text-slate-600 hover:text-blue-600 transition-colors"
+              className="flex size-11 items-center justify-center text-slate-600 hover:text-blue-600 transition-colors sm:size-7"
+              aria-label="Previous month"
               title="Previous Month"
             >
               <ChevronLeft size={16} />
@@ -99,7 +104,8 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
             <button
               type="button"
               onClick={nextMonth}
-              className="p-1.5 text-slate-600 hover:text-blue-600 transition-colors"
+              className="flex size-11 items-center justify-center text-slate-600 hover:text-blue-600 transition-colors sm:size-7"
+              aria-label="Next month"
               title="Next Month"
             >
               <ChevronRight size={16} />
@@ -110,7 +116,7 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
             <button
               type="button"
               onClick={onAddTask}
-              className="flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 transition-colors"
+              className="hidden items-center gap-1 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 transition-colors sm:flex"
             >
               <Plus size={13} />
               Add Task
@@ -122,12 +128,33 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
       {/* Weekday headers */}
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 uppercase tracking-wider">
         {WEEKDAYS.map((wd) => (
-          <div key={wd} className="py-1">{wd}</div>
+          <div key={wd} className="py-1"><span className="sm:hidden" aria-label={wd}>{wd.charAt(0)}</span><span className="hidden sm:inline">{wd}</span></div>
         ))}
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1 sm:hidden">
+        {calendarCells.map((cell, index) => cell.isBlank ? <div key={`mobile-blank-${index}`} /> : (
+          <button key={cell.dayNum} type="button" aria-pressed={selectedDay === cell.dayNum} aria-label={`${monthName} ${cell.dayNum}, ${getTasksForDay(cell.dayNum).length} tasks`} onClick={() => setSelectedDay(cell.dayNum)} className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-lg text-xs font-semibold ${selectedDay === cell.dayNum ? "bg-blue-600 text-white" : isSameCalendarDay(new Date(year, month, cell.dayNum), today) ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"}`}>
+            {cell.dayNum}
+            <span aria-hidden="true" className={`size-1 rounded-full ${getTasksForDay(cell.dayNum).length ? selectedDay === cell.dayNum ? "bg-white" : "bg-blue-500" : "bg-transparent"}`} />
+          </button>
+        ))}
+      </div>
+      <section className="space-y-2 border-t border-slate-100 pt-3 sm:hidden" aria-label="Tasks for selected date">
+        <h3 className="text-sm font-bold text-slate-800">{monthName} {selectedDay} · {getTasksForDay(selectedDay).length} tasks</h3>
+        {getTasksForDay(selectedDay).length === 0 && <p className="py-4 text-sm text-slate-500">No tasks scheduled for this day.</p>}
+        {getTasksForDay(selectedDay).map((task) => (
+          <button key={task.id} type="button" onClick={() => onSelectTask ? onSelectTask(task) : setSelectedTask(task)} className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-200 p-3 text-left hover:bg-slate-50">
+            <span className="break-words text-sm font-semibold text-slate-900">{task.title || task.description}</span>
+            <span className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2 py-1 text-xs font-semibold ${getStatusTheme(task.status, customStatuses).badge}`}>{task.status}</span>
+              <TaskAssignee task={task} />
+            </span>
+          </button>
+        ))}
+      </section>
+      <div className="hidden grid-cols-7 gap-2 sm:grid">
         {calendarCells.map((cell, idx) => {
           if (cell.isBlank) {
             return <div key={`blank-${idx}`} className="min-h-[100px] rounded-xl bg-slate-50/50 p-2 border border-transparent" />;

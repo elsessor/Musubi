@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { BookOpen, CalendarDays, Plus, X, Zap } from "lucide-react";
 import { AtomizerForm } from "./AtomizerForm";
 import { EventsDashboard } from "./EventsDashboard";
@@ -230,7 +231,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
 
   return (
     <TaskAssigneeMembersContext.Provider value={members}>
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-full min-w-0 flex-col">
       {/* Tab navigation */}
       <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
         <TabButton
@@ -251,7 +252,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
       </div>
 
       {/* View content */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-w-0 flex-1">
         {currentTab === "atomizer" && isLeader ? (
           <AtomizerForm events={events} members={members} onPublishGoalTasks={handlePublishGoalTasks} />
         ) : selectedEvent ? (
@@ -267,6 +268,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
         ) : (
           <EventsDashboard
             organizationId={effectiveOrgId}
+            committees={committees}
             events={events}
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}
@@ -331,14 +333,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
 
               <div>
                 <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">COORDINATING COMMITTEE <span className="font-medium normal-case tracking-normal">(optional)</span></label>
-                <select
-                  value={committee}
-                  onChange={(e) => setCommittee(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200/60 bg-[#F0F4F8] px-4 py-2.5 text-xs text-slate-800 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="">No lead committee (cross-committee)</option>
-                  {committees.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
-                </select>
+                <CustomSelect value={committee} onChange={setCommittee} options={[{ value: "", label: "No lead committee (cross-committee)" }, ...committees.map((item) => ({ value: item.name, label: item.name }))]} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
               </div>
 
               {/* START DATE & END DATE WITH TIME */}

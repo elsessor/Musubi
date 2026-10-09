@@ -237,19 +237,7 @@ export function AddTaskModal({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Committee</label>
-              <select
-                value={committee}
-                onChange={(e) => setCommittee(e.target.value)}
-                disabled={committeeOptions.length === 0}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
-              >
-                {committeeOptions.length === 0 && <option value="">No committees available</option>}
-                {committeeOptions.map((comm) => (
-                  <option key={comm} value={comm}>
-                    {comm} Committee
-                  </option>
-                ))}
-              </select>
+              <CustomSelect value={committee} onChange={setCommittee} disabled={committeeOptions.length === 0} placeholder="No committees available" options={committeeOptions.map((name) => ({ value: name, label: name.endsWith("Committee") ? name : `${name} Committee` }))} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
             </div>
           </div>
 

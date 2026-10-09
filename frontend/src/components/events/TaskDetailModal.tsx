@@ -222,7 +222,7 @@ export function TaskDetailModal({
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status &amp; assignment</h4>
           {!isLeader ? <TaskAssignee task={task} /> : null}
           {/* STATUS & PRIORITY */}
-          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">Status</label>
               {canEdit ? <CustomSelect
@@ -261,17 +261,7 @@ export function TaskDetailModal({
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">Committee</label>
-              <select
-                value={committee}
-                onChange={(e) => setCommittee(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-blue-500"
-              >
-                {committeeOptions.map((comm) => (
-                  <option key={comm} value={comm}>
-                    {comm} Committee
-                  </option>
-                ))}
-              </select>
+              <CustomSelect value={committee} onChange={setCommittee} disabled={committeeOptions.length === 0} placeholder="No committees available" options={committeeOptions.map((name) => ({ value: name, label: name.endsWith("Committee") ? name : `${name} Committee` }))} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
             </div>
           </div> : null}
 

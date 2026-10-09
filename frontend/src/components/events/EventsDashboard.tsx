@@ -23,6 +23,7 @@ import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "
 
 import { useAuthStore } from "@/store/authStore";
 import { eventStatusSettings, type EventStatusSettings } from "@/services/events.service";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 type StatusFilter = EventStatus | "All";
 type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
@@ -110,6 +111,44 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [calendarDate, setCalendarDate] = useState<Date>(() => new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState(() => new Date().getDate());
+  const [smallScreen, setSmallScreen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersDialogRef = useRef<HTMLDialogElement>(null);
+  const [kanbanStatus, setKanbanStatus] = useState("Active");
+  const compactMobile = smallScreen;
+
+  const calendarMonth = calendarDate.getMonth();
+  const calendarYear = calendarDate.getFullYear();
+  useEffect(() => {
+    const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    setSelectedCalendarDay((day) => Math.min(day, lastDay));
+  }, [calendarMonth, calendarYear]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    const update = () => {
+      setSmallScreen(media.matches);
+      if (!media.matches) setFiltersOpen(false);
+    };
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const dialog = filtersDialogRef.current;
+    dialog?.showModal();
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFiltersOpen(false);
+    };
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("keydown", close);
+      dialog?.close();
+    };
+  }, [filtersOpen]);
 
   // Organization status settings are shared with every event panel.
   const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
@@ -265,10 +304,28 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       {settingsError ? <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{settingsError}</p> : null}
       {/* Summary bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm">
+      {compactMobile && (
+        <>
+          <p className="text-sm font-semibold text-slate-600">{events.length} events · {activeCount} active</p>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setFiltersOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold">
+              <SlidersHorizontal size={16} /> Filters{filter !== "All" || selectedCommittee !== "All" ? ` (${Number(filter !== "All") + Number(selectedCommittee !== "All")})` : ""}
+            </button>
+            <div className="min-w-0 flex-1">
+              <CustomSelect value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[
+                { value: "grid", label: "Grid" }, { value: "table", label: "Table" },
+                { value: "expanded", label: "Expanded" }, { value: "kanban", label: "Kanban" },
+                { value: "calendar", label: "Calendar" }
+              ]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
+            </div>
+            {isLeader && <button type="button" onClick={onNewEvent} className="flex min-h-11 items-center gap-1 rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white"><Plus size={16} /> New</button>}
+          </div>
+        </>
+      )}
+      <div className={`${compactMobile ? "hidden" : "flex"} flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm`}>
         <div className="flex flex-wrap items-center gap-5 text-sm">
           <span className="font-semibold text-slate-800">
             <span className="mr-1.5 text-base font-bold">{events.length}</span>
@@ -301,23 +358,11 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       </div>
 
       {/* Filter bar & View toggles */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className={`${compactMobile ? "hidden" : "flex"} flex-wrap items-center justify-between gap-2`}>
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <div className="relative flex items-center">
-            <SlidersHorizontal size={12} className="pointer-events-none absolute left-3.5 text-slate-400" />
-            <select
-              value={selectedCommittee}
-              onChange={(e) => setSelectedCommittee(e.target.value)}
-              className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 outline-none hover:bg-slate-50 focus:ring-2 focus:ring-blue-400 cursor-pointer"
-            >
-              <option value="All">All Committees</option>
-              {allCommitteeNames.map((commName) => (
-                <option key={commName} value={commName}>
-                  {commName}
-                </option>
-              ))}
-            </select>
+          <div className="w-44 max-w-full">
+            <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white sm:min-h-9" dropdownClassName="[&_button]:min-h-11" portal />
           </div>
 
           {/* Status filter pills */}
@@ -419,18 +464,18 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
 
       {/* 1. Grid View */}
       {viewMode === "grid" && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-3">
           {visible.map((event) => (
             <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} />
           ))}
-          {isLeader && <CreateEventCard onClick={onNewEvent} />}
+          {isLeader && !compactMobile && <CreateEventCard onClick={onNewEvent} />}
         </div>
       )}
 
       {/* 2. Table View */}
       {viewMode === "table" && (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full border-collapse text-left text-xs">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <table className={`${compactMobile ? "min-w-[760px]" : ""} w-full border-collapse text-left text-xs`}>
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-3.5">EVENT</th>
@@ -514,7 +559,7 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-slate-900">{event.title}</h3>
-                      <p className="mt-0.5 text-xs text-slate-500">{event.description}</p>
+                      {!compactMobile && <p className="mt-0.5 text-xs text-slate-500">{event.description}</p>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -552,9 +597,15 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       )}
 
       {/* 4. Kanban View */}
+      {viewMode === "kanban" && compactMobile && (
+        <div className="space-y-2 text-sm font-semibold text-slate-600">
+          <p>Column</p>
+          <CustomSelect value={statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]} onChange={setKanbanStatus} options={statusOrder.map((status) => ({ value: status, label: `${status} (${visible.filter((event) => event.status === status).length})`, indicatorClass: getStatusTheme(status, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
+        </div>
+      )}
       {viewMode === "kanban" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {statusOrder.map((status) => {
+          {(compactMobile ? [statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]].filter(Boolean) : statusOrder).map((status) => {
             const statusEvents = visible.filter((e) => e.status === status);
             const theme = getStatusTheme(status, customStatuses);
             const isColDraggable = isLeader && settingsReady;
@@ -643,7 +694,37 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       )}
 
       {/* 5. Calendar View */}
-      {viewMode === "calendar" && (
+      {viewMode === "calendar" && compactMobile && (
+        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <h2 className="flex items-center gap-2 text-sm font-bold"><Calendar size={16} className="text-blue-600" />{calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" })}</h2>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => { const today = new Date(); setCalendarDate(today); setSelectedCalendarDay(today.getDate()); }} className="min-h-11 rounded-xl border border-slate-200 px-3 text-xs font-semibold">Today</button>
+              <button type="button" aria-label="Previous month" onClick={() => { setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1)); setSelectedCalendarDay(1); }} className="flex size-11 items-center justify-center rounded-lg hover:bg-slate-100"><ChevronLeft size={18} /></button>
+              <button type="button" aria-label="Next month" onClick={() => { setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1)); setSelectedCalendarDay(1); }} className="flex size-11 items-center justify-center rounded-lg hover:bg-slate-100"><ChevronRight size={18} /></button>
+            </div>
+          </div>
+          <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-400">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day} aria-label={day}>{day.charAt(0)}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {buildCalendarDays(calendarDate, visible).map((day, index) => day.month !== "current" ? <div key={`blank-${index}`} /> : (
+              <button key={day.dayNumber} type="button" onClick={() => setSelectedCalendarDay(day.dayNumber)} aria-pressed={selectedCalendarDay === day.dayNumber} aria-label={`${calendarDate.toLocaleString("en-US", { month: "long" })} ${day.dayNumber}, ${day.matchingEvents.length} events`} className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-lg text-xs font-semibold ${selectedCalendarDay === day.dayNumber ? "bg-blue-600 text-white" : day.isToday ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"}`}>
+                {day.dayNumber}
+                <span aria-hidden="true" className={`size-1 rounded-full ${day.matchingEvents.length ? selectedCalendarDay === day.dayNumber ? "bg-white" : "bg-blue-500" : "bg-transparent"}`} />
+              </button>
+            ))}
+          </div>
+          <div className="space-y-2 border-t border-slate-100 pt-3">
+            <h3 className="text-sm font-bold">{calendarDate.toLocaleString("en-US", { month: "long" })} {selectedCalendarDay} · {visible.filter((event) => isEventScheduledOnDay(event, new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedCalendarDay))).length} events</h3>
+            {visible.filter((event) => isEventScheduledOnDay(event, new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedCalendarDay))).map((event) => (
+              <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} compact />
+            ))}
+            {!visible.some((event) => isEventScheduledOnDay(event, new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedCalendarDay))) && <p className="py-4 text-sm text-slate-500">No events scheduled for this day.</p>}
+          </div>
+        </section>
+      )}
+      {viewMode === "calendar" && !compactMobile && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-4">
             <button
@@ -737,6 +818,26 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       )}
 
       {/* Add & Manage Custom Event Status Modal */}
+      {filtersOpen && (
+        <dialog ref={filtersDialogRef} onCancel={() => setFiltersOpen(false)} aria-labelledby="mobile-event-filters-title" className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 id="mobile-event-filters-title" className="text-lg font-bold">Filter events</h2>
+            <button type="button" onClick={() => setFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
+          </div>
+          <div className="space-y-4">
+            <div className="space-y-2 text-sm font-semibold text-slate-600"><p>Committee</p>
+              <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" />
+            </div>
+            <div className="space-y-2 text-sm font-semibold text-slate-600"><p>Status</p>
+              <CustomSelect value={filter} onChange={setFilter} options={allStatusFilters.map(({ key, label }) => ({ value: key, label, indicatorClass: key === "All" ? undefined : getStatusTheme(key, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" />
+            </div>
+            <div className="flex flex-wrap justify-between gap-2">
+              <button type="button" onClick={() => { setFilter("All"); setSelectedCommittee("All"); }} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
+              {isLeader && <button type="button" disabled={!settingsReady} onClick={() => { setFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600 disabled:opacity-50">Manage statuses</button>}
+            </div>
+          </div>
+        </dialog>
+      )}
       <AddCustomStatusModal
         isOpen={isAddStatusModalOpen}
         onClose={() => setIsAddStatusModalOpen(false)}
