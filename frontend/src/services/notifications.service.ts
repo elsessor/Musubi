@@ -376,3 +376,33 @@ export async function markAllNotificationsAsRead(user: User | null, notification
     await Promise.all(directIds.map((id) => markNotificationAsRead(user, id)));
   }
 }
+
+export async function sendNudgeEmail(input: {
+  recipientEmail?: string;
+  recipientUID?: string;
+  taskTitle: string;
+  eventName?: string;
+  deadline?: string;
+  message?: string;
+  isUrgent?: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://musubi-backend-4roe.onrender.com";
+    const res = await fetch(`${apiBaseUrl}/email/nudge`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || "Failed to send email" };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.warn("Failed to dispatch nudge email:", err);
+    return { success: false, error: err.message || "Network error" };
+  }
+}

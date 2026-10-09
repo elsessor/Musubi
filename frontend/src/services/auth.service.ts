@@ -52,6 +52,7 @@ export type OrganizationDirectoryRecord = OrganizationDirectoryOption & {
 export type OrganizationMember = {
   id: string;
   name: string;
+  email?: string;
   role: string;
   position: string;
   skills: string[];

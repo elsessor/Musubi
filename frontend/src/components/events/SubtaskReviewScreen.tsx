@@ -37,6 +37,7 @@ import {
   type OrganizationMember
 } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { sendNudgeEmail } from "@/services/notifications.service";
 import {
   delegateSubtasksHeuristically,
   findBestMemberForSubtask
@@ -953,6 +954,19 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+
+    if (sendNudgeAlert) {
+      const assignedMember = members.find((m) => m.name === assigneeName);
+      sendNudgeEmail({
+        recipientEmail: assignedMember?.email,
+        recipientUID: assignedMember?.id,
+        taskTitle: title.trim(),
+        eventName: "Organization Task",
+        deadline: formattedDeadline,
+        message: estimatedDays <= 3 ? "Priority Nudge: Short deadline assigned for this task." : undefined,
+        isUrgent: estimatedDays <= 3
+      }).catch((err) => console.warn("Failed to dispatch email nudge:", err));
+    }
 
     onSave({
       ...subtask,

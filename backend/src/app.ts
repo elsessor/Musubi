@@ -4,6 +4,7 @@ import express from "express";
 import { env } from "./config/env.js";
 import { errorMiddleware, notFoundMiddleware } from "./middleware/error.middleware.js";
 import { authRouter } from "./routes/auth.routes.js";
+import { emailRouter } from "./routes/email.routes.js";
 
 export const app = express();
 
@@ -36,6 +37,7 @@ app.get("/health", (_request: express.Request, response: express.Response) => {
 });
 
 app.use("/auth", authRouter);
+app.use("/email", emailRouter);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
