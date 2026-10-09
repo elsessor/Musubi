@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import Link from "next/link";
 import { BookOpen, CalendarDays, Plus, X, Zap } from "lucide-react";
 import { AtomizerForm } from "./AtomizerForm";
 import { EventsDashboard } from "./EventsDashboard";
@@ -12,7 +12,6 @@ import type { CustomStatusConfig } from "./statusUtils";
 import type { Event, Task } from "./types";
 import { isStartAfterEnd } from "./dateValidation";
 
-import { getFirebaseDb } from "@/firebase/config";
 import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
@@ -23,6 +22,32 @@ type Tab = "events" | "atomizer";
 
 export function EventsTasksView() {
   const profile = useAuthStore((state) => state.profile);
+  const loading = useAuthStore((state) => state.loading);
+  const organizationId = profile?.organizationId?.trim();
+
+  if (loading || !profile) return null;
+
+  if (!organizationId) {
+    return (
+      <section className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
+        <BookOpen className="mb-4 size-10 text-slate-400" aria-hidden="true" />
+        <h1 className="text-xl font-bold text-slate-900">Join an organization to get started</h1>
+        <p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">
+          You need to be a member of an organization to access Events &amp; Tasks and the AI Task Atomizer.
+          If you have already sent a join request, these tools will be available once your request is accepted.
+        </p>
+        <Link href="/dashboard/organization" className="mt-6 rounded-xl bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90">
+          Go to Organization
+        </Link>
+      </section>
+    );
+  }
+
+  return <OrganizationEventsTasksView key={`${profile.uid}:${organizationId}`} organizationId={organizationId} />;
+}
+
+function OrganizationEventsTasksView({ organizationId }: { organizationId: string }) {
+  const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const showToast = useToastStore((state) => state.showToast);
   const isLeader = profile?.role === "Student Leader" || profile?.role === "Admin";
@@ -32,7 +57,7 @@ export function EventsTasksView() {
   const [events, setEvents] = useState<Event[]>([]);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [committees, setCommittees] = useState<{ id: string; name: string }[]>([]);
-  const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(profile?.organizationId ?? null);
+  const effectiveOrgId = organizationId;
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,23 +68,6 @@ export function EventsTasksView() {
   const [committee, setCommittee] = useState("");
   const [creating, setCreating] = useState(false);
   const [dateError, setDateError] = useState("");
-
-  useEffect(() => {
-    if (profile?.organizationId) {
-      setEffectiveOrgId(profile.organizationId);
-      return;
-    }
-    if (firebaseUser?.uid) {
-      void getDoc(doc(getFirebaseDb(), "users", firebaseUser.uid)).then((snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          if (typeof data.organizationId === "string" && data.organizationId.trim()) {
-            setEffectiveOrgId(data.organizationId);
-          }
-        }
-      }).catch(() => {});
-    }
-  }, [firebaseUser?.uid, profile?.organizationId]);
 
   useEffect(() => {
     const unsubscribe = subscribeEventsFirestore(firebaseUser, effectiveOrgId, (realtimeEvents) => {
@@ -128,7 +136,7 @@ export function EventsTasksView() {
       const startFormatted = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       const endFormatted = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       try {
-        await createEventFirestore(firebaseUser, effectiveOrgId || profile?.organizationId || "default-org", {
+        await createEventFirestore(firebaseUser, effectiveOrgId, {
           title: newEventDetails?.title || "New Event",
           description: newEventDetails?.description || "",
           status: "Planning",
@@ -195,7 +203,7 @@ export function EventsTasksView() {
     if (error) return;
     setCreating(true);
     try {
-      await createEventFirestore(firebaseUser, effectiveOrgId || profile?.organizationId || "default-org", {
+      await createEventFirestore(firebaseUser, effectiveOrgId, {
         title: title.trim(),
         description: description.trim(),
         status: "Active",

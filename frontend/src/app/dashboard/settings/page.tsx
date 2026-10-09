@@ -12,7 +12,7 @@ import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { subscribeNotificationsFirestore } from "@/services/notifications.service";
-import { updateOrganizationDetails } from "@/services/auth.service";
+import { updateOrganizationDetails, updateUserProfile } from "@/services/auth.service";
 
 function greetingDate() {
   return new Intl.DateTimeFormat("en-US", {
@@ -164,14 +164,11 @@ export default function DashboardSettingsPage() {
         if (typeof data.email === "string" && data.email.trim()) {
           setEmail(data.email);
         }
-        if (typeof data.organizationName === "string" && data.organizationName.trim()) {
-          setOrganizationName(data.organizationName);
-        }
+        const membershipId = typeof data.organizationId === "string" ? data.organizationId.trim() : "";
+        setOrgId(membershipId || null);
+        setOrganizationName(membershipId && typeof data.organizationName === "string" ? data.organizationName : "");
         if (typeof data.position === "string" && data.position.trim()) {
           setPosition(data.position);
-        }
-        if (typeof data.organizationId === "string" && data.organizationId.trim()) {
-          setOrgId(data.organizationId);
         }
 
         if (data.preferences && typeof data.preferences === "object") {
@@ -191,16 +188,17 @@ export default function DashboardSettingsPage() {
 
   // Real-time listener for organization document in Firestore
   useEffect(() => {
-    const targetOrgId = orgId || profile?.organizationId;
-    if (!targetOrgId) return;
+    const targetOrgId = orgId;
+    if (!targetOrgId) {
+      setOrganizationName("");
+      return;
+    }
 
     const unsubscribe = onSnapshot(
       doc(getFirebaseDb(), "organizations", targetOrgId),
       (snapshot) => {
         const data = snapshot.data();
-        if (data?.name && typeof data.name === "string" && data.name.trim()) {
-          setOrganizationName(data.name);
-        }
+        setOrganizationName(typeof data?.name === "string" ? data.name.trim() : "");
       },
       () => {
         // Silent fallback when client-side rules restrict direct listener
@@ -234,7 +232,8 @@ export default function DashboardSettingsPage() {
     );
   }
 
-  const effectiveOrgName = organizationName || profile.organizationName || "Campus Organization";
+  const canManageOrganization = Boolean(orgId) && (profile.role === "Student Leader" || profile.role === "Admin");
+  const effectiveOrgName = orgId ? organizationName.trim() : "";
   const effectiveFullName = fullName || profile.fullName || firebaseUser?.displayName || "User";
   const effectiveEmail = email || profile.email || firebaseUser?.email || "";
   const effectivePosition = position || profile.position || (profile.role === "Student Leader" ? "Student Leader" : profile.role);
@@ -250,6 +249,7 @@ export default function DashboardSettingsPage() {
   };
 
   const handleOpenEdit = (field: EditableField) => {
+    if ((field === "organizationName" || field === "position") && !canManageOrganization) return;
     setEditingField(field);
     if (field === "organizationName") setEditValue(effectiveOrgName);
     if (field === "fullName") setEditValue(effectiveFullName);
@@ -259,6 +259,7 @@ export default function DashboardSettingsPage() {
 
   const handleSaveEdit = async () => {
     if (!editingField || !firebaseUser?.uid) return;
+    if ((editingField === "organizationName" || editingField === "position") && !canManageOrganization) return;
     setSaving(true);
 
     try {
@@ -266,29 +267,21 @@ export default function DashboardSettingsPage() {
       const userRef = doc(getFirebaseDb(), "users", uid);
 
       if (editingField === "organizationName") {
-        setOrganizationName(editValue);
-        const targetOrgId = orgId || profile.organizationId;
-        if (targetOrgId && firebaseUser) {
-          try {
-            await updateOrganizationDetails(firebaseUser, targetOrgId, { name: editValue });
-          } catch (err) {
-            console.warn("[Settings] API org update warning:", err);
-          }
-        }
-        try {
-          await updateDoc(userRef, { organizationName: editValue });
-        } catch { }
+        if (!orgId) return;
+        await updateOrganizationDetails(firebaseUser, orgId, { name: editValue.trim() });
+        setOrganizationName(editValue.trim());
         if (profile) setProfile({ ...profile, organizationName: editValue });
       } else if (editingField === "fullName") {
         setFullName(editValue);
         if (firebaseUser) {
           try {
-            await updateProfile(firebaseUser, { displayName: editValue });
-          } catch { }
+            await updateUserProfile(firebaseUser, { fullName: editValue });
+          } catch (err) {
+            console.warn("[Settings] API profile update fallback:", err);
+            try { await updateProfile(firebaseUser, { displayName: editValue }); } catch { }
+            try { await updateDoc(userRef, { fullName: editValue }); } catch { }
+          }
         }
-        try {
-          await updateDoc(userRef, { fullName: editValue });
-        } catch { }
         if (profile) setProfile({ ...profile, fullName: editValue });
       } else if (editingField === "email") {
         setEmail(editValue);
@@ -298,9 +291,13 @@ export default function DashboardSettingsPage() {
         if (profile) setProfile({ ...profile, email: editValue });
       } else if (editingField === "position") {
         setPosition(editValue);
-        try {
-          await updateDoc(userRef, { position: editValue });
-        } catch { }
+        if (firebaseUser) {
+          try {
+            await updateUserProfile(firebaseUser, { position: editValue });
+          } catch {
+            try { await updateDoc(userRef, { position: editValue }); } catch { }
+          }
+        }
         if (profile) setProfile({ ...profile, position: editValue });
       }
 
@@ -313,6 +310,7 @@ export default function DashboardSettingsPage() {
   };
 
   const togglePref = async (key: keyof typeof prefs) => {
+    if (key !== "emailNotifications" && !canManageOrganization) return;
     const nextVal = !prefs[key];
     const newPrefs = { ...prefs, [key]: nextVal };
     setPrefs(newPrefs);
@@ -338,7 +336,7 @@ export default function DashboardSettingsPage() {
       case "organizationName":
         return "ORGANIZATION NAME";
       case "fullName":
-        return "LEADER NAME";
+        return "NAME";
       case "email":
         return "EMAIL";
       case "position":
@@ -371,16 +369,16 @@ export default function DashboardSettingsPage() {
                 ORGANIZATION NAME
               </span>
               <span className="mt-1 block text-[15px] font-bold text-slate-900">
-                {effectiveOrgName} – {academicYear}
+                {effectiveOrgName ? `${effectiveOrgName} – ${academicYear}` : orgId ? "Loading organization..." : "Not in an organization"}
               </span>
             </div>
-            <button
+            {canManageOrganization && <button
               type="button"
               onClick={() => handleOpenEdit("organizationName")}
               className="text-[13px] font-semibold text-[#2563eb] hover:text-blue-700 hover:underline"
             >
               Edit
-            </button>
+            </button>}
           </div>
 
           <div className="my-1 border-b border-slate-100" />
@@ -389,7 +387,7 @@ export default function DashboardSettingsPage() {
           <div className="flex items-center justify-between py-3">
             <div>
               <span className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                LEADER NAME
+                NAME
               </span>
               <span className="mt-1 block text-[15px] font-bold text-slate-900">
                 {effectiveFullName}
@@ -437,13 +435,13 @@ export default function DashboardSettingsPage() {
                 {effectivePosition}
               </span>
             </div>
-            <button
+            {canManageOrganization && <button
               type="button"
               onClick={() => handleOpenEdit("position")}
               className="text-[13px] font-semibold text-[#2563eb] hover:text-blue-700 hover:underline"
             >
               Edit
-            </button>
+            </button>}
           </div>
         </div>
 
@@ -480,7 +478,7 @@ export default function DashboardSettingsPage() {
             </div>
 
             {/* AI Delegation Suggestions */}
-            <div className="flex items-center justify-between gap-4">
+            {canManageOrganization && <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[15px] font-bold text-slate-900">AI Delegation Suggestions</p>
                 <p className="mt-0.5 text-[13px] font-medium text-slate-400">
@@ -502,10 +500,10 @@ export default function DashboardSettingsPage() {
                   }`}
                 />
               </button>
-            </div>
+            </div>}
 
             {/* Weekly Summary Report */}
-            <div className="flex items-center justify-between gap-4">
+            {canManageOrganization && <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[15px] font-bold text-slate-900">Weekly Summary Report</p>
                 <p className="mt-0.5 text-[13px] font-medium text-slate-400">
@@ -527,7 +525,7 @@ export default function DashboardSettingsPage() {
                   }`}
                 />
               </button>
-            </div>
+            </div>}
           </div>
         </div>
       </section>

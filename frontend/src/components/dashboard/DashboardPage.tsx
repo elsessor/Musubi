@@ -289,7 +289,7 @@ export function DashboardPage() {
       if (!map.has(item.id)) map.set(item.id, item);
     });
 
-    setActivities(Array.from(map.values()).slice(0, 6));
+    setActivities(Array.from(map.values()));
   }, [rawAuditLogs, realtimeEventsList]);
 
   useEffect(() => {
@@ -462,7 +462,7 @@ export function DashboardPage() {
         onLogout={logout}
         user={dashboardUser}
       >
-        <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
           {memberKpis.map((kpi) => (
             <KPICard
               key={kpi.id}

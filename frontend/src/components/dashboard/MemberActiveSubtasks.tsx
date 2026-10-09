@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, ChevronRight } from "lucide-react";
+import { Calendar, ChevronRight, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
 import type { Task } from "@/components/events/types";
@@ -18,9 +18,12 @@ export function MemberActiveSubtasks({ subtasks }: MemberActiveSubtasksProps) {
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600" aria-hidden="true"><ListChecks className="size-4" /></span>
         <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
           Active Sub-Tasks
         </h2>
+        </div>
         <Link
           href="/dashboard/events"
           className="group inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"

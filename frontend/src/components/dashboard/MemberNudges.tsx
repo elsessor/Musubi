@@ -22,6 +22,7 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
     <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
         <div className="flex items-center gap-2">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600" aria-hidden="true"><Bell className="size-4" /></span>
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900">
             Nudges
           </h2>

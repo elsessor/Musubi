@@ -33,6 +33,7 @@ import {
   organizationRequestsController,
   organizationsController,
   reassignMemberController,
+  rerollSubtaskController,
   reviewOrganizationJoinRequestController,
   reviewOrganizationRequestController,
   updateAdminMemberController,
@@ -40,7 +41,8 @@ import {
   updateMeController,
   updateOrganizationCommitteeController,
   updateMemberRoleController,
-  updateOrganizationController
+  updateOrganizationController,
+  updateProfileController
 } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { workflowRouter } from "./workflow.routes.js";
@@ -51,9 +53,11 @@ export const authRouter = Router();
 authRouter.post("/login", loginController);
 authRouter.post("/onboarding", onboardingController);
 authRouter.get("/me", requireAuth, meController);
+authRouter.patch("/profile", requireAuth, updateProfileController);
 authRouter.patch("/me", requireAuth, updateMeController);
 
 authRouter.post("/atomize", atomizeGoalController);
+authRouter.post("/reroll-subtask", rerollSubtaskController);
 authRouter.get("/events", requireAuth, getEventsController);
 authRouter.post("/events", requireAuth, createEventController);
 authRouter.get("/announcements", requireAuth, getAnnouncementsController);

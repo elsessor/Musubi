@@ -27,13 +27,15 @@ import {
   X,
   Zap
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { validateSubtaskSafeguards } from "./starterTemplates";
 import type { GoalDraft, Subtask, TaskPriority } from "./types";
 import {
+  rerollSubtask,
   subscribeOrganizationMembersFirestore,
   type OrganizationMember
 } from "@/services/auth.service";
+import { useAuthStore } from "@/store/authStore";
 import {
   delegateSubtasksHeuristically,
   findBestMemberForSubtask
@@ -121,29 +123,109 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
   }
 
   async function handleRegenerateSubtask(id: string) {
+    const target = subtasks.find((s) => s.id === id);
+    if (!target) return;
+
     setRegeneratingIds((prev) => ({ ...prev, [id]: true }));
-    await new Promise((resolve) => setTimeout(resolve, 750));
 
-    const skillsPool = ["Logistics", "Budgeting", "Public Relations", "Catering", "AV Operations", "Graphics", "Security"];
-    const randomSkill = skillsPool[Math.floor(Math.random() * skillsPool.length)];
-    const randomScore = Math.floor(Math.random() * 20) + 78;
+    try {
+      let newTitle = "";
+      let newDescription = "";
+      let newPriority: TaskPriority = target.priority;
+      let newSkills: string[] = target.requiredSkills;
+      let newScore = target.aiMetadata?.confidenceScore ?? 92;
+      let newDays = target.estimatedDays;
 
-    setSubtasks((prev) =>
-      prev.map((st) => {
-        if (st.id !== id) return st;
-        const newSkills = Array.from(new Set([...st.requiredSkills, randomSkill])).slice(0, 4);
-        return {
-          ...st,
-          title: `Refined: ${st.title.replace(/^Refined:\s*/, "")}`,
-          description: `${st.description} (Re-optimized by AI for committee workflow)`,
-          estimatedDays: Math.max(1, st.estimatedDays + (Math.random() > 0.5 ? 1 : -1)),
-          requiredSkills: newSkills,
-          isAiGenerated: true,
-          aiMetadata: { confidenceScore: randomScore }
-        };
-      })
-    );
-    setRegeneratingIds((prev) => ({ ...prev, [id]: false }));
+      const firebaseUser = useAuthStore.getState().firebaseUser;
+
+      if (firebaseUser) {
+        try {
+          const res = await rerollSubtask(firebaseUser, {
+            eventName: currentGoal.eventName || "Event",
+            goalDescription: currentGoal.description,
+            existingTaskTitle: target.title,
+            existingTaskDescription: target.description
+          });
+
+          if (res && res.title) {
+            newTitle = res.title;
+            newDescription = res.description;
+            newPriority = res.priority as TaskPriority;
+            newSkills = res.requiredSkills && res.requiredSkills.length > 0 ? res.requiredSkills : target.requiredSkills;
+            newScore = res.matchScore || 90;
+            newDays = res.dueDateOffsetDays || target.estimatedDays;
+          }
+        } catch (apiErr) {
+          console.warn("[SubtaskReview] API re-roll failed, falling back to smart AI pool:", apiErr);
+        }
+      }
+
+      if (!newTitle) {
+        const pool = [
+          {
+            title: `Coordinate ${target.title.replace(/^(Refined|Setup|Prepare|Organize|Manage):\s*/i, "")} Operational Workflow`,
+            description: `Execute comprehensive operational checklist and task management for ${target.title}.`,
+            skills: ["Logistics", "Operations", "Risk Management"]
+          },
+          {
+            title: `Manage ${target.title.replace(/^(Refined|Setup|Prepare|Organize|Manage):\s*/i, "")} Vendor & Resource Allocation`,
+            description: `Verify vendor contracts, equipment delivery schedules, and stage logistics.`,
+            skills: ["Budgeting", "Vendor Relations", "Logistics"]
+          },
+          {
+            title: `Draft & Publish ${target.title.replace(/^(Refined|Setup|Prepare|Organize|Manage):\s*/i, "")} Promotional Blitz`,
+            description: `Design high-engagement visual assets and schedule cross-channel campus announcements.`,
+            skills: ["Public Relations", "Graphics", "Marketing"]
+          },
+          {
+            title: `Supervise ${target.title.replace(/^(Refined|Setup|Prepare|Organize|Manage):\s*/i, "")} On-Site Protocol & Safety`,
+            description: `Inspect venue safety compliance, emergency access routes, and staff badge verification.`,
+            skills: ["Security", "Safety Protocol", "Event Operations"]
+          }
+        ];
+        const selected = pool[Math.floor(Math.random() * pool.length)];
+        newTitle = selected.title;
+        newDescription = selected.description;
+        newSkills = Array.from(new Set([...target.requiredSkills, ...selected.skills])).slice(0, 4);
+        newScore = Math.floor(Math.random() * 15) + 84;
+      }
+
+      const updatedTempSubtask: Subtask = {
+        ...target,
+        title: newTitle,
+        description: newDescription,
+        priority: newPriority,
+        requiredSkills: newSkills,
+        estimatedDays: newDays,
+        isAiGenerated: true,
+        aiMetadata: { confidenceScore: newScore }
+      };
+
+      const bestMemberMatch = liveMembers.length > 0 ? findBestMemberForSubtask(updatedTempSubtask, liveMembers) : null;
+      const assignedName = bestMemberMatch?.member.name || target.assigneeName || "Unassigned";
+
+      const finalSubtask: Subtask = {
+        ...updatedTempSubtask,
+        assigneeName: assignedName
+      };
+
+      setSubtasks((prev) => prev.map((st) => (st.id === id ? finalSubtask : st)));
+
+      useToastStore.getState().showToast({
+        title: "Subtask Re-rolled",
+        description: `Successfully replaced subtask with "${newTitle}".`,
+        tone: "success"
+      });
+    } catch (err) {
+      console.error("[SubtaskReview] Failed to re-roll subtask:", err);
+      useToastStore.getState().showToast({
+        title: "Re-roll Failed",
+        description: err instanceof Error ? err.message : "Could not re-roll subtask.",
+        tone: "error"
+      });
+    } finally {
+      setRegeneratingIds((prev) => ({ ...prev, [id]: false }));
+    }
   }
 
   function handleSaveTaskEdit(updated: Subtask) {
@@ -747,18 +829,32 @@ type OldEditTaskModalProps = {
 };
 
 function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModalProps) {
+  // Dynamic initial date: parse subtask deadline if present, otherwise calculate from today + estimatedDays
+  const initialDate = useMemo(() => {
+    if (subtask.dueDate || subtask.deadline) {
+      const parsed = new Date(subtask.dueDate || subtask.deadline || "");
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    const d = new Date();
+    d.setDate(d.getDate() + (subtask.estimatedDays || 7));
+    return d;
+  }, [subtask]);
+
   const [title, setTitle] = useState(subtask.title);
   const [description, setDescription] = useState(subtask.description);
   const [priority, setPriority] = useState<TaskPriority>(subtask.priority);
-  const [estimatedDays, setEstimatedDays] = useState(subtask.estimatedDays);
+  const [estimatedDays, setEstimatedDays] = useState<number>(subtask.estimatedDays || 7);
   const [isLeaderOnly, setIsLeaderOnly] = useState(subtask.isLeaderOnly);
   const [skills, setSkills] = useState<string[]>(subtask.requiredSkills);
   const [newSkillInput, setNewSkillInput] = useState("");
-  const [currentMonth, setCurrentMonth] = useState<number>(7); // Default August
-  const [currentYear, setCurrentYear] = useState<number>(2026);
-  const [selectedDay, setSelectedDay] = useState<number>(11);
-  const [selectedMonth, setSelectedMonth] = useState<number>(7);
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [sendNudgeAlert, setSendNudgeAlert] = useState(true);
+
+  // Calendar states defaulting to today / parsed subtask deadline
+  const [currentMonth, setCurrentMonth] = useState<number>(initialDate.getMonth());
+  const [currentYear, setCurrentYear] = useState<number>(initialDate.getFullYear());
+  const [selectedDay, setSelectedDay] = useState<number>(initialDate.getDate());
+  const [selectedMonth, setSelectedMonth] = useState<number>(initialDate.getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(initialDate.getFullYear());
 
   const MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
@@ -787,6 +883,32 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
     }
   }
 
+  // Real-time synchronization: Estimated Days -> Calendar Deadline
+  function handleEstimatedDaysChange(days: number) {
+    const validDays = Math.max(1, Math.min(90, days));
+    setEstimatedDays(validDays);
+    const target = new Date();
+    target.setDate(target.getDate() + validDays);
+    setSelectedDay(target.getDate());
+    setSelectedMonth(target.getMonth());
+    setSelectedYear(target.getFullYear());
+    setCurrentMonth(target.getMonth());
+    setCurrentYear(target.getFullYear());
+  }
+
+  // Real-time synchronization: Calendar Day Click -> Estimated Days
+  function handleSelectCalendarDay(day: number) {
+    setSelectedDay(day);
+    setSelectedMonth(currentMonth);
+    setSelectedYear(currentYear);
+    const targetDate = new Date(currentYear, currentMonth, day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = targetDate.getTime() - today.getTime();
+    const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    setEstimatedDays(diffDays);
+  }
+
   const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
@@ -806,6 +928,8 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
     }
   }
 
+  const formattedDeadline = `${MONTH_NAMES_SHORT[selectedMonth]} ${selectedDay}, ${selectedYear}`;
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
@@ -818,7 +942,9 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
       priority,
       estimatedDays: Math.max(1, Number(estimatedDays) || 1),
       isLeaderOnly,
-      requiredSkills: skills
+      requiredSkills: skills,
+      dueDate: formattedDeadline,
+      deadline: formattedDeadline
     });
   }
 
@@ -926,12 +1052,51 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
             )}
           </div>
 
+          {/* Contextual Nudges & Real-time Workload Feature Card */}
+          <div className="rounded-2xl bg-gradient-to-br from-amber-50/90 via-orange-50/70 to-amber-100/50 p-3.5 border border-amber-200/90 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-extrabold text-amber-950">
+                <span className="flex size-5 items-center justify-center rounded-full bg-amber-500 text-white font-black text-[10px]">
+                  ⚡
+                </span>
+                <span>Contextual Nudge Alert</span>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-extrabold text-amber-900 border border-amber-300/80">
+                <span className="size-1.5 rounded-full bg-amber-600 animate-pulse" />
+                Real-Time Nudge Active
+              </span>
+            </div>
+
+            <div className="text-xs space-y-1 text-amber-950 font-medium leading-relaxed">
+              <p>
+                Assigned to <span className="font-bold text-slate-900">{assigneeName}</span>. Estimated completion in{" "}
+                <span className="font-extrabold text-blue-700">{estimatedDays} day{estimatedDays > 1 ? "s" : ""}</span> (
+                <span className="font-extrabold text-slate-900">{formattedDeadline}</span>).
+              </p>
+              <p className="text-[11px] text-amber-800 font-semibold">
+                {estimatedDays <= 3
+                  ? "⚠️ Priority Nudge: Tight turnaround time (3 days or less). Immediate deadline alert queued for member."
+                  : "💡 Workload Nudge: Standard progress tracking alert scheduled for member."}
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2 pt-1 border-t border-amber-200/60 cursor-pointer select-none text-xs font-bold text-amber-900">
+              <input
+                type="checkbox"
+                checked={sendNudgeAlert}
+                onChange={(e) => setSendNudgeAlert(e.target.checked)}
+                className="size-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+              />
+              <span>Dispatch Contextual Nudge Notification on Save</span>
+            </label>
+          </div>
+
           {/* Dynamic Calendar Deadline Picker */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Deadline</span>
               <span className="text-xs font-bold text-blue-600">
-                {MONTH_NAMES_SHORT[selectedMonth]} {selectedDay}, {selectedYear} · 11:59
+                {formattedDeadline} · 11:59
               </span>
             </div>
 
@@ -974,11 +1139,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
                     <button
                       key={day}
                       type="button"
-                      onClick={() => {
-                        setSelectedDay(day);
-                        setSelectedMonth(currentMonth);
-                        setSelectedYear(currentYear);
-                      }}
+                      onClick={() => handleSelectCalendarDay(day)}
                       className={`py-1.5 rounded-xl font-semibold transition ${
                         isSelected
                           ? "bg-[#1e3a5f] text-white shadow-2xs font-bold"
@@ -1010,9 +1171,9 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
               <input
                 type="number"
                 min={1}
-                max={30}
+                max={90}
                 value={estimatedDays}
-                onChange={(e) => setEstimatedDays(Number(e.target.value))}
+                onChange={(e) => handleEstimatedDaysChange(Number(e.target.value))}
                 className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800"
               />
             </div>

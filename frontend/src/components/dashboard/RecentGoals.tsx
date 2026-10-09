@@ -3,6 +3,7 @@
 import { getStatusTheme } from "@/components/events/statusUtils";
 
 import Link from "next/link";
+import { Target } from "lucide-react";
 import type { DashboardGoal } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
 
@@ -40,9 +41,12 @@ export function RecentGoals({ goals }: RecentGoalsProps) {
   return (
     <article className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
       <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600" aria-hidden="true"><Target className="size-4" /></span>
         <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
           Recent Events
         </h2>
+        </div>
         <Link className="text-sm font-semibold text-blue-600 transition hover:text-blue-700" href="/dashboard/events">
           View All →
         </Link>

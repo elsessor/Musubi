@@ -49,7 +49,7 @@ export function useAuthListener() {
       setFirebaseUser(firebaseUser);
 
       try {
-        const session = await exchangeFirebaseSession(firebaseUser);
+        const session = await exchangeFirebaseSession(firebaseUser, firebaseUser.displayName || undefined);
         setProfile(session.user);
       } catch {
         showToast({

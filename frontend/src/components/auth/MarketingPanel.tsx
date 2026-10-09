@@ -34,7 +34,7 @@ function LogoBolt() {
 
 export function MarketingPanel() {
   return (
-    <aside className="relative flex min-h-[560px] overflow-hidden bg-brand px-8 py-8 text-white sm:px-12 lg:min-h-screen lg:px-14 xl:px-16">
+    <aside className="relative flex h-full min-h-[560px] overflow-hidden bg-brand px-8 py-8 text-white sm:px-12 lg:min-h-screen lg:px-14 xl:px-16">
       <div className="absolute -right-20 -top-20 size-56 rounded-full bg-white/10 sm:size-72 lg:size-80" />
       <div className="absolute -bottom-28 -left-20 size-64 rounded-full bg-white/10 sm:size-80" />
       <div className="absolute right-10 top-[54%] size-36 rounded-full bg-accent/10 sm:size-44 xl:right-24" />
@@ -45,7 +45,7 @@ export function MarketingPanel() {
             <LogoBolt />
           </div>
           <div>
-            <p className="text-base font-bold leading-5">AI-Powered Workflow Management</p>
+            <p className="text-base font-bold leading-5">Musubi</p>
             <p className="mt-1 text-sm font-medium text-white/60">
               Task Orchestration for Campus Orgs
             </p>
@@ -54,7 +54,7 @@ export function MarketingPanel() {
 
         <div className="my-auto max-w-3xl py-16 lg:max-w-[780px]">
           <h1 className="text-3xl font-extrabold leading-tight text-white sm:text-4xl lg:text-[34px] xl:text-[38px]">
-            AI-Powered Workflow Management and Task Orchestration System for Campus Organizations
+            Musubi: Your All-in-One Task Orchestration Platform for Campus Organizations
           </h1>
           <p className="mt-6 max-w-lg text-base font-medium leading-7 text-white/70">
             Break events into delegatable sub-tasks, intelligently assign work based on
@@ -69,7 +69,7 @@ export function MarketingPanel() {
         </div>
 
         <p className="text-sm font-semibold text-white/20">
-          (c) 2026 AI-Powered Workflow Management System - Campus Edition
+          (c) 2026 Musubi - Campus Edition
         </p>
       </div>
     </aside>

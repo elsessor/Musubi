@@ -719,3 +719,36 @@ export async function atomizeGoal(
   });
 }
 
+export async function rerollSubtask(
+  user: User,
+  payload: { eventName: string; goalDescription?: string; existingTaskTitle: string; existingTaskDescription?: string }
+) {
+  return organizationRequest<{
+    title: string;
+    description: string;
+    priority: "Low" | "Medium" | "High" | "Critical";
+    assigneeName: string;
+    dueDateOffsetDays: number;
+    matchScore: number;
+    requiredSkills: string[];
+  }>(user, "/auth/reroll-subtask", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateUserProfile(
+  user: User,
+  input: { fullName?: string; position?: string; yearLevel?: string; program?: string; birthdate?: string; skills?: string[] }
+): Promise<AuthUserProfile> {
+  const data = await organizationRequest<{ user?: AuthUserProfile }>(user, "/auth/profile", {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+  if (!data?.user) {
+    throw new Error("Failed to update user profile.");
+  }
+  return data.user;
+}
+
+

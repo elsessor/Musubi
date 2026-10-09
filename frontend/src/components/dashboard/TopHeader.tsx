@@ -486,6 +486,8 @@ import { MemberAvatar } from "./MemberAvatar";
 import { getAvailabilityTheme } from "@/utils/availabilityTheme";
 import { getFirebaseDb } from "@/firebase/config";
 import { getOrganization } from "@/services/auth.service";
+import { subscribeNotificationsFirestore, markNotificationAsRead, markAllNotificationsAsRead, type NotificationRecord } from "@/services/notifications.service";
+import { NotificationPanel } from "./NotificationPanel";
 import { useAuthStore } from "@/store/authStore";
 import type { UserRole } from "@/types/auth";
 
@@ -505,7 +507,7 @@ function Avatar({ name, role, availability, profilePicture }: { name: string; ro
   const statusDotColor = getAvailabilityTheme(availability).dot;
   return (
     <div className="relative shrink-0">
-      <MemberAvatar member={{ name, profilePicture }} className="size-12" fallbackClassName={role === "Admin" ? "bg-[#ef2360] text-base font-extrabold" : "text-base font-extrabold"} />
+      <MemberAvatar member={{ name, profilePicture }} className="size-10" fallbackClassName={role === "Admin" ? "bg-[#ef2360] text-base font-extrabold" : "text-base font-extrabold"} />
       {role !== "Admin" ? <span className={`absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-[#f1f4f8] ${statusDotColor} transition-colors duration-200`} /> : null}
     </div>
   );
@@ -527,6 +529,47 @@ export function TopHeader({
   const profile = useAuthStore((state) => state.profile);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const notificationBellRef = useRef<HTMLButtonElement>(null);
+
+  function closeNotifications() {
+    setNotificationsOpen(false);
+    notificationBellRef.current?.focus();
+  }
+
+  function readNotification(id: string) {
+    setNotifications((items) => items.map((item) => item.id === id ? { ...item, unread: false } : item));
+    void markNotificationAsRead(firebaseUser, id);
+  }
+
+  function readAllNotifications() {
+    const ids = notifications.filter((item) => item.unread).map((item) => item.id);
+    setNotifications((items) => items.map((item) => ({ ...item, unread: false })));
+    void markAllNotificationsAsRead(firebaseUser, ids);
+  }
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const outside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setNotificationsOpen(false);
+        notificationBellRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [notificationsOpen]);
 
   const [liveUser, setLiveUser] = useState({
     name,
@@ -665,6 +708,29 @@ export function TopHeader({
     };
   }, [firebaseUser, liveOrganizationName, liveUser.organizationId]);
 
+  // Real-time unread notifications subscription for header bell
+  const [liveUnreadCount, setLiveUnreadCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const authUser = firebaseUser ?? useAuthStore.getState().firebaseUser;
+    const targetOrgId = liveUser.organizationId || profile?.organizationId || null;
+    const unsubscribe = subscribeNotificationsFirestore(
+      authUser,
+      targetOrgId,
+      (notifications) => {
+        setNotifications(notifications);
+        const unread = notifications.filter((n) => n.unread).length;
+        setLiveUnreadCount(unread);
+      }
+    );
+
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
+  }, [firebaseUser, liveUser.organizationId, profile?.organizationId]);
+
+  const bellCount = liveUnreadCount !== null ? notifications.filter((item) => item.unread).length : (notificationCount || 0);
+
   // Close profile dropdown on outside click or Escape
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -748,7 +814,7 @@ export function TopHeader({
     `${(liveUser.name || "user").toLowerCase().replace(/\s+/g, "")}@university.edu.ph`;
 
   return (
-    <header className="sticky top-0 z-20 flex min-h-[76px] items-center justify-between gap-3 border-b border-slate-200/80 bg-[#f1f4f8]/95 px-4 py-4 backdrop-blur sm:px-6 lg:min-h-[108px] lg:px-9 lg:py-5">
+    <header className="sticky top-0 z-20 flex min-h-[64px] items-center justify-between gap-3 border-b border-slate-200/80 bg-[#f1f4f8]/95 px-4 py-3 backdrop-blur sm:px-6 lg:min-h-[80px] lg:px-9 lg:py-3">
       <div className="flex min-w-0 items-center gap-3">
         <button
           aria-label="Open navigation"
@@ -759,36 +825,46 @@ export function TopHeader({
           <Menu className="size-6" />
         </button>
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-extrabold tracking-[-0.02em] text-slate-900 sm:text-[25px]">
+          <h1 className="truncate text-lg font-extrabold tracking-[-0.02em] text-slate-900 sm:text-[21px]">
             {liveUser.role === "Admin"
               ? "Admin Dashboard"
               : `Welcome, ${liveUser.name}${liveUser.role === "Student Leader" ? " 👋" : ""}`}
           </h1>
-          <p className="mt-1 truncate text-sm font-semibold text-slate-500 sm:text-[17px]">
+          <p className="mt-0.5 truncate text-xs font-semibold text-slate-500 sm:text-sm">
             {subtitle}
           </p>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-3 sm:gap-5">
+      <div className="flex shrink-0 items-center gap-3 sm:gap-4">
         {liveUser.role !== "Admin" ? (
+          <div ref={notificationRef} className="static sm:relative">
           <button
-            aria-label={`Notifications ${notificationCount}`}
-            className="relative flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:size-14 sm:rounded-[18px]"
+            ref={notificationBellRef}
+            aria-label={`Notifications ${bellCount}`}
+            aria-expanded={notificationsOpen}
+            aria-controls="header-notifications"
+            aria-haspopup="dialog"
+            onClick={() => { setNotificationsOpen((current) => !current); setMenuOpen(false); }}
+            className="relative flex size-10 cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:size-11 sm:rounded-xl"
             type="button"
           >
-            <Bell className="size-5 sm:size-6" strokeWidth={1.75} />
+            <Bell className="size-5" strokeWidth={1.75} />
             <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
-              {notificationCount}
+              {bellCount}
             </span>
           </button>
+          {notificationsOpen && (
+            <NotificationPanel notifications={notifications} onClose={closeNotifications} onRead={readNotification} onReadAll={readAllNotifications} />
+          )}
+          </div>
         ) : null}
         <div ref={menuRef} className="relative">
           <button
             aria-expanded={menuOpen}
             aria-haspopup="menu"
             aria-label="Open profile menu"
-            className="relative flex size-12 items-center justify-center rounded-full outline-none ring-offset-2 transition focus-visible:ring-2 focus-visible:ring-slate-400"
-            onClick={() => setMenuOpen((current) => !current)}
+            className="relative flex size-10 items-center justify-center rounded-full outline-none ring-offset-2 transition focus-visible:ring-2 focus-visible:ring-slate-400"
+            onClick={() => { setMenuOpen((current) => !current); setNotificationsOpen(false); }}
             type="button"
           >
             <Avatar availability={currentAvailability} name={liveUser.name} role={liveUser.role} profilePicture={liveUser.profilePicture} />
