@@ -207,7 +207,7 @@ export function TopHeader({
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
     };
-  }, [firebaseUser, liveUser.organizationId, profile?.organizationId]);
+  }, [firebaseUser?.uid, liveUser.organizationId, profile?.organizationId]);
 
   const bellCount = liveUnreadCount !== null ? liveUnreadCount : (notificationCount || 0);
 

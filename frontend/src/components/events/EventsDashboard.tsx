@@ -161,7 +161,7 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       }
     }
     void refresh();
-    const interval = window.setInterval(() => { if (!document.hidden) void refresh(); }, 25000);
+    const interval = window.setInterval(() => { if (!document.hidden) void refresh(); }, 120000);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [firebaseUser, organizationId, isLeader]);
 

@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { collection, doc, onSnapshot, query, updateDoc, arrayUnion, limit } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, arrayUnion, limit, where } from "firebase/firestore";
 import { getFirebaseDb } from "../firebase/config";
 import { subscribeEventsFirestore } from "./events.service";
 import { subscribeAnnouncementsFirestore } from "./announcements.service";
@@ -241,7 +241,9 @@ export function subscribeNotificationsFirestore(
   });
 
   // 3. Subscribe to direct notifications
-  const notifQuery = query(collection(db, "notifications"), limit(50));
+  const notifQuery = targetOrgId
+    ? query(collection(db, "notifications"), where("orgId", "==", targetOrgId), limit(20))
+    : query(collection(db, "notifications"), limit(20));
   const unsubNotifs = onSnapshot(
     notifQuery,
     (snapshot) => {
@@ -279,7 +281,9 @@ export function subscribeNotificationsFirestore(
   );
 
   // 4. Subscribe to audit logs
-  const auditQuery = query(collection(db, "audit_logs"), limit(40));
+  const auditQuery = targetOrgId
+    ? query(collection(db, "audit_logs"), where("orgId", "==", targetOrgId), limit(15))
+    : query(collection(db, "audit_logs"), limit(15));
   const unsubAudit = onSnapshot(
     auditQuery,
     (snapshot) => {
