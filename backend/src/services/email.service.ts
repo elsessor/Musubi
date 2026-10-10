@@ -146,13 +146,16 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
         } else {
           const errMsg = resendData?.message || resendData?.error || "Resend API failure";
           console.warn("⚠️ Resend API error:", errMsg);
-          if (!env.gmailAppPassword) {
-            return { success: false, error: errMsg };
+          if (!env.brevoApiKey && !env.gmailAppPassword) {
+            const formattedError = errMsg.toLowerCase().includes("only send testing emails")
+              ? "Resend Sandbox Restriction: On the free trial without a verified domain, Resend only allows sending to the account owner (larryagad1@gmail.com). To send to all registered members, add a Brevo API key or verify a custom domain on Resend."
+              : errMsg;
+            return { success: false, error: formattedError };
           }
         }
       } catch (resendErr: any) {
         console.warn("⚠️ Resend request error:", resendErr?.message);
-        if (!env.gmailAppPassword) {
+        if (!env.brevoApiKey && !env.gmailAppPassword) {
           return { success: false, error: resendErr?.message || "Resend connection error" };
         }
       }
