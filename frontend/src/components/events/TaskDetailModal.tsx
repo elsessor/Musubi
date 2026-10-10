@@ -4,6 +4,7 @@ import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 
 import {
   AlertTriangle,
+  Bell,
   Check,
   ChevronDown,
   Edit3,
@@ -20,6 +21,8 @@ import type { Task, TaskPriority, TaskStatus } from "./types";
 import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { type OrgMemberItem } from "./AddTaskModal";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
+import { sendNudgeEmail } from "@/services/notifications.service";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
@@ -76,6 +79,68 @@ export function TaskDetailModal({
   const [dateError, setDateError] = useState("");
   const [isLeaderOnly, setIsLeaderOnly] = useState<boolean>(Boolean(task.isLeaderOnly));
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sendingNudge, setSendingNudge] = useState(false);
+
+  async function handleSendManualNudge() {
+    setSendingNudge(true);
+    try {
+      const assignedMember = activeRoster.find((m) =>
+        selectedMemberId ? m.id === selectedMemberId : task.assignedMemberUID ? m.id === task.assignedMemberUID : m.name === (task.assignedMemberName || task.assignee?.name)
+      );
+
+      const targetUID = assignedMember?.id || task.assignedMemberUID || reviewerUID;
+      const targetName = assignedMember?.name || task.assignedMemberName || task.assignee?.name || "Team Member";
+
+      const dueDateStr = dueDate || task.dueDate || task.deadline;
+      let nudgeType = "3_days_prior";
+      let isUrgent = false;
+
+      if (dueDateStr) {
+        const parsedDate = new Date(dueDateStr);
+        if (!isNaN(parsedDate.getTime())) {
+          const diffDays = Math.ceil((parsedDate.getTime() - Date.now()) / (1000 * 3600 * 24));
+          if (diffDays <= 1) {
+            nudgeType = "1_day_prior";
+            isUrgent = true;
+          }
+        }
+      }
+
+      const res = await sendNudgeEmail({
+        recipientUID: targetUID,
+        taskTitle: title.trim() || task.title,
+        eventName: "Organization Event",
+        deadline: dueDateStr || "Upcoming",
+        message: isUrgent
+          ? "Urgent Reminder: This task is due tomorrow!"
+          : "Contextual Nudge: Checking in on progress 3 days prior to deadline.",
+        isUrgent,
+        nudgeType
+      });
+
+      if (res.success) {
+        useToastStore.getState().showToast({
+          title: "Nudge Email Sent",
+          description: `Successfully sent ${nudgeType === "1_day_prior" ? "1-Day Prior (Urgent)" : "3-Days Prior"} nudge for "${title || task.title}" to ${targetName}.`,
+          tone: "success"
+        });
+      } else {
+        useToastStore.getState().showToast({
+          title: "Could Not Send Nudge",
+          description: res.error || "Failed to deliver email nudge.",
+          tone: "error"
+        });
+      }
+    } catch (err: any) {
+      useToastStore.getState().showToast({
+        title: "Error Sending Nudge",
+        description: err.message || "An unexpected error occurred.",
+        tone: "error"
+      });
+    } finally {
+      setSendingNudge(false);
+    }
+  }
 
   // Assignee selection
   const currentMemberMatch = activeRoster.find(
@@ -374,13 +439,46 @@ export function TaskDetailModal({
           <TaskAttachments eventId={eventId} task={task} canAdd={canEdit} onTaskUpdated={onAttachmentsUpdated} />
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
-            {isLeader && canEdit && onDeleteTask ? <button
-              type="button" onClick={() => setConfirmDelete(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
-            ><Trash2 size={14} />Delete task</button> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {isLeader && canEdit && onDeleteTask ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                >
+                  <Trash2 size={14} />
+                  Delete task
+                </button>
+              ) : null}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={handleSendManualNudge}
+                  disabled={sendingNudge}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 hover:text-blue-800 disabled:opacity-50"
+                  title="Test or dispatch an adviser-recommended nudge email right now"
+                >
+                  <Bell size={14} className="text-blue-600" />
+                  {sendingNudge ? "Sending Nudge..." : "Send Nudge Email"}
+                </button>
+              )}
+            </div>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-              <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">{canEdit ? "Cancel" : "Close"}</button>
-              {canEdit ? <button type="submit" className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700">{isLeader ? "Save changes" : "Update status"}</button> : null}
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                {canEdit ? "Cancel" : "Close"}
+              </button>
+              {canEdit ? (
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700"
+                >
+                  {isLeader ? "Save changes" : "Update status"}
+                </button>
+              ) : null}
             </div>
           </div>
         </form>

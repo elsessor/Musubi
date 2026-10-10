@@ -2,6 +2,9 @@
 
 import { AlertCircle, Clock, ChevronRight, Bell } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
+import { checkAndDispatchDueNudges } from "@/services/notifications.service";
+import { useToastStore } from "@/store/toastStore";
 
 export type NudgeItem = {
   id: string;
@@ -18,6 +21,36 @@ type MemberNudgesProps = {
 };
 
 export function MemberNudges({ nudges }: MemberNudgesProps) {
+  const [checking, setChecking] = useState(false);
+
+  async function handleCheckAndDispatch() {
+    setChecking(true);
+    try {
+      const res = await checkAndDispatchDueNudges();
+      if (res.success) {
+        useToastStore.getState().showToast({
+          title: "Nudges Evaluated",
+          description: `Checked deadlines. ${res.processedCount || 0} email nudge(s) dispatched.`,
+          tone: "success"
+        });
+      } else {
+        useToastStore.getState().showToast({
+          title: "Check Failed",
+          description: res.error || "Could not check due nudges.",
+          tone: "error"
+        });
+      }
+    } catch (e: any) {
+      useToastStore.getState().showToast({
+        title: "Error",
+        description: e.message || "Failed to trigger nudges check.",
+        tone: "error"
+      });
+    } finally {
+      setChecking(false);
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -31,13 +64,25 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
             </span>
           )}
         </div>
-        <Link
-          href="/dashboard/notifications"
-          className="group inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
-        >
-          View All
-          <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCheckAndDispatch}
+            disabled={checking}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+            title="Check and dispatch due 3-day and 1-day prior nudges"
+          >
+            <Bell size={12} className="text-blue-600" />
+            {checking ? "Checking..." : "Check Nudges"}
+          </button>
+          <Link
+            href="/dashboard/notifications"
+            className="group inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            View All
+            <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
       </div>
 
       {nudges.length === 0 ? (
