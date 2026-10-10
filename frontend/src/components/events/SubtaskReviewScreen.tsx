@@ -342,22 +342,25 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
     : subtasks;
 
   return (
-    <div className="flex flex-col gap-6 bg-[#f4f7fb] p-6 rounded-3xl min-h-screen">
+    <div className="flex min-w-0 flex-col gap-4 rounded-2xl bg-[#f4f7fb] p-3 sm:gap-6 sm:rounded-3xl sm:p-6">
       {/* Top Header Row (matching Old UI) */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/80 pb-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-[#1e293b] tracking-tight">Events &amp; Tasks</h1>
-          <p className="text-xs text-slate-500 font-semibold mt-0.5">
-            University Student Council · AY 2025–2026 · {new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date())}
-          </p>
+      <div className="flex min-w-0 flex-col gap-3 border-b border-slate-200/80 pb-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 items-start justify-between gap-3 xl:block">
+          <div className="min-w-0">
+            <h1 className="text-xl font-extrabold tracking-tight text-[#1e293b] sm:text-2xl">Events &amp; Tasks</h1>
+            <p className="mt-1 break-words text-xs font-semibold leading-5 text-slate-500">
+              University Student Council · AY 2025–2026 · {new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date())}
+            </p>
+          </div>
+          {onBack ? <button type="button" onClick={onBack} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 xl:hidden"><ChevronLeft size={14} /> Back</button> : null}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="grid min-w-0 grid-cols-2 gap-2 xl:flex xl:flex-wrap xl:items-center xl:justify-end xl:gap-3">
           {onBack && (
             <button
               type="button"
               onClick={onBack}
-              className="rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+              className="hidden min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-xs transition hover:bg-slate-50 xl:inline-flex"
             >
               &larr; Back
             </button>
@@ -366,46 +369,46 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
           <button
             type="button"
             onClick={handleAutoAssignHeuristics}
-            className="inline-flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-bold text-indigo-700 shadow-xs hover:bg-indigo-100 transition"
+            className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-2.5 text-xs font-bold text-indigo-700 shadow-xs transition hover:bg-indigo-100 xl:px-4"
             title="Automatically assign subtasks based on team members' skills & workload"
           >
-            <Sparkles size={15} />
-            Auto-Assign Skills
+            <Sparkles size={15} className="shrink-0" />
+            <span className="xl:hidden">Auto-assign</span><span className="hidden xl:inline">Auto-Assign Skills</span>
           </button>
 
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#2563eb] px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
+            className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl bg-[#2563eb] px-2 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 xl:px-4"
           >
-            <Plus size={15} />
-            + Add Subtask Manually
+            <Plus size={15} className="shrink-0" />
+            <span className="xl:hidden">Add subtask</span><span className="hidden xl:inline">Add Subtask Manually</span>
           </button>
 
           <button
             type="button"
             disabled={subtasks.length === 0 || isPublished}
             onClick={() => setShowPublishModal(true)}
-            className={`inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-bold text-white shadow-md transition ${subtasks.length === 0 || isPublished
+            className={`col-span-2 inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-white shadow-sm transition xl:px-5 ${subtasks.length === 0 || isPublished
                 ? "bg-slate-300 cursor-not-allowed opacity-70"
                 : "bg-[#1e3a5f] hover:bg-[#152943]"
               }`}
           >
-            <Zap size={15} />
+            <Zap size={15} className="shrink-0" />
             {isPublished ? "Event Published" : `Publish Event (${subtasks.length} subtasks)`}
           </button>
         </div>
       </div>
 
       {/* Semantic Safeguard Status Bar (MSB-FE-014) */}
-      <div className="rounded-3xl border border-slate-200/90 bg-white p-4.5 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
+      <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xs sm:rounded-3xl sm:p-4 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3.5">
           <div className={`flex size-10 shrink-0 items-center justify-center rounded-2xl font-bold shadow-2xs ${
             subtasksWithWarnings.length === 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
           }`}>
             {subtasksWithWarnings.length === 0 ? <ShieldCheck size={22} /> : <ShieldAlert size={22} />}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-extrabold text-slate-900 tracking-tight">
                 Semantic Safeguard Audit
@@ -418,7 +421,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
                 {subtasksWithWarnings.length === 0 ? "Safeguard Compliant (0 Warnings)" : `${subtasksWithWarnings.length} Flagged Item(s)`}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-slate-500 font-medium">
+            <p className="mt-1 break-words text-xs font-medium leading-5 text-slate-500">
               {subtasksWithWarnings.length === 0
                 ? "All subtasks meet quality, skill assignment, and organizational security standards."
                 : `${subtasksWithWarnings.length} subtask(s) flagged for low confidence, missing details, or unassigned roles.`}
@@ -426,28 +429,29 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid min-w-0 grid-cols-2 gap-2 lg:flex lg:flex-wrap lg:items-center">
           {subtasksWithWarnings.length > 0 && (
             <>
               <button
                 type="button"
                 onClick={() => setShowOnlyWarnings(!showOnlyWarnings)}
-                className={`rounded-2xl border px-3 py-1.5 text-xs font-bold transition ${
+                className={`min-h-11 min-w-0 rounded-xl border px-2 py-2 text-xs font-bold transition lg:px-3 ${
                   showOnlyWarnings
                     ? "border-amber-400 bg-amber-50 text-amber-800"
                     : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
-                {showOnlyWarnings ? "Show All Tasks" : `Filter Warnings (${subtasksWithWarnings.length})`}
+                <span className="lg:hidden">{showOnlyWarnings ? "Show all tasks" : `Warnings (${subtasksWithWarnings.length})`}</span>
+                <span className="hidden lg:inline">{showOnlyWarnings ? "Show All Tasks" : `Filter Warnings (${subtasksWithWarnings.length})`}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleAutoFixSafeguards}
-                className="inline-flex items-center gap-1.5 rounded-2xl bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-600 transition"
+                className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-2 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-amber-600 lg:px-3"
               >
-                <Sparkles size={13} />
-                Auto-Fix Safeguards
+                <Sparkles size={13} className="shrink-0" />
+                <span className="lg:hidden">Auto-fix</span><span className="hidden lg:inline">Auto-Fix Safeguards</span>
               </button>
             </>
           )}
@@ -455,9 +459,9 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
       </div>
 
       {/* Work Breakdown Section Header (Exact Old UI Style) */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <h2 className="text-lg font-bold text-[#1e293b]">Work Breakdown</h2>
+      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="text-base font-bold text-[#1e293b] sm:text-lg">Work Breakdown</h2>
           <span className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-2.5 py-0.5 text-xs font-semibold text-[#d97706]">
             {currentGoal.generationSource === "template"
               ? "Template Based"
@@ -466,13 +470,13 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
               : "AI Generated"}
           </span>
           {isEditingEventName ? (
-            <div className="flex items-center gap-1.5">
+            <div className="flex w-full min-w-0 items-center gap-1.5 lg:w-auto">
               <span className="text-sm font-semibold text-slate-500">for &quot;</span>
               <input
                 type="text"
                 value={eventNameInput}
                 onChange={(e) => setEventNameInput(e.target.value)}
-                className="h-7 rounded-lg border border-slate-300 px-2 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
+                className="min-h-11 w-full min-w-0 flex-1 rounded-lg border border-slate-300 px-2 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none lg:w-48"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSaveEventName();
@@ -483,22 +487,23 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
               <button
                 type="button"
                 onClick={handleSaveEventName}
-                className="rounded-lg bg-blue-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-blue-700"
+                className="min-h-11 shrink-0 rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700"
               >
                 Save
               </button>
             </div>
           ) : (
-            <span className="inline-flex items-center gap-1 text-sm font-semibold text-slate-500">
-              for &quot;{currentGoal.eventName || "New Event"}&quot;
+            <span className="inline-flex w-full min-w-0 items-center gap-1 text-xs font-semibold text-slate-500 sm:text-sm lg:w-auto">
+              <span className="min-w-0 break-words">for &quot;{currentGoal.eventName || "New Event"}&quot;</span>
               <button
                 type="button"
                 onClick={() => {
                   setEventNameInput(currentGoal.eventName || "");
                   setIsEditingEventName(true);
                 }}
-                className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                 title="Edit Event Name"
+                aria-label="Edit event name"
               >
                 <Edit2 size={13} />
               </button>
@@ -506,14 +511,14 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
           )}
         </div>
 
-        <p className="text-xs font-medium text-slate-400">
+        <p className="text-xs font-medium leading-5 text-slate-500">
           {confirmedCount}/{subtasks.length} confirmed · Review each task before adding to event
         </p>
       </div>
 
       {/* Task Cards Grid (2-column Old UI Layout) */}
       {displayedSubtasks.length === 0 ? (
-        <div className="rounded-3xl border-2 border-dashed border-slate-300 bg-white p-12 text-center shadow-xs">
+        <div className="min-w-0 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-8 text-center shadow-xs sm:rounded-3xl sm:p-12">
           <Layers size={32} className="mx-auto text-slate-400 mb-2" />
           <h3 className="text-base font-bold text-slate-900">
             {showOnlyWarnings ? "No Flagged Subtasks" : "No Subtasks"}
@@ -530,7 +535,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-5 lg:grid-cols-2">
           {displayedSubtasks.map((st) => (
             <OldTaskCard
               key={st.id}
@@ -648,7 +653,7 @@ function OldTaskCard({
 
   return (
     <div
-      className={`relative flex flex-col rounded-3xl bg-white p-6 shadow-sm transition-all border-2 ${
+      className={`relative flex min-w-0 flex-col rounded-2xl border-2 bg-white p-3 shadow-sm transition-all sm:rounded-3xl sm:p-5 ${
         warnings.length > 0
           ? "border-amber-400 ring-2 ring-amber-100/70 bg-amber-50/10"
           : isConfirmed
@@ -659,16 +664,16 @@ function OldTaskCard({
       {/* Regeneration Spinner */}
       {isRegenerating && (
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-white/85 backdrop-blur-xs">
-          <div className="flex items-center gap-2 text-xs font-bold text-purple-700 bg-purple-50 px-4 py-2 rounded-full border border-purple-200">
-            <Loader2 size={16} className="animate-spin text-purple-600" />
+          <div className="mx-3 flex min-w-0 items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-700">
+            <Loader2 size={16} className="shrink-0 animate-spin text-purple-600" />
             AI Regenerating single subtask...
           </div>
         </div>
       )}
 
       {/* Card Header Row: Needs Review / Confirmed Pill & Priority */}
-      <div className="flex items-center justify-between">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="contents">
           {isConfirmed ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#d1fae5] px-3 py-1 text-xs font-bold text-[#047857]">
               <CheckCircle2 size={12} />
@@ -704,38 +709,38 @@ function OldTaskCard({
       </div>
 
       {/* Title */}
-      <h3 className="mt-4 text-base font-bold text-[#1e293b] leading-snug">{subtask.title}</h3>
+      <h3 className="mt-3 break-words text-sm font-bold leading-6 text-[#1e293b] sm:text-base">{subtask.title}</h3>
 
       {/* Assignee & Date Row */}
-      <div className="mt-2.5 flex items-center gap-4 text-xs font-medium text-slate-500">
-        <span className="flex items-center gap-1.5">
-          <User size={13} className="text-slate-400" />
-          {subtask.assigneeName || "Unassigned"}
+      <div className="mt-2 flex min-w-0 flex-col gap-1.5 text-xs font-medium leading-5 text-slate-500 sm:flex-row sm:flex-wrap sm:gap-x-4">
+        <span className="flex min-w-0 items-start gap-1.5">
+          <User size={13} className="mt-1 shrink-0 text-slate-400" />
+          <span className="min-w-0 break-words">{subtask.assigneeName || "Unassigned"}</span>
         </span>
 
         <span className="flex items-center gap-1.5">
-          <CalendarIcon size={13} className="text-slate-400" />
+          <CalendarIcon size={13} className="shrink-0 text-slate-400" />
           {formatSubtaskDate(subtask)}
         </span>
       </div>
 
       {/* Inline Safeguard Validation Warnings Box (MSB-FE-014) */}
       {warnings.length > 0 && (
-        <div className="mt-3.5 rounded-2xl border border-amber-300 bg-amber-50/90 p-3.5 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-900">
+        <div className="mt-3 space-y-1.5 rounded-xl border border-amber-300 bg-amber-50/90 p-3">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5 text-xs font-extrabold text-amber-900">
               <AlertTriangle size={14} className="text-amber-600 shrink-0" />
-              <span>Inline Validation Warning ({warnings.length}):</span>
+              <span>Validation warnings ({warnings.length})</span>
             </div>
             <button
               type="button"
               onClick={onEdit}
-              className="text-[11px] font-extrabold text-blue-700 hover:text-blue-900 underline"
+              className="min-h-11 text-xs font-extrabold text-blue-700 underline hover:text-blue-900"
             >
               Edit &amp; Resolve &rarr;
             </button>
           </div>
-          <ul className="text-xs text-amber-900 space-y-1 pl-4 list-disc font-medium">
+          <ul className="list-disc space-y-1 break-words pl-4 text-xs font-medium leading-5 text-amber-900">
             {warnings.map((w, idx) => (
               <li key={idx}>{w}</li>
             ))}
@@ -744,7 +749,7 @@ function OldTaskCard({
       )}
 
       {/* Status Box */}
-      <div className="mt-3.5 flex items-center justify-between rounded-xl bg-[#f1f5f9] px-4 py-2.5 text-xs">
+      <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl bg-[#f1f5f9] px-3 py-2.5 text-xs">
         <span className="font-semibold text-slate-500">Status:</span>
         <span className={`rounded-full px-2 py-0.5 font-bold ${getStatusTheme(subtask.status || "To Do", customStatuses).badge}`}>{subtask.status || "To Do"}</span>
       </div>
@@ -774,15 +779,15 @@ function OldTaskCard({
       <div className="mt-3.5 flex items-center gap-1.5 flex-wrap">
         <span className="text-[11px] font-bold text-slate-400">Skills:</span>
         {subtask.requiredSkills.map((sk) => (
-          <span key={sk} className="rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 border border-slate-200/60">
+          <span key={sk} className="max-w-full break-words rounded-lg border border-slate-200/60 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
             {sk}
           </span>
         ))}
       </div>
 
       {/* Leader Only Toggle Checkbox & Single Actions */}
-      <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
-        <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-600 hover:text-slate-900 select-none">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+        <label className="flex min-h-11 cursor-pointer select-none items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900">
           <input
             type="checkbox"
             checked={subtask.isLeaderOnly}
@@ -799,7 +804,8 @@ function OldTaskCard({
               type="button"
               onClick={onRegenerate}
               title="Re-roll single AI subtask"
-              className="p-1.5 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition"
+              aria-label="Regenerate subtask"
+              className="inline-flex size-11 items-center justify-center rounded-lg border border-purple-200 bg-purple-50 text-purple-700 transition hover:bg-purple-100"
             >
               <RefreshCw size={12} />
             </button>
@@ -809,7 +815,8 @@ function OldTaskCard({
             type="button"
             onClick={onDelete}
             title="Delete subtask"
-            className="p-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition"
+            aria-label="Delete subtask"
+            className="inline-flex size-11 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 transition hover:bg-rose-100"
           >
             <Trash2 size={12} />
           </button>
@@ -817,11 +824,11 @@ function OldTaskCard({
       </div>
 
       {/* Main Bottom Buttons (Exact Old UI Style from Screenshot 1) */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-xl border border-[#cbd5e1] bg-white py-3 text-sm font-bold text-[#334155] shadow-2xs hover:bg-slate-50 transition"
+          className="min-h-11 rounded-xl border border-[#cbd5e1] bg-white px-2 py-2.5 text-xs font-bold text-[#334155] shadow-2xs transition hover:bg-slate-50 sm:text-sm"
         >
           Edit
         </button>
@@ -829,7 +836,7 @@ function OldTaskCard({
         <button
           type="button"
           onClick={onConfirm}
-          className="rounded-xl bg-[#1e3a5f] py-3 text-sm font-bold text-white shadow-2xs hover:bg-[#152943] transition"
+          className="min-h-11 rounded-xl bg-[#1e3a5f] px-2 py-2.5 text-xs font-bold text-white shadow-2xs transition hover:bg-[#152943] sm:text-sm"
         >
           {isConfirmed ? "Confirmed" : "Confirm"}
         </button>
@@ -1011,16 +1018,16 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+      <div className="max-h-[90dvh] w-full min-w-0 max-w-lg space-y-5 overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:rounded-3xl sm:p-6">
         {/* Modal Header (Matching Screenshot 2) */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-full bg-[#e0e7ff] text-[#3b82f6]">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e0e7ff] text-[#3b82f6]">
               <Edit2 size={18} />
             </span>
             <h3 className="text-lg font-bold text-slate-900">Edit AI Task</h3>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button type="button" onClick={onClose} aria-label="Close task editor" className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-600">
             <X size={20} />
           </button>
         </div>
@@ -1049,7 +1056,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none"
+                className="w-full resize-y rounded-2xl border border-slate-200 bg-[#f8fafc] px-3 py-2.5 text-sm leading-6 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none"
             />
           </div>
 
@@ -1074,7 +1081,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
             />
             {bestMatch && (
               <div className="mt-2.5 rounded-2xl border border-blue-100 bg-slate-50/70 p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
                     <Sparkles size={14} className="text-blue-600 shrink-0" />
                     <span>Recommended Assignee</span>
@@ -1123,7 +1130,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
 
           {/* Schedule & Auto-Reminder Card */}
           <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
                 <Bell size={14} className="text-blue-600 shrink-0" />
                 <span>Adviser-Recommended Nudges</span>
@@ -1267,7 +1274,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
                   }
                 }}
                 placeholder="Type skill name & enter"
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs text-slate-800"
+                className="min-h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs text-slate-800"
               />
               <button
                 type="button"
@@ -1377,15 +1384,15 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-4">
+      <div className="max-h-[90dvh] w-full min-w-0 max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:rounded-3xl sm:p-6">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-full bg-[#e0e7ff] text-[#3b82f6]">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#e0e7ff] text-[#3b82f6]">
               <Plus size={18} />
             </span>
             <h3 className="text-base font-extrabold text-slate-900">Add Subtask Manually</h3>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button type="button" onClick={onClose} aria-label="Close new subtask" className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-600">
             <X size={18} />
           </button>
         </div>
@@ -1412,7 +1419,7 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Specify requirements or instructions..."
-              className="w-full resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2 text-xs text-slate-800"
+              className="w-full resize-y rounded-2xl border border-slate-200 bg-[#f8fafc] px-3 py-2.5 text-sm leading-6 text-slate-800"
             />
           </div>
 
@@ -1463,7 +1470,7 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
                   }
                 }}
                 placeholder="Add skill & Enter"
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs text-slate-800"
+                className="min-h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs text-slate-800"
               />
               <button
                 type="button"
@@ -1544,9 +1551,9 @@ function OldPublishGoalModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-4">
+      <div className="max-h-[90dvh] w-full min-w-0 max-w-md space-y-4 overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:rounded-3xl sm:p-6">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-          <span className="flex size-10 items-center justify-center rounded-full bg-[#e0e7ff] text-[#3b82f6]">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e0e7ff] text-[#3b82f6]">
             <Zap size={20} />
           </span>
           <div>
@@ -1555,7 +1562,7 @@ function OldPublishGoalModal({
           </div>
         </div>
 
-        <p className="text-xs text-slate-600 leading-relaxed">
+        <p className="break-words text-xs leading-relaxed text-slate-600">
           You are about to publish the subtasks for <strong className="text-slate-900">&quot;{goalName}&quot;</strong>. Once published, these subtasks become active and can be assigned to organization members.
         </p>
 

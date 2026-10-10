@@ -416,16 +416,16 @@ function TabButton({ icon, label, badge, active, onClick }: TabButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`relative flex items-center gap-1.5 px-4 pb-3 pt-1 text-sm font-medium transition-colors ${
+      className={`relative flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 px-2 pb-3 pt-1 text-xs font-medium transition-colors sm:flex-none sm:gap-1.5 sm:px-4 sm:text-sm ${
         active
           ? "text-blue-600"
           : "text-slate-500 hover:text-slate-800"
       }`}
     >
-      {icon}
-      {label}
+      <span className="shrink-0">{icon}</span>
+      <span className="min-w-0">{label}</span>
       {badge && (
-        <span className="rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+        <span className="hidden shrink-0 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 px-1.5 py-0.5 text-[10px] font-bold text-white sm:inline">
           {badge}
         </span>
       )}

@@ -381,39 +381,39 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
       {/* Unified Main Card Container */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+      <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm sm:p-6">
         {/* Header Section */}
         <div className="mb-6 flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100/70 text-blue-500">
             <Zap size={18} />
           </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-bold text-slate-900">AI Task Atomizer</h2>
               <span className="inline-flex items-center rounded-full bg-blue-100/70 px-2.5 py-0.5 text-[11px] font-semibold text-blue-600">
                 AI Powered
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-1 text-xs leading-5 text-slate-500">
               Describe an event and the AI will break it into specific, actionable tasks with suggested assignees, deadlines, and priorities.
             </p>
           </div>
         </div>
 
         {/* Form Controls */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2">
           {/* Target Event */}
           <div>
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <label className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
                 Target Event <span className="text-rose-500">*</span>
               </label>
               <button
                 type="button"
                 onClick={() => setIsCreateFromDescription((prev) => !prev)}
-                className="text-xs font-medium text-blue-600 hover:underline"
+                className="min-h-11 text-left text-xs font-medium text-blue-600 hover:underline sm:min-h-0"
               >
                 {isCreateFromDescription ? "Select Existing Event" : "+ Create from Description"}
               </button>
@@ -480,17 +480,17 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         )}
 
         {/* Action Controls */}
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-5 flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={handleAtomize}
             disabled={isAtomizing || !goalDescription.trim()}
-            className="flex items-center gap-2 rounded-2xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-blue-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-5"
           >
             {isAtomizing ? (
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2 size={16} className="shrink-0 animate-spin" />
             ) : (
-              <Zap size={16} />
+              <Zap size={16} className="shrink-0" />
             )}
             {isAtomizing ? "Atomizing with Genkit..." : "Atomize Event with AI"}
           </button>
