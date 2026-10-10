@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Edit3,
   Lock,
+  MoreHorizontal,
   Shield,
   Sparkles,
   Star,
@@ -26,6 +27,7 @@ import { sendNudgeEmail } from "@/services/notifications.service";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { TaskAttachments } from "./TaskAttachments";
 import { TaskAssignee } from "./TaskAssignee";
@@ -63,7 +65,7 @@ export function TaskDetailModal({
 }: TaskDetailModalProps) {
   const panelId = useId();
   const activeRoster = Array.isArray(roster) ? roster : [];
-  const reviewerUID = useAuthStore((state) => state.firebaseUser?.uid);
+  const reviewerUID = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
   const reviewerName = useAuthStore((state) => state.profile?.fullName || "");
   const reviewerRole = useAuthStore((state) => state.profile?.role);
   const canViewReview = reviewerRole === "Student Leader" || reviewerRole === "Admin" || isTaskAssignedToUser(task, reviewerUID, reviewerName);
@@ -80,15 +82,26 @@ export function TaskDetailModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [sendingNudge, setSendingNudge] = useState(false);
 
+  // Assignee selection
+  const currentMemberMatch = activeRoster.find(
+    (m) => task.assignedMemberUID ? m.id === task.assignedMemberUID : m.name === (task.assignedMemberName || task.assignee?.name)
+  );
+  const [selectedMemberId, setSelectedMemberId] = useState<string>(
+    currentMemberMatch?.id || task.assignedMemberUID || ""
+  );
+  const nudgeRecipient = activeRoster.find((member) =>
+    selectedMemberId ? member.id === selectedMemberId : task.assignedMemberUID ? member.id === task.assignedMemberUID : member.name === (task.assignedMemberName || task.assignee?.name)
+  );
+  const nudgeRecipientUID = nudgeRecipient?.id || selectedMemberId || task.assignedMemberUID;
+  const canSendNudge = isLeader && canEdit && (reviewerRole === "Student Leader" || reviewerRole === "Admin")
+    && Boolean(reviewerUID && nudgeRecipientUID && nudgeRecipientUID !== reviewerUID);
+  const canDeleteTask = isLeader && canEdit && Boolean(onDeleteTask);
+
   async function handleSendManualNudge() {
+    if (!canSendNudge || sendingNudge) return;
     setSendingNudge(true);
     try {
-      const assignedMember = activeRoster.find((m) =>
-        selectedMemberId ? m.id === selectedMemberId : task.assignedMemberUID ? m.id === task.assignedMemberUID : m.name === (task.assignedMemberName || task.assignee?.name)
-      );
-
-      const targetUID = assignedMember?.id || task.assignedMemberUID || reviewerUID;
-      const targetName = assignedMember?.name || task.assignedMemberName || task.assignee?.name || "Team Member";
+      const targetName = nudgeRecipient?.name || task.assignedMemberName || task.assignee?.name || "Team Member";
 
       const dueDateStr = dueDate || task.dueDate || task.deadline;
       let nudgeType = "3_days_prior";
@@ -106,7 +119,7 @@ export function TaskDetailModal({
       }
 
       const res = await sendNudgeEmail({
-        recipientUID: targetUID,
+        recipientUID: nudgeRecipientUID || undefined,
         taskTitle: title.trim() || task.title,
         eventName: "Organization Event",
         deadline: dueDateStr || "Upcoming",
@@ -140,14 +153,6 @@ export function TaskDetailModal({
       setSendingNudge(false);
     }
   }
-
-  // Assignee selection
-  const currentMemberMatch = activeRoster.find(
-    (m) => task.assignedMemberUID ? m.id === task.assignedMemberUID : m.name === (task.assignedMemberName || task.assignee?.name)
-  );
-  const [selectedMemberId, setSelectedMemberId] = useState<string>(
-    currentMemberMatch?.id || task.assignedMemberUID || ""
-  );
 
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, [task.status]);
 
@@ -419,43 +424,66 @@ export function TaskDetailModal({
       ) : null}
           <TaskAttachments eventId={eventId} task={task} canAdd={canEdit} onTaskUpdated={onAttachmentsUpdated} />
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
-            <div className="flex flex-wrap items-center gap-2">
-              {isLeader && canEdit && onDeleteTask ? (
+          <div className="flex shrink-0 items-center gap-2 border-t border-slate-200 bg-white p-3 sm:flex-wrap sm:justify-between sm:gap-3 sm:px-6 sm:py-4">
+            {canDeleteTask || canSendNudge ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label="More task actions" className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:hidden">
+                    <MoreHorizontal size={20} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" collisionPadding={12} className="z-[60] w-52 rounded-xl border-slate-200 bg-white p-1.5 text-slate-700 shadow-lg sm:hidden">
+                  {canSendNudge ? (
+                    <DropdownMenuItem onSelect={() => { void handleSendManualNudge(); }} disabled={sendingNudge} className="min-h-11 cursor-pointer rounded-lg px-3 text-xs focus:bg-blue-50 focus:text-blue-700">
+                      <Bell size={14} className="text-blue-600" />
+                      {sendingNudge ? "Sending nudge..." : "Send nudge email"}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canDeleteTask ? (
+                    <DropdownMenuItem onSelect={() => setConfirmDelete(true)} className="min-h-11 cursor-pointer rounded-lg px-3 text-xs text-rose-600 focus:bg-rose-50 focus:text-rose-700">
+                      <Trash2 size={14} className="text-rose-600" />
+                      Delete task
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+            {canDeleteTask || canSendNudge ? <div className="hidden min-w-0 flex-wrap items-center gap-2 sm:flex">
+              {canDeleteTask ? (
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-rose-50 px-2 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 sm:min-h-9 sm:bg-transparent sm:px-3 sm:hover:bg-rose-50"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={14} className="shrink-0" />
                   Delete task
                 </button>
               ) : null}
-              {canEdit && (
+              {canSendNudge && (
                 <button
                   type="button"
                   onClick={handleSendManualNudge}
                   disabled={sendingNudge}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 hover:text-blue-800 disabled:opacity-50"
-                  title="Test or dispatch an adviser-recommended nudge email right now"
+                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-2 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 hover:text-blue-800 disabled:opacity-50 sm:min-h-9 sm:px-3"
+                  title="Send a reminder email to the assigned member"
                 >
-                  <Bell size={14} className="text-blue-600" />
+                  <Bell size={14} className="shrink-0 text-blue-600" />
                   {sendingNudge ? "Sending Nudge..." : "Send Nudge Email"}
                 </button>
               )}
-            </div>
-            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            </div> : null}
+            <div className={`grid min-w-0 flex-1 gap-2 ${canEdit ? "grid-cols-2" : "grid-cols-1"} sm:ml-auto sm:flex sm:flex-none sm:items-center sm:justify-end`}>
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                className="min-h-11 rounded-xl border border-slate-200 px-2 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 sm:min-h-9 sm:px-4"
               >
                 {canEdit ? "Cancel" : "Close"}
               </button>
               {canEdit ? (
                 <button
                   type="submit"
-                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700"
+                  className="min-h-11 rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700 sm:min-h-9 sm:px-4"
                 >
                   {isLeader ? "Save changes" : "Update status"}
                 </button>

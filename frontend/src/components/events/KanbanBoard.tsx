@@ -47,7 +47,7 @@ type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
 const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { mode: "grid", title: "Grid View", icon: LayoutGrid },
   { mode: "table", title: "Table View", icon: Table },
-  { mode: "expanded", title: "Expanded View", icon: Rows },
+  { mode: "expanded", title: "Expandable list", icon: Rows },
   { mode: "kanban", title: "Kanban Columns", icon: Columns3 },
   { mode: "calendar", title: "Calendar View", icon: Calendar }
 ];
@@ -557,7 +557,7 @@ export function KanbanBoard({
             <Filter size={16} /> Filters{statusFilter !== "All" || selectedCommittee !== "All" ? ` (${Number(statusFilter !== "All") + Number(selectedCommittee !== "All")})` : ""}
           </button>
           <div className="min-w-0 flex-1">
-            <CustomSelect value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[{ value: "grid", label: "Grid" }, { value: "table", label: "Table" }, { value: "expanded", label: "Expanded" }, { value: "kanban", label: "Kanban" }, { value: "calendar", label: "Calendar" }]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11" portal />
+            <CustomSelect value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[{ value: "grid", label: "Grid" }, { value: "table", label: "Table" }, { value: "expanded", label: "Expandable list" }, { value: "kanban", label: "Kanban" }, { value: "calendar", label: "Calendar" }]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11" portal />
           </div>
           {isLeader && <button type="button" onClick={() => setShowAddTaskModal(true)} className="flex min-h-11 items-center gap-1 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white"><Plus size={16} /> Task</button>}
         </div>
@@ -733,7 +733,6 @@ export function KanbanBoard({
           <TaskExpandedView
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
-            onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
             customStatuses={customStatuses}
             statusOrder={statusOrder}
@@ -741,7 +740,7 @@ export function KanbanBoard({
         )}
 
         {viewMode === "kanban" && (
-          <div className="flex h-full gap-4 overflow-x-auto pb-4">
+          <div className="flex min-w-0 snap-x snap-proximity items-start gap-3 overflow-x-auto overscroll-x-contain pb-4 pt-1 sm:gap-4">
             {allStatuses.map((status) => (
               <KanbanColumn
                 key={status}
@@ -759,7 +758,6 @@ export function KanbanBoard({
                 dragOverColumnStatus={dragOverColumnStatus}
                 onReassignTask={isLeader ? (task) => setReassignTaskTarget(task) : undefined}
                 onSelectTask={(task) => setSelectedDetailTask(task)}
-                onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
                 customStatuses={customStatuses}
                 isLeader={isLeader}
                 onColumnDragStart={(st) => setDraggedStatusPill(st)}
@@ -903,11 +901,12 @@ export function KanbanBoard({
 
       {ratingTaskTarget && (
         <TaskRatingModal
-          key={ratingTaskTarget.id}
+          key={currentEvent.id}
           eventId={currentEvent.id}
           isOpen={Boolean(ratingTaskTarget)}
           onClose={() => setRatingTaskTarget(null)}
-          task={tasks.find((task) => task.id === ratingTaskTarget.id) || ratingTaskTarget}
+          tasks={tasks.filter((task) => (task.status === "Completed" || task.status === "Done") && !task.performanceReview?.rating)}
+          initialTaskId={ratingTaskTarget.id}
           onRate={handleRateTask}
         />
       )}

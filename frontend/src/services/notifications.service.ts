@@ -418,18 +418,22 @@ export async function sendNudgeEmail(input: {
   nudgeType?: "3_days_prior" | "1_day_prior" | string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
+    const user = useAuthStore.getState().firebaseUser;
+    if (!user) return { success: false, error: "Sign in again to send a nudge." };
+    const token = await user.getIdToken();
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://musubi-backend-4roe.onrender.com";
     const res = await fetch(`${apiBaseUrl}/email/nudge`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
       },
       body: JSON.stringify(input)
     });
 
     const data = await res.json();
     if (!res.ok) {
-      return { success: false, error: data.error || "Failed to send email" };
+      return { success: false, error: data.error || data.message || "Failed to send email" };
     }
     return { success: true };
   } catch (err: any) {

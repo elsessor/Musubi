@@ -8,6 +8,7 @@ import { cn } from "@/components/ui/utils";
 export type CustomSelectOption = {
   value: string;
   label: string;
+  description?: string;
   sublabel?: string;
   initials?: string;
   color?: string;
@@ -121,10 +122,13 @@ export function CustomSelect({
               <button key={opt.value} type="button" onClick={() => { onChange(opt.value); setIsOpen(false); }} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-left transition select-none cursor-pointer", isSelected ? opt.selectedClass || "bg-blue-50 text-blue-700 font-bold" : "text-slate-700 hover:bg-slate-100/80 hover:text-slate-900")}>
                 <div className="flex min-w-0 items-center gap-2 truncate">
                   {opt.initials && <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white", opt.color || "bg-blue-600")}>{opt.initials}</span>}
-                  <div className="truncate">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate">
                     {opt.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", opt.indicatorClass)} />}
                     <span className={cn(opt.labelClass)}>{opt.label}</span>
                     {opt.sublabel && <span className="text-slate-400 font-normal ml-1"> — {opt.sublabel}</span>}
+                    </div>
+                    {opt.description ? <p className="mt-0.5 whitespace-normal break-words text-[11px] font-normal leading-relaxed text-slate-500">{opt.description}</p> : null}
                   </div>
                 </div>
                 {isSelected && <Check size={14} className="text-current shrink-0 ml-2" />}

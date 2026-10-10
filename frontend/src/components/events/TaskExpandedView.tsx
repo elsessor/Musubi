@@ -1,258 +1,132 @@
 "use client";
 
-import { Calendar, CheckCircle, ChevronDown, ChevronUp, Clock, ShieldAlert, Sparkles, AlertTriangle, Bell, Check } from "lucide-react";
-import type { Task, TaskPriority, TaskStatus } from "./types";
+import { Bell, Calendar, CheckCircle, ChevronDown, ChevronUp, ShieldAlert, Sparkles } from "lucide-react";
+import { useId, useState } from "react";
+import type { Task, TaskStatus } from "./types";
 import { OverdueBadge } from "./overdue";
-import { useState } from "react";
 import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
-import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
+import { PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
 import { useAuthStore } from "@/store/authStore";
-import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
+import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-
-
 
 type TaskExpandedViewProps = {
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
-  onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
   onSelectTask?: (task: Task) => void;
   customStatuses?: CustomStatusConfig[];
   statusOrder?: string[];
 };
 
-export function TaskExpandedView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses, statusOrder }: TaskExpandedViewProps) {
+export function TaskExpandedView({ tasks, onUpdateStatus, onSelectTask, customStatuses, statusOrder }: TaskExpandedViewProps) {
+  const panelId = useId();
   const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
   const role = useAuthStore((state) => state.profile?.role);
-  function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
-  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority), role); }
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<string, boolean>>({});
-  const [openPriorityDropdownId, setOpenPriorityDropdownId] = useState<string | null>(null);
+  function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
 
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, tasks.map((task) => task.status));
-
   const statusOptions = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
     return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
   });
 
   function toggleTask(id: string) {
-    setExpandedTaskIds((prev) => ({ ...prev, [id]: prev[id] === undefined ? false : !prev[id] }));
+    setExpandedTaskIds((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
   if (tasks.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-xs">
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center shadow-xs">
         <p className="text-sm font-semibold text-slate-700">No tasks found</p>
-        <p className="mt-1 text-xs text-slate-400">Add a task or adjust filters to view tasks in expanded mode.</p>
+        <p className="mt-1 text-xs text-slate-400">Add a task or adjust filters to see tasks in this list.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {tasks.map((task) => {
-        const isExpanded = expandedTaskIds[task.id] !== false;
+    <div className="flex min-w-0 flex-col gap-3">
+      {tasks.map((task, index) => {
+        const isExpanded = expandedTaskIds[task.id] === true;
         const pCfg = priorityConfig[task.priority || "Medium"];
         const theme = getStatusTheme(task.status, customStatuses);
-        const isPriorityOpen = openPriorityDropdownId === task.id;
+        const detailsId = `${panelId}-${index}-details`;
+        const dueDate = task.dueDate || task.deadline;
 
         return (
-          <div
-            key={task.id}
-            className={`min-w-0 rounded-2xl border border-slate-200 border-l-4 ${theme.border} bg-white shadow-xs transition-all hover:border-slate-300 hover:shadow-md`}
-          >
-            {/* Main Header / Summary Row */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-              <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div key={task.id} className={`min-w-0 rounded-2xl border border-slate-200 border-l-4 ${theme.border} bg-white shadow-xs transition-all hover:border-slate-300 hover:shadow-md`}>
+            <div className="min-w-0 space-y-3 p-3 sm:p-4">
+              <div className="flex min-w-0 items-start gap-2.5">
                 <button
                   type="button"
                   onClick={() => toggleTask(task.id)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                  aria-expanded={isExpanded}
+                  aria-controls={detailsId}
+                  aria-label={`${isExpanded ? "Collapse" : "Expand"} ${task.title || "task"}`}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200"
                 >
                   {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3
-                      onClick={() => onSelectTask?.(task)}
-                      className="break-words text-sm font-semibold text-slate-900 hover:text-blue-600 transition-colors cursor-pointer"
-                    >
-                      {task.title || task.description}
-                    </h3>
-
-                    {/* Interactive Priority Badge */}
-                    <div className="relative">
-                      {canEditPriority(task) ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenPriorityDropdownId(isPriorityOpen ? null : task.id);
-                          }}
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset transition cursor-pointer ${pCfg.classes}`}
-                          title="Click to modify priority level"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          {pCfg.label}
-                          <ChevronDown size={11} className="opacity-60" />
-                        </button>
-                      ) : (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${pCfg.classes}`}>
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          {pCfg.label}
-                        </span>
-                      )}
-
-                      {isPriorityOpen && canEditPriority(task) && onUpdatePriority && (
-                        <div
-                          className="absolute left-0 top-full z-30 mt-1 w-32 rounded-xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 animate-in fade-in duration-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {ALL_PRIORITIES.map((pr) => {
-                            const cfg = priorityConfig[pr];
-                            const isSelected = task.priority === pr;
-                            return (
-                              <button
-                                key={pr}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (canEditPriority(task)) onUpdatePriority?.(task.id, pr);
-                                  setOpenPriorityDropdownId(null);
-                                }}
-                                className={`flex w-full items-center justify-between px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 ${
-                                  isSelected ? `${cfg.classes} font-bold` : "text-slate-700"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
-                                  {cfg.label}
-                                </div>
-                                {isSelected && <Check size={12} className="text-current" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {task.committee && (
-                      <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 ring-1 ring-inset ring-violet-200">
-                        {task.committee}
-                      </span>
-                    )}
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${theme.badge}`}>
-                      {task.status}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                    <TaskAssignee task={task} showAvatar={false} className="max-w-[240px]" />
-                    <span className="flex items-center gap-1">
-                      <Calendar size={12} className="text-slate-400" />
-                      Due {task.dueDate}
-                      <OverdueBadge task={task} />
-                    </span>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <h3 className="break-words [overflow-wrap:anywhere] text-sm font-semibold leading-5 text-slate-900">
+                    {onSelectTask ? <button type="button" onClick={() => onSelectTask(task)} className="w-full text-left transition-colors hover:text-blue-600">{task.title || task.description}</button> : task.title || task.description}
+                  </h3>
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${pCfg.classes}`}><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />{pCfg.label}</span>
+                    {task.committee ? <span title={task.committee} className="inline-flex min-w-0 max-w-full items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-inset ring-violet-200"><span className="truncate">{task.committee}</span></span> : null}
+                    <OverdueBadge task={task} />
                   </div>
                 </div>
               </div>
 
-              {/* Status dropdown & Actions */}
-              <div className="flex max-w-full flex-wrap items-center gap-3">
-                {/* Status dropdown */}
-                {canEditStatus(task) ? (
-                  <div className="w-44 max-w-full">
+              <div className="flex min-w-0 flex-col gap-1.5 text-[11px] text-slate-500 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
+                <TaskAssignee task={task} compactMobile className="self-start max-w-full" />
+                <div className="flex min-w-0 items-start gap-1.5 leading-4">
+                  <Calendar size={12} className="mt-0.5 shrink-0 text-slate-400" />
+                  <span className="min-w-0 break-words">{dueDate ? `Due ${dueDate}` : "No deadline"}</span>
+                </div>
+              </div>
+
+              <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5">
+                <div className="min-w-0 flex-1 basis-36 sm:max-w-48">
+                  {canEditStatus(task) ? (
                     <CustomSelect
                       value={task.status}
                       options={statusOptions}
                       onChange={(value) => { if (canEditStatus(task)) onUpdateStatus(task.id, value as TaskStatus); }}
-                      buttonClassName="rounded-xl px-2.5 py-2"
-                      dropdownClassName="rounded-xl"
+                      buttonClassName="min-h-9 rounded-xl px-2.5 py-1.5"
+                      dropdownClassName="rounded-xl [&_button]:min-h-11"
+                      portal
                     />
-                  </div>
-                ) : <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${theme.badge}`}>{task.status}</span>}
-
-                {onSelectTask && (
-                  <button
-                    type="button"
-                    onClick={() => onSelectTask(task)}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  >
-                    View Details
-                  </button>
-                )}
-
-                {canEditStatus(task) && task.status !== "Completed" && (
-                  <button
-                    type="button"
-                    onClick={() => { if (canEditStatus(task)) onUpdateStatus(task.id, "Completed"); }}
-                    className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 transition-colors"
-                  >
-                    <CheckCircle size={14} />
-                    Complete
-                  </button>
-                )}
+                  ) : <span className={`inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold ring-1 ring-inset ${theme.badge}`}><span className={`size-2 shrink-0 rounded-full ${theme.dot}`} /><span className="min-w-0 break-words">{task.status}</span></span>}
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  {onSelectTask ? <button type="button" onClick={() => onSelectTask(task)} className="min-h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 sm:flex-none">View Details</button> : null}
+                  {canEditStatus(task) && task.status !== "Completed" && task.status !== "Done" ? (
+                    <button type="button" onClick={() => { if (canEditStatus(task)) onUpdateStatus(task.id, "Completed"); }} className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-emerald-700 sm:flex-none">
+                      <CheckCircle size={14} className="shrink-0" /> Complete
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
 
-            {/* Expanded Content Drawer */}
-            {isExpanded && (
-              <div className="rounded-b-2xl border-t border-slate-100 bg-slate-50/50 p-5 space-y-4">
-                {/* Description block */}
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Description & Details</h4>
-                  <p className="mt-1 text-sm text-slate-700 leading-relaxed">
-                    {task.description || "No detailed description provided for this task."}
-                  </p>
+            {isExpanded ? (
+              <div id={detailsId} className="min-w-0 space-y-3 rounded-b-2xl border-t border-slate-100 bg-slate-50/50 p-3 sm:p-4">
+                <div className="min-w-0">
+                  <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Description</h4>
+                  <p className="mt-1.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-slate-700">{task.description || "No detailed description provided for this task."}</p>
                 </div>
-
-                {/* Metadata & Badges Grid */}
-                <div className="grid min-w-0 grid-cols-1 gap-3 pt-2 sm:grid-cols-2 2xl:grid-cols-4">
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold text-slate-400">Assignee</span>
-                    <div className="mt-1 flex items-center gap-2">
-                      <TaskAssignee task={task} />
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold text-slate-400">Current Status</span>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
-                      <span className="text-xs font-bold text-slate-800">{task.status}</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold text-slate-400">Match & Security</span>
-                    <div className="mt-1 flex items-center gap-2">
-                      {task.isLeaderOnly ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600">
-                          <ShieldAlert size={12} /> Leader Only
-                        </span>
-                      ) : typeof task.matchPercentage === "number" ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600">
-                          <Sparkles size={12} /> {task.matchPercentage}% Match
-                        </span>
-                      ) : (
-                        <span className="text-xs font-medium text-slate-500">Standard Task</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold text-slate-400">Task Nudges</span>
-                    <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                      <Bell size={12} className="text-blue-500" />
-                      {task.nudges?.length || 0} Nudges Configured
-                    </div>
-                  </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200/70 pt-2.5 text-[11px] text-slate-500">
+                  {task.isLeaderOnly ? <span className="inline-flex items-center gap-1 font-semibold text-amber-600"><ShieldAlert size={12} className="shrink-0" /> Leader Only</span>
+                    : typeof task.matchPercentage === "number" ? <span className="inline-flex items-center gap-1 font-semibold text-indigo-600"><Sparkles size={12} className="shrink-0" /> {task.matchPercentage}% Match</span>
+                    : <span>Standard Task</span>}
+                  <span className="inline-flex items-center gap-1.5"><Bell size={12} className="shrink-0 text-blue-500" />{task.nudges?.length || 0} nudges</span>
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         );
       })}

@@ -1,10 +1,14 @@
 import type { Request, Response } from "express";
 import { firebaseAuth, firestore } from "../config/firebase.js";
 import { sendNudgeNotificationEmail } from "../services/email.service.js";
+import type { AuthenticatedRequest } from "../types/auth.types.js";
+import { assertCanSendManualNudge } from "../utils/nudgePermissions.js";
+import { AppError } from "../utils/AppError.js";
 
-export async function sendNudgeEmailController(req: Request, res: Response): Promise<void> {
+export async function sendNudgeEmailController(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { recipientEmail, recipientUID, taskTitle, eventName, deadline, message, isUrgent, nudgeType } = req.body;
+    assertCanSendManualNudge(req.authUser, recipientUID, recipientEmail);
 
     if (!taskTitle) {
       res.status(400).json({ error: "taskTitle is required" });
@@ -46,6 +50,7 @@ export async function sendNudgeEmailController(req: Request, res: Response): Pro
       return;
     }
 
+    assertCanSendManualNudge(req.authUser, recipientUID, targetEmail);
     const result = await sendNudgeNotificationEmail({
       to: targetEmail,
       recipientName: targetName,
@@ -63,6 +68,10 @@ export async function sendNudgeEmailController(req: Request, res: Response): Pro
       res.status(500).json({ success: false, error: result.error });
     }
   } catch (err: any) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
     console.error("Error in sendNudgeEmailController:", err);
     res.status(500).json({ error: err.message || "Failed to process email request" });
   }

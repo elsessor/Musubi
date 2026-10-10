@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Sparkles, Star, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Star, X } from "lucide-react";
 import type { Task } from "./types";
 import { TaskAttachments } from "./TaskAttachments";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 export type TaskRatingModalProps = {
   eventId: string;
   isOpen: boolean;
   onClose: () => void;
-  task: Task | null;
+  tasks: Task[];
+  initialTaskId?: string;
   onRate: (taskId: string, rating: number, feedback: string) => Promise<void>;
 };
 
@@ -21,33 +23,53 @@ const RATING_DESCRIPTIONS: Record<number, { text: string; color: string }> = {
   5: { text: "5 / 5 — Outstanding Execution", color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
 };
 
-export function TaskRatingModal({ eventId, isOpen, onClose, task, onRate }: TaskRatingModalProps) {
-  const [rating, setRating] = useState<number>(task?.performanceReview?.rating || 5);
+export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId, onRate }: TaskRatingModalProps) {
+  const [selectedTaskId, setSelectedTaskId] = useState(initialTaskId || tasks[0]?.id || "");
+  const [drafts, setDrafts] = useState<Record<string, { rating: number; feedback: string }>>({});
   const [hoverRating, setHoverRating] = useState<number>(0);
-  const [feedback, setFeedback] = useState<string>(task?.performanceReview?.feedback || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState("");
 
+  const task = tasks.find((submission) => submission.id === selectedTaskId) || tasks[0];
   if (!isOpen || !task) return null;
 
+  const selectedIndex = tasks.findIndex((submission) => submission.id === task.id);
+  const { rating, feedback } = drafts[task.id] || { rating: task.performanceReview?.rating || 5, feedback: task.performanceReview?.feedback || "" };
   const activeRating = hoverRating || rating;
   const currentDesc = RATING_DESCRIPTIONS[activeRating] || RATING_DESCRIPTIONS[5];
   const assigneeName = task.assignee?.name || task.assignedMemberName || "Organization Member";
   const assigneeInitials = task.assignee?.initials || assigneeName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 
+  function selectTask(taskId: string) {
+    if (isSubmitting) return;
+    setSelectedTaskId(taskId);
+    setHoverRating(0);
+    setError("");
+  }
+
+  function updateDraft(change: Partial<{ rating: number; feedback: string }>) {
+    setDrafts((current) => ({ ...current, [task.id]: { ...(current[task.id] || { rating, feedback }), ...change } }));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (isSubmitting || isSuccess) return;
+    if (isSubmitting) return;
     setError("");
     setIsSubmitting(true);
     try {
-      await onRate(task!.id, rating, feedback);
-      setIsSuccess(true);
-      setTimeout(() => {
-        setIsSuccess(false);
+      await onRate(task.id, rating, feedback);
+      setDrafts((current) => {
+        const remaining = { ...current };
+        delete remaining[task.id];
+        return remaining;
+      });
+      const nextTask = tasks[selectedIndex + 1] || tasks.find((submission) => submission.id !== task.id);
+      if (nextTask) {
+        setSelectedTaskId(nextTask.id);
+        setHoverRating(0);
+      } else {
         onClose();
-      }, 1000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "The rating could not be saved. Please try again.");
     } finally {
@@ -87,6 +109,38 @@ export function TaskRatingModal({ eventId, isOpen, onClose, task, onRate }: Task
         {/* Form content */}
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+          <section aria-label="Select submission" className="space-y-2">
+            <h3 className="text-xs font-semibold text-slate-700">Select submission</h3>
+            <CustomSelect
+              value={task.id}
+              onChange={selectTask}
+              disabled={isSubmitting}
+              options={tasks.map((submission) => {
+                const name = submission.assignee?.name || submission.assignedMemberName || "Organization Member";
+                const count = submission.attachments?.length || 0;
+                return {
+                  value: submission.id,
+                  label: name,
+                  description: `${submission.title} · ${count} attachment${count === 1 ? "" : "s"}`,
+                  initials: submission.assignee?.initials || name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+                  color: "bg-[#213f68]"
+                };
+              })}
+              buttonClassName="min-h-11 rounded-xl bg-white"
+              dropdownClassName="[&_button]:min-h-11"
+              portal
+            />
+            <div className="flex items-center justify-between gap-2">
+              <button type="button" disabled={isSubmitting || selectedIndex === 0} onClick={() => selectTask(tasks[selectedIndex - 1].id)} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
+                <ChevronLeft size={14} /> Previous
+              </button>
+              <p role="status" className="text-center text-[11px] text-slate-500">{selectedIndex + 1} of {tasks.length} awaiting review</p>
+              <button type="button" disabled={isSubmitting || selectedIndex === tasks.length - 1} onClick={() => selectTask(tasks[selectedIndex + 1].id)} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
+          </section>
+
           {/* Member & Task Context Card */}
           <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 border border-slate-200/80 p-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -106,7 +160,7 @@ export function TaskRatingModal({ eventId, isOpen, onClose, task, onRate }: Task
           </div>
 
           {task.description ? <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-600">{task.description}</p> : null}
-          <TaskAttachments eventId={eventId} task={task} canAdd={false} />
+          <TaskAttachments key={task.id} eventId={eventId} task={task} canAdd={false} />
 
           {/* Star Rating Selector */}
           <div className="space-y-2 text-center py-1">
@@ -120,12 +174,12 @@ export function TaskRatingModal({ eventId, isOpen, onClose, task, onRate }: Task
                   <button
                     key={star}
                     type="button"
-                    onClick={() => setRating(star)}
+                    onClick={() => updateDraft({ rating: star })}
                     onMouseEnter={() => setHoverRating(star)}
                     onMouseLeave={() => setHoverRating(0)}
                     aria-label={`Rate ${star} ${star === 1 ? "star" : "stars"}`}
                     aria-pressed={rating === star}
-                    disabled={isSubmitting || isSuccess}
+                    disabled={isSubmitting}
                     className="p-1 transition-transform transform hover:scale-110 focus:outline-none cursor-pointer"
                   >
                     <Star
@@ -154,8 +208,8 @@ export function TaskRatingModal({ eventId, isOpen, onClose, task, onRate }: Task
             </label>
             <textarea
               value={feedback}
-              disabled={isSubmitting || isSuccess}
-              onChange={(e) => setFeedback(e.target.value)}
+              disabled={isSubmitting}
+              onChange={(e) => updateDraft({ feedback: e.target.value })}
               placeholder="Add review notes regarding quality, accuracy, and timeliness..."
               rows={3}
               className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-[#2868ed] focus:ring-1 focus:ring-[#2868ed]"
@@ -185,14 +239,10 @@ export function TaskRatingModal({ eventId, isOpen, onClose, task, onRate }: Task
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || isSuccess}
+              disabled={isSubmitting}
               className="flex items-center gap-1.5 rounded-xl bg-[#213f68] hover:bg-[#1a3254] px-4 py-2 text-xs font-semibold text-white shadow-xs active:scale-98 transition disabled:opacity-50 cursor-pointer"
             >
-              {isSuccess ? (
-                <>
-                  <Check size={14} /> Saved Rating
-                </>
-              ) : isSubmitting ? (
+              {isSubmitting ? (
                 "Saving..."
               ) : (
                 <>
