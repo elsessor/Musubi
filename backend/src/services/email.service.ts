@@ -46,11 +46,6 @@ function getTransporter(): Transporter | null {
 
 export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    const transport = getTransporter();
-    if (!transport) {
-      return { success: false, error: "GMAIL_APP_PASSWORD is missing in backend environment" };
-    }
-
     const {
       to,
       recipientName = "Team Member",
@@ -121,6 +116,80 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
     </html>
     `;
 
+    // 1. Resend HTTPS REST API (Recommended for Render, operates over HTTPS port 443)
+    if (env.resendApiKey) {
+      try {
+        const resendRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${env.resendApiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            from: env.resendFromEmail || "Musubi Workflow <onboarding@resend.dev>",
+            to: [to],
+            subject,
+            html: htmlContent
+          })
+        });
+
+        const resendData: any = await resendRes.json();
+        if (resendRes.ok && resendData?.id) {
+          console.log(`✉️ Email Nudge sent via Resend API to ${to}. Message ID: ${resendData.id}`);
+          return { success: true, messageId: resendData.id };
+        } else {
+          const errMsg = resendData?.message || resendData?.error || "Resend API failure";
+          console.warn("⚠️ Resend API error:", errMsg);
+          if (!env.gmailAppPassword) {
+            return { success: false, error: errMsg };
+          }
+        }
+      } catch (resendErr: any) {
+        console.warn("⚠️ Resend request error:", resendErr?.message);
+        if (!env.gmailAppPassword) {
+          return { success: false, error: resendErr?.message || "Resend connection error" };
+        }
+      }
+    }
+
+    // 2. Brevo HTTPS REST API (Operates over HTTPS port 443)
+    if (env.brevoApiKey) {
+      try {
+        const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            "api-key": env.brevoApiKey,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            sender: { name: "Musubi Workflow", email: env.gmailUser || "noreply.musubi@gmail.com" },
+            to: [{ email: to, name: recipientName }],
+            subject,
+            htmlContent
+          })
+        });
+
+        const brevoData: any = await brevoRes.json();
+        if (brevoRes.ok && (brevoData?.messageId || brevoData?.messageIds)) {
+          console.log(`✉️ Email Nudge sent via Brevo API to ${to}. Message ID: ${brevoData.messageId}`);
+          return { success: true, messageId: brevoData.messageId };
+        } else {
+          console.warn("⚠️ Brevo API error:", brevoData?.message || brevoData);
+        }
+      } catch (brevoErr: any) {
+        console.warn("⚠️ Brevo request error:", brevoErr?.message);
+      }
+    }
+
+    // 3. Fallback: Nodemailer SMTP
+    const transport = getTransporter();
+    if (!transport) {
+      return {
+        success: false,
+        error: "No email provider configured. Please set RESEND_API_KEY (recommended for Render) or GMAIL_APP_PASSWORD in environment variables."
+      };
+    }
+
     const info = await transport.sendMail({
       from: `"Musubi Workflow" <${env.gmailUser}>`,
       to,
@@ -128,7 +197,7 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
       html: htmlContent
     });
 
-    console.log(`✉️ Email Nudge sent successfully to ${to}. Message ID: ${info.messageId}`);
+    console.log(`✉️ Email Nudge sent successfully via SMTP to ${to}. Message ID: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (err: any) {
     console.error("❌ Failed to send Nudge Email:", err);
