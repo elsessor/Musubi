@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Check, ChevronDown, ChevronUp, GripVertical, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { COLOR_OPTIONS, getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
+import { CustomSelect } from "@/components/ui/CustomSelect";
+
 export type AddCustomStatusModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -249,19 +251,20 @@ export function AddCustomStatusModal({
             <label className="mb-1 block text-[10px] font-semibold text-slate-400">
               Insert after:
             </label>
-            <select
+            <CustomSelect
               value={insertAfter}
-              onChange={(e) => setInsertAfter(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 py-2 text-xs text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-            >
-              <option value="before-completed">— Before &quot;Completed&quot; —</option>
-              <option value="at-start">At the beginning</option>
-              {statusOrder.map((s) => (
-                <option key={s} value={s}>
-                  After &quot;{s}&quot;
-                </option>
-              ))}
-            </select>
+              onChange={setInsertAfter}
+              options={[
+                { value: "before-completed", label: '— Before "Completed" —' },
+                { value: "at-start", label: "At the beginning" },
+                ...statusOrder.map((s) => ({
+                  value: s,
+                  label: `After "${s}"`,
+                })),
+              ]}
+              buttonClassName="h-9 rounded-2xl border-slate-200/80 bg-[#F0F4F8] px-4 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              dropdownClassName="w-full shadow-xl border-slate-200/90 rounded-2xl max-h-48"
+            />
           </div>
 
           {error && <p className="text-xs text-rose-500 font-medium">{error}</p>}

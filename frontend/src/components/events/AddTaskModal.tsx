@@ -4,7 +4,7 @@ import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 
 import { Plus, Shield, X } from "lucide-react";
 import { useState } from "react";
-import type { Task, TaskPriority, TaskStatus } from "./types";
+import type { Nudge, Task, TaskPriority, TaskStatus } from "./types";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import type { OrganizationMember } from "@/services/auth.service";
@@ -127,7 +127,29 @@ export function AddTaskModal({
     const nowStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const error = getDateRangeError(startDate.trim() || nowStr, dueDate.trim() || nowStr, "Task");
     setDateError(error || "");
-    if (error) return;
+    const targetDue = new Date(dueDate.trim() || nowStr);
+    const threeDaysBefore = !isNaN(targetDue.getTime())
+      ? new Date(targetDue.getTime() - 3 * 24 * 3600 * 1000).toISOString().split("T")[0]
+      : "";
+    const oneDayBefore = !isNaN(targetDue.getTime())
+      ? new Date(targetDue.getTime() - 1 * 24 * 3600 * 1000).toISOString().split("T")[0]
+      : "";
+
+    const defaultNudges: Nudge[] = [
+      {
+        nudgeUID: `nudge_${Date.now()}_3d`,
+        triggerDate: threeDaysBefore,
+        nudgeType: "3 Days Prior",
+        sent: false
+      },
+      {
+        nudgeUID: `nudge_${Date.now()}_1d`,
+        triggerDate: oneDayBefore,
+        nudgeType: "1 Day Prior",
+        sent: false
+      }
+    ];
+
     const newTask: Task = {
       id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: title.trim(),
@@ -145,7 +167,8 @@ export function AddTaskModal({
       assignedMemberName: selectedMember.name,
       assignedMemberUID: selectedMember.id,
       isLeaderOnly,
-      requiredSkills: ["Event Coordination"]
+      requiredSkills: ["Event Coordination"],
+      nudges: defaultNudges
     };
 
     setSaving(true);

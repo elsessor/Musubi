@@ -56,6 +56,7 @@ export type Task = {
   completedAt?: string | null;
   performanceReview?: {
     rating: number;
+    feedback?: string;
     reviewerUID?: string;
     reviewedAt?: string;
   } | null;
@@ -118,6 +119,7 @@ export type Subtask = {
   deadline?: string;
   status?: TaskStatus;
   validationWarnings?: string[];
+  nudges?: Nudge[];
 };
 
 export type GoalDraft = {

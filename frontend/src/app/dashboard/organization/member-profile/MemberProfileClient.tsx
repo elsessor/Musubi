@@ -60,7 +60,7 @@ export function MemberProfileClient() {
     }
     setMember(null); setLoading(true); setError("");
     void load();
-    const interval = setInterval(() => { if (!document.hidden) void load(); }, 25000);
+    const interval = setInterval(() => { if (!document.hidden) void load(); }, 60000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [authLoading, firebaseUser, memberId, profile, isOwner]);
 

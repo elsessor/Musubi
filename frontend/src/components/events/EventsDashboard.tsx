@@ -3,6 +3,7 @@
 import {
   BookOpen,
   Calendar,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   Columns3,
@@ -20,10 +21,11 @@ import { isEventScheduledOnDay } from "@/utils/calendarSchedule";
 import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 import { useAuthStore } from "@/store/authStore";
-import { eventStatusSettings, type EventStatusSettings } from "@/services/events.service";
-import { CustomSelect } from "@/components/ui/CustomSelect";
+import { useToastStore } from "@/store/toastStore";
+import { eventStatusSettings, updateEventFirestore, type EventStatusSettings } from "@/services/events.service";
 
 type StatusFilter = EventStatus | "All";
 type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
@@ -96,12 +98,22 @@ type EventsDashboardProps = {
   organizationId?: string | null;
   isLeader?: boolean;
   onSelectEvent: (event: Event) => void;
-  onNewEvent: () => void;
+  onNewEvent: (initialStatus?: EventStatus) => void;
+  onUpdateEvent?: (updatedEvent: Event) => void;
   committees?: { id: string; name: string }[];
 };
 
-export function EventsDashboard({ events, organizationId, isLeader = true, onSelectEvent: selectEvent, onNewEvent, committees = [] }: EventsDashboardProps) {
+export function EventsDashboard({
+  events,
+  organizationId,
+  isLeader = true,
+  onSelectEvent: selectEvent,
+  onNewEvent,
+  onUpdateEvent,
+  committees = []
+}: EventsDashboardProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const showToast = useToastStore((state) => state.showToast);
   const [settingsError, setSettingsError] = useState("");
   const [settingsReady, setSettingsReady] = useState(false);
   const saveQueue = useRef(Promise.resolve());
@@ -156,6 +168,12 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
   const [draggedStatusPill, setDraggedStatusPill] = useState<string | null>(null);
   const [dragOverStatusPill, setDragOverStatusPill] = useState<string | null>(null);
 
+  // Trello-style card drag and drop state
+  const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [dragOverCardTarget, setDragOverCardTarget] = useState<{ status: string; cardId: string | null; position: "before" | "after" } | null>(null);
+  const didDragRef = useRef(false);
+
   const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_EVENT_STATUSES);
 
   useEffect(() => {
@@ -199,7 +217,7 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       }
     }
     void refresh();
-    const interval = window.setInterval(() => { if (!document.hidden) void refresh(); }, 25000);
+    const interval = window.setInterval(() => { if (!document.hidden) void refresh(); }, 120000);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [firebaseUser, organizationId, isLeader]);
 
@@ -282,6 +300,111 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
     setDragOverStatusPill(null);
   }
 
+  // Card Drag & Drop (Trello-style)
+  function handleCardDragStart(e: React.DragEvent, event: Event) {
+    if (!isLeader) return;
+    e.stopPropagation();
+    e.dataTransfer.setData("text/plain", event.id);
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedCardId(event.id);
+    didDragRef.current = true;
+  }
+
+  function handleCardDragEnd() {
+    setDraggedCardId(null);
+    setDragOverColumn(null);
+    setDragOverCardTarget(null);
+    setTimeout(() => {
+      didDragRef.current = false;
+    }, 150);
+  }
+
+  function handleColumnDragOver(e: React.DragEvent, status: string) {
+    if (!isLeader || !draggedCardId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverColumn !== status) {
+      setDragOverColumn(status);
+    }
+  }
+
+  function handleCardDragOver(e: React.DragEvent, status: string, targetCardId: string) {
+    if (!isLeader || !draggedCardId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+
+    if (draggedCardId === targetCardId) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position = e.clientY < midY ? "before" : "after";
+
+    setDragOverColumn(status);
+    setDragOverCardTarget({ status, cardId: targetCardId, position });
+  }
+
+  function handleCardDrop(e: React.DragEvent, targetStatus: string) {
+    if (!isLeader || !draggedCardId) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const targetCard = events.find((ev) => ev.id === draggedCardId);
+    if (!targetCard) {
+      handleCardDragEnd();
+      return;
+    }
+
+    const previousStatus = targetCard.status;
+    const isCompleted = targetStatus === "Completed";
+    const statusChanged = previousStatus !== targetStatus;
+
+    if (!statusChanged && !dragOverCardTarget?.cardId) {
+      handleCardDragEnd();
+      return;
+    }
+
+    const updatedEvent: Event = {
+      ...targetCard,
+      status: targetStatus as EventStatus,
+      progress: isCompleted ? 100 : targetCard.progress
+    };
+
+    // Optimistically notify parent
+    onUpdateEvent?.(updatedEvent);
+
+    // Persist to Firestore
+    void updateEventFirestore(firebaseUser, targetCard.id, {
+      status: targetStatus,
+      ...(isCompleted ? { progress: 100 } : {})
+    })
+      .then(() => {
+        showToast({
+          title: "Event moved",
+          description: `"${targetCard.title}" moved to ${targetStatus}.`,
+          tone: "success"
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to move event:", err);
+        // Rollback
+        onUpdateEvent?.(targetCard);
+        showToast({
+          title: "Failed to move event",
+          description: err instanceof Error ? err.message : "Please try again.",
+          tone: "error"
+        });
+      });
+
+    handleCardDragEnd();
+  }
+
+  function handleCardClick(event: Event) {
+    if (didDragRef.current) return;
+    onSelectEvent(event);
+  }
+
   const activeCount    = events.filter((e) => e.status === "Active").length;
   const planningCount  = events.filter((e) => e.status === "Planning").length;
   const completedCount = events.filter((e) => e.status === "Completed").length;
@@ -321,7 +444,7 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
                 { value: "calendar", label: "Calendar" }
               ]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
             </div>
-            {isLeader && <button type="button" onClick={onNewEvent} className="flex min-h-11 items-center gap-1 rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white"><Plus size={16} /> New</button>}
+            {isLeader && <button type="button" onClick={() => onNewEvent()} className="flex min-h-11 items-center gap-1 rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white"><Plus size={16} /> New</button>}
           </div>
         </>
       )}
@@ -347,7 +470,7 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onNewEvent}
+              onClick={() => onNewEvent()}
               className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700"
             >
               <Plus size={15} />
@@ -361,9 +484,22 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
       <div className={`${compactMobile ? "hidden" : "flex"} flex-wrap items-center justify-between gap-2`}>
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <div className="w-44 max-w-full">
-            <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white sm:min-h-9" dropdownClassName="[&_button]:min-h-11" portal />
-          </div>
+          <CustomSelect
+            value={selectedCommittee}
+            onChange={setSelectedCommittee}
+            options={[
+              { value: "All", label: "All Committees" },
+              ...allCommitteeNames.map((commName) => ({
+                value: commName,
+                label: commName,
+              })),
+            ]}
+            icon={<SlidersHorizontal size={13} className="text-slate-400" />}
+            containerClassName="w-auto min-w-[150px]"
+            buttonClassName="min-h-11 rounded-xl bg-white border-slate-200 px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:min-h-9"
+            dropdownClassName="shadow-xl border-slate-200/90 rounded-2xl [&_button]:min-h-11"
+            portal
+          />
 
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">
@@ -468,7 +604,7 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
           {visible.map((event) => (
             <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} />
           ))}
-          {isLeader && !compactMobile && <CreateEventCard onClick={onNewEvent} />}
+          {isLeader && !compactMobile && <CreateEventCard onClick={() => onNewEvent()} />}
         </div>
       )}
 
@@ -604,30 +740,43 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
         </div>
       )}
       {viewMode === "kanban" && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className={compactMobile ? "grid grid-cols-1 gap-4" : "flex gap-4 overflow-x-auto pb-6 pt-1 items-start min-h-[580px] scrollbar-thin"}>
           {(compactMobile ? [statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]].filter(Boolean) : statusOrder).map((status) => {
             const statusEvents = visible.filter((e) => e.status === status);
             const theme = getStatusTheme(status, customStatuses);
             const isColDraggable = isLeader && settingsReady;
             const isDraggingCol = draggedStatusPill === status;
             const isDragOverCol = dragOverStatusPill === status;
+            const isCardOverThisCol = dragOverColumn === status && Boolean(draggedCardId);
 
             return (
               <div
                 key={status}
-                className={`flex flex-col gap-3 transition-all ${
-                  isDraggingCol ? "opacity-30 scale-95" : ""
-                } ${isDragOverCol ? "ring-2 ring-blue-500 rounded-2xl p-1 bg-blue-50/40" : ""}`}
+                onDragOver={(e) => handleColumnDragOver(e, status)}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    if (dragOverColumn === status) setDragOverColumn(null);
+                  }
+                }}
+                onDrop={(e) => handleCardDrop(e, status)}
+                className={`flex flex-col ${compactMobile ? "w-full min-w-0" : "w-[308px] min-w-[308px] max-w-[320px] shrink-0"} rounded-2xl bg-slate-100/90 border border-slate-200/80 p-3 transition-all duration-200 shadow-2xs ${
+                  isDraggingCol ? "opacity-30 scale-95 border-dashed border-blue-400" : ""
+                } ${
+                  isDragOverCol ? "ring-2 ring-indigo-500 bg-indigo-50/50" : ""
+                } ${
+                  isCardOverThisCol ? "ring-2 ring-blue-500/80 bg-blue-50/50 shadow-md" : ""
+                }`}
               >
+                {/* Column Header (Draggable to rearrange lists) */}
                 <div
                   draggable={isColDraggable}
                   onDragStart={(e) => {
-                    if (!isColDraggable) return;
+                    if (!isColDraggable || draggedCardId) return;
                     e.dataTransfer.setData("text/plain", status);
                     setDraggedStatusPill(status);
                   }}
                   onDragOver={(e) => {
-                    if (!isLeader) return;
+                    if (!isLeader || draggedCardId) return;
                     e.preventDefault();
                     if (draggedStatusPill && draggedStatusPill !== status) {
                       setDragOverStatusPill(status);
@@ -637,7 +786,7 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
                     if (dragOverStatusPill === status) setDragOverStatusPill(null);
                   }}
                   onDrop={(e) => {
-                    if (!isColDraggable) return;
+                    if (!isColDraggable || draggedCardId) return;
                     e.preventDefault();
                     handleDropStatusPill(status);
                   }}
@@ -645,51 +794,186 @@ export function EventsDashboard({ events, organizationId, isLeader = true, onSel
                     setDraggedStatusPill(null);
                     setDragOverStatusPill(null);
                   }}
-                  title={isColDraggable ? "Drag column header to rearrange" : undefined}
-                  className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-xs font-bold ${theme.headerTone} ${
+                  title={isColDraggable ? "Drag column header to rearrange list" : undefined}
+                  className={`group/header flex items-center justify-between rounded-xl px-3 py-2 text-xs font-bold transition select-none ${theme.headerTone} ${
                     isColDraggable ? "cursor-grab active:cursor-grabbing hover:brightness-95" : ""
                   }`}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
                     {isColDraggable && (
-                      <GripVertical size={13} className="text-slate-400 opacity-60" />
+                      <GripVertical size={13} className="text-slate-400 opacity-60 group-hover/header:opacity-100 shrink-0" />
                     )}
-                    <span>{status}</span>
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${theme.dot}`} />
+                    <span className="truncate uppercase tracking-wider">{status}</span>
                   </div>
-                  <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold">{statusEvents.length}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold text-slate-700 shadow-2xs">
+                      {statusEvents.length}
+                    </span>
+                    {isLeader && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNewEvent(status as EventStatus);
+                        }}
+                        className="rounded-lg p-1 text-slate-500 opacity-0 group-hover/header:opacity-100 hover:bg-white hover:text-slate-900 transition"
+                        title={`Add event in ${status}`}
+                      >
+                        <Plus size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  {statusEvents.map((event) => (
-                    <article
-                      key={event.id}
-                      onClick={() => onSelectEvent(event)}
-                      className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow cursor-pointer"
-                    >
-                      <div className={`h-1 w-full rounded-full ${theme.dot} mb-3`} />
-                      <h4 className="text-sm font-bold text-slate-900">{event.title}</h4>
-                      <div className="mt-2.5">
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                          <span>{event.progress}% done</span>
-                          <span>👥 {event.memberCount}</span>
-                        </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                          <div className={`h-full rounded-full ${theme.dot}`} style={{ width: `${event.progress}%` }} />
-                        </div>
-                      </div>
-                      <p className="mt-3 text-[11px] font-medium text-slate-500">📅 {event.startDate}</p>
-                    </article>
-                  ))}
+                {/* Cards List (Scrollable, Trello cards) */}
+                <div className="flex flex-col gap-2.5 overflow-y-auto max-h-[calc(100vh-320px)] min-h-[60px] p-0.5 mt-2.5 scrollbar-thin">
+                  {statusEvents.map((event) => {
+                    const isDraggingThisCard = draggedCardId === event.id;
+                    const isTargetCard = dragOverCardTarget?.cardId === event.id;
+                    const showBeforePlaceholder = isTargetCard && dragOverCardTarget?.position === "before" && !isDraggingThisCard;
+                    const showAfterPlaceholder = isTargetCard && dragOverCardTarget?.position === "after" && !isDraggingThisCard;
+                    const completedTasks = event.tasks.filter((t) => t.status === "Completed").length;
+                    const hasTasks = event.tasks.length > 0;
 
+                    return (
+                      <div key={event.id} className="flex flex-col gap-2.5">
+                        {/* Insertion Placeholder (Before) */}
+                        {showBeforePlaceholder && (
+                          <div className="h-16 w-full rounded-xl border-2 border-dashed border-blue-400 bg-blue-100/60 flex items-center justify-center text-xs font-semibold text-blue-600 animate-pulse transition-all">
+                            Drop here
+                          </div>
+                        )}
+
+                        {/* Card */}
+                        <article
+                          draggable={isLeader}
+                          onDragStart={(e) => handleCardDragStart(e, event)}
+                          onDragEnd={handleCardDragEnd}
+                          onDragOver={(e) => handleCardDragOver(e, status, event.id)}
+                          onClick={() => handleCardClick(event)}
+                          className={`group/card relative overflow-hidden rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs transition-all duration-150 select-none ${
+                            isDraggingThisCard
+                              ? "opacity-30 scale-[0.97] rotate-1 border-2 border-dashed border-blue-400 shadow-xl"
+                              : "hover:shadow-md hover:border-slate-300 hover:-translate-y-0.5 cursor-pointer active:scale-[0.99]"
+                          }`}
+                        >
+                          {/* Top colored accent line */}
+                          <div className={`h-1 w-full rounded-full ${theme.dot} mb-2.5`} />
+
+                          {/* Header row: title + grip handle on hover */}
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="text-sm font-bold text-slate-800 leading-snug group-hover/card:text-blue-600 transition-colors">
+                              {event.title}
+                            </h4>
+                            {isLeader && (
+                              <GripVertical
+                                size={14}
+                                className="text-slate-400 opacity-0 group-hover/card:opacity-60 hover:opacity-100 transition-opacity shrink-0 cursor-grab active:cursor-grabbing"
+                              />
+                            )}
+                          </div>
+
+                          {/* Optional description snippet */}
+                          {event.description && (
+                            <p className="mt-1 line-clamp-2 text-[11px] text-slate-500 leading-relaxed">
+                              {event.description}
+                            </p>
+                          )}
+
+                          {/* Committee tag pill */}
+                          {event.committee && (
+                            <div className="mt-2.5">
+                              <span className="inline-flex items-center rounded-md bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-inset ring-violet-200">
+                                {event.committee}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Progress bar */}
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 mb-1">
+                              <span>{event.progress}% done</span>
+                              {hasTasks && (
+                                <span className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold">
+                                  <CheckSquare size={11} className="text-slate-400" />
+                                  {completedTasks}/{event.tasks.length}
+                                </span>
+                              )}
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${theme.dot}`}
+                                style={{ width: `${event.progress}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Footer: Date & Members */}
+                          <div className="mt-3 flex items-center justify-between text-[11px] font-medium text-slate-500 pt-2 border-t border-slate-100">
+                            <span className="flex items-center gap-1">
+                              <Calendar size={12} className="text-slate-400" />
+                              {event.startDate}
+                            </span>
+                            <span className="flex items-center gap-1 font-semibold text-slate-600">
+                              <Users size={12} className="text-slate-400" />
+                              {event.memberCount}
+                            </span>
+                          </div>
+                        </article>
+
+                        {/* Insertion Placeholder (After) */}
+                        {showAfterPlaceholder && (
+                          <div className="h-16 w-full rounded-xl border-2 border-dashed border-blue-400 bg-blue-100/60 flex items-center justify-center text-xs font-semibold text-blue-600 animate-pulse transition-all">
+                            Drop here
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Empty state when no events in this status */}
                   {statusEvents.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center text-xs text-slate-400 font-medium">
-                      No events
+                    <div
+                      className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-9 px-3 text-center transition-all ${
+                        isCardOverThisCol
+                          ? "border-blue-400 bg-blue-100/50 text-blue-600 font-semibold text-xs"
+                          : "border-slate-200/90 bg-white/40 text-slate-400 text-xs"
+                      }`}
+                    >
+                      {isCardOverThisCol ? "Drop event here" : "No events"}
                     </div>
                   )}
                 </div>
+
+                {/* Trello-Style Column Footer: + Add an event button */}
+                {isLeader && (
+                  <button
+                    type="button"
+                    onClick={() => onNewEvent(status as EventStatus)}
+                    className="mt-2.5 flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-2xs transition-all w-full text-left"
+                  >
+                    <Plus size={14} className="text-slate-400" />
+                    <span>Add an event</span>
+                  </button>
+                )}
               </div>
             );
           })}
+
+          {/* End of Board: + Add Custom Status Column (Trello "+ Add another list") */}
+          {isLeader && (
+            <div className={compactMobile ? "w-full min-w-0" : "w-[280px] min-w-[280px] shrink-0"}>
+              <button
+                type="button"
+                onClick={() => setIsAddStatusModalOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 px-4 py-4 text-xs font-bold text-slate-600 hover:border-blue-400 hover:bg-blue-50/60 hover:text-blue-700 transition-all shadow-2xs"
+              >
+                <Plus size={16} />
+                <span>Add another status list</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 

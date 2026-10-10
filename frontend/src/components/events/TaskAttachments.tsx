@@ -19,7 +19,7 @@ export function TaskAttachments({ eventId, task, canAdd, onTaskUpdated }: {
   eventId: string;
   task: Task;
   canAdd: boolean;
-  onTaskUpdated: (task: Task) => void;
+  onTaskUpdated?: (task: Task) => void;
 }) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +38,7 @@ export function TaskAttachments({ eventId, task, canAdd, onTaskUpdated }: {
 
   function saved(updatedTask: Task) {
     setAttachments(updatedTask.attachments || []);
-    onTaskUpdated(updatedTask);
+    onTaskUpdated?.(updatedTask);
   }
 
   async function uploadFiles(files: File[]) {

@@ -42,7 +42,7 @@ export function recordTaskPerformance(
     }
     // A stale review must never transfer to a newly assigned member.
     if (assignmentChanged && requested.rating === original?.performanceReview?.rating) return updated;
-    updated.performanceReview = { rating: requested.rating, reviewerUID: actor.uid, reviewedAt: now };
+    updated.performanceReview = { rating: requested.rating, feedback: requested.feedback || "", reviewerUID: actor.uid, reviewedAt: now };
     return updated;
   });
 }

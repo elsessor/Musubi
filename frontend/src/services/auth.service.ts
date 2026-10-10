@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 
 import { getFirebaseDb } from "../firebase/config";
 import type { BackendLoginResponse, UserRole } from "@/types/auth";
+import { useAuthStore } from "@/store/authStore";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 const roles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -51,6 +52,7 @@ export type OrganizationDirectoryRecord = OrganizationDirectoryOption & {
 export type OrganizationMember = {
   id: string;
   name: string;
+  email?: string;
   role: string;
   position: string;
   skills: string[];
@@ -403,27 +405,51 @@ export async function updateOrganizationDetails(
   return org;
 }
 
+const membersClientCache = new Map<string, { data: OrganizationMember[]; timestamp: number }>();
+const inFlightMembersPromises = new Map<string, Promise<OrganizationMember[]>>();
+
 export async function getOrganizationMembers(user: User, organizationId: string): Promise<OrganizationMember[]> {
-  const data = await organizationRequest<{ members?: unknown[] }>(user, `/auth/organizations/${organizationId}/members`);
-  return Array.isArray(data.members)
-    ? data.members.map((member) => {
-      const record = isRecord(member) ? member : {};
-      return {
-        id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
-        name: typeof record.name === "string" ? record.name : "Unnamed member",
-        role: typeof record.role === "string" ? record.role : "Organization Member",
-        position: typeof record.position === "string" ? record.position : "Organization Member",
-        skills: normalizeStringArray(record.skills),
-        committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
-        committeeName: typeof record.committeeName === "string" ? record.committeeName : null,
-        availability: typeof record.availability === "string" ? record.availability : undefined,
-        profilePicture: typeof record.profilePicture === "string" ? record.profilePicture : null,
-        workload: typeof record.workload === "number" ? record.workload : undefined,
-        reliability: typeof record.reliability === "string" ? record.reliability : undefined,
-        assignedTasks: Array.isArray(record.assignedTasks) ? record.assignedTasks as OrganizationMember["assignedTasks"] : undefined
-      };
-    })
-    : [];
+  const cacheKey = organizationId.trim();
+  const now = Date.now();
+  const cached = membersClientCache.get(cacheKey);
+  if (cached && now - cached.timestamp < 20000) {
+    return cached.data;
+  }
+  if (inFlightMembersPromises.has(cacheKey)) {
+    return inFlightMembersPromises.get(cacheKey)!;
+  }
+
+  const promise = (async () => {
+    try {
+      const data = await organizationRequest<{ members?: unknown[] }>(user, `/auth/organizations/${organizationId}/members`);
+      const members = Array.isArray(data.members)
+        ? data.members.map((member) => {
+          const record = isRecord(member) ? member : {};
+          return {
+            id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
+            name: typeof record.name === "string" ? record.name : "Unnamed member",
+            role: typeof record.role === "string" ? record.role : "Organization Member",
+            position: typeof record.position === "string" ? record.position : "Organization Member",
+            skills: normalizeStringArray(record.skills),
+            committeeId: typeof record.committeeId === "string" ? record.committeeId : null,
+            committeeName: typeof record.committeeName === "string" ? record.committeeName : null,
+            availability: typeof record.availability === "string" ? record.availability : undefined,
+            profilePicture: typeof record.profilePicture === "string" ? record.profilePicture : null,
+            workload: typeof record.workload === "number" ? record.workload : undefined,
+            reliability: typeof record.reliability === "string" ? record.reliability : undefined,
+            assignedTasks: Array.isArray(record.assignedTasks) ? record.assignedTasks as OrganizationMember["assignedTasks"] : undefined
+          };
+        })
+        : [];
+      membersClientCache.set(cacheKey, { data: members, timestamp: Date.now() });
+      return members;
+    } finally {
+      inFlightMembersPromises.delete(cacheKey);
+    }
+  })();
+
+  inFlightMembersPromises.set(cacheKey, promise);
+  return promise;
 }
 
 export function subscribeOrganizationMembersFirestore(
@@ -441,9 +467,10 @@ export function subscribeOrganizationMembersFirestore(
   let intervalId: ReturnType<typeof setInterval> | null = null;
 
   const loadMembers = () => {
-    if (!user) return;
+    const currentUser = user || useAuthStore.getState().firebaseUser;
+    if (!currentUser) return;
     if (typeof document !== "undefined" && document.hidden) return;
-    void getOrganizationMembers(user, targetOrgId)
+    void getOrganizationMembers(currentUser, targetOrgId)
       .then((members) => {
         if (isMounted) onData(members);
       })
@@ -453,7 +480,7 @@ export function subscribeOrganizationMembersFirestore(
   };
 
   loadMembers();
-  intervalId = setInterval(loadMembers, 25000);
+  intervalId = setInterval(loadMembers, 60000);
 
   return () => {
     isMounted = false;

@@ -82,29 +82,60 @@ export function normalizeEvent(id: string, data: Record<string, any>): Event {
   };
 }
 
-export async function fetchEvents(user: User | null, orgId?: string | null, throwOnError = false): Promise<Event[]> {
-  const token = await getValidToken(user);
-  if (token) {
-    try {
-      const queryParams = new URLSearchParams();
-      if (orgId) queryParams.set("orgId", orgId);
-      const res = await fetch(`${API_BASE_URL}/auth/events?${queryParams.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.events)) {
-          return data.events.map((e: any) => normalizeEvent(e.id, e));
-        }
-      }
-      if (throwOnError) throw new Error("Unable to load your tasks. Please try again.");
-    } catch (err) {
-      if (throwOnError) throw err;
-      console.warn("fetchEvents error:", err);
-    }
+const eventsMemoryCache = new Map<string, { data: Event[]; timestamp: number }>();
+const inFlightEventsPromises = new Map<string, Promise<Event[]>>();
+
+export function invalidateEventsCache(orgId?: string) {
+  if (orgId) {
+    eventsMemoryCache.delete(orgId);
+  } else {
+    eventsMemoryCache.clear();
   }
-  if (throwOnError) throw new Error("Sign in again to load your tasks.");
-  return [];
+}
+
+export async function fetchEvents(user: User | null, orgId?: string | null, throwOnError = false): Promise<Event[]> {
+  const targetOrgId = orgId && orgId.trim() ? orgId.trim() : "default";
+  const now = Date.now();
+  const cached = eventsMemoryCache.get(targetOrgId);
+  if (cached && now - cached.timestamp < 15000) {
+    return cached.data;
+  }
+  if (inFlightEventsPromises.has(targetOrgId)) {
+    return inFlightEventsPromises.get(targetOrgId)!;
+  }
+
+  const promise = (async () => {
+    const token = await getValidToken(user);
+    if (token) {
+      try {
+        const queryParams = new URLSearchParams();
+        if (orgId) queryParams.set("orgId", orgId);
+        const res = await fetch(`${API_BASE_URL}/auth/events?${queryParams.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.events)) {
+            const normalized = data.events.map((e: any) => normalizeEvent(e.id, e));
+            eventsMemoryCache.set(targetOrgId, { data: normalized, timestamp: Date.now() });
+            return normalized;
+          }
+        }
+        if (throwOnError) throw new Error("Unable to load your tasks. Please try again.");
+      } catch (err) {
+        if (throwOnError) throw err;
+        console.warn("fetchEvents error:", err);
+      } finally {
+        inFlightEventsPromises.delete(targetOrgId);
+      }
+    }
+    inFlightEventsPromises.delete(targetOrgId);
+    if (throwOnError) throw new Error("Sign in again to load your tasks.");
+    return cached ? cached.data : [];
+  })();
+
+  inFlightEventsPromises.set(targetOrgId, promise);
+  return promise;
 }
 
 export function subscribeEventsFirestore(
@@ -126,11 +157,11 @@ export function subscribeEventsFirestore(
   };
   void refresh();
 
-  // 2. Poll every 25 seconds (and pause if tab is hidden) to preserve Firestore quota
+  // Poll every 60 seconds (and pause if tab is hidden) to conserve Firestore quota
   const interval = setInterval(() => {
     if (typeof document !== "undefined" && document.hidden) return;
     void refresh();
-  }, 25000);
+  }, 60000);
 
   return () => {
     cancelled = true;
@@ -164,6 +195,7 @@ export async function createEventFirestore(
       throw new Error(typeof err.message === "string" ? err.message : "Failed to create event.");
     }
     const data = await res.json();
+    invalidateEventsCache(orgId);
     return data.id;
   }
 
@@ -182,6 +214,7 @@ export async function createEventFirestore(
     orgId: targetOrgId,
     createdAt: serverTimestamp()
   });
+  invalidateEventsCache(targetOrgId);
   return docRef.id;
 }
 
@@ -204,6 +237,7 @@ export async function updateEventFirestore(
       const err = await res.json().catch(() => ({}));
       throw new Error(typeof err.message === "string" ? err.message : "Failed to update event.");
     }
+    invalidateEventsCache();
     return;
   }
 
@@ -213,6 +247,7 @@ export async function updateEventFirestore(
     ...update,
     updatedAt: serverTimestamp()
   });
+  invalidateEventsCache();
 }
 
 export async function deleteEventFirestore(user: User | null, eventId: string): Promise<void> {
@@ -226,12 +261,14 @@ export async function deleteEventFirestore(user: User | null, eventId: string): 
       const err = await res.json().catch(() => ({}));
       throw new Error(typeof err.message === "string" ? err.message : "Failed to delete event.");
     }
+    invalidateEventsCache();
     return;
   }
 
   const db = getFirebaseDb();
   const docRef = doc(db, "events", eventId);
   await deleteDoc(docRef);
+  invalidateEventsCache();
 }
 
 export async function clearMockEventsFirestore(user: User | null, orgId?: string): Promise<void> {
@@ -289,3 +326,19 @@ export async function downloadTaskAttachment(user: User | null, eventId: string,
   const response = await requestTask(user, eventId, taskId, `/attachments/${encodeURIComponent(attachmentId)}`);
   return response.blob();
 }
+
+export async function rateTaskInEvent(
+  user: User | null,
+  eventId: string,
+  taskId: string,
+  rating: number,
+  feedback?: string
+): Promise<Task> {
+  const response = await requestTask(user, eventId, taskId, "/rate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating, feedback })
+  });
+  return (await response.json()).task;
+}
+

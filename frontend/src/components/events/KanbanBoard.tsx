@@ -13,6 +13,7 @@ import {
   Rows,
   Search,
   SlidersHorizontal,
+  Star,
   Table,
   Users
 } from "lucide-react";
@@ -35,7 +36,8 @@ import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
-import { updateEventFirestore, updateTaskStatus } from "@/services/events.service";
+import { updateEventFirestore, updateTaskStatus, rateTaskInEvent } from "@/services/events.service";
+import { TaskRatingModal } from "./TaskRatingModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
 const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
@@ -77,6 +79,7 @@ export function KanbanBoard({
 
   const realRoster = Array.isArray(members) && members.length > 0 ? members.map(mapOrgMemberToItem) : undefined;
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverColumnStatus, setDragOverColumnStatus] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [search, setSearch] = useState("");
@@ -96,6 +99,7 @@ export function KanbanBoard({
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
+  const [ratingTaskTarget, setRatingTaskTarget] = useState<Task | null>(null);
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
   const [editEventModalOpen, setEditEventModalOpen] = useState(false);
@@ -322,6 +326,9 @@ export function KanbanBoard({
     const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: targetStatus } : t));
     if (isLeader) {
       syncEvent(updatedTasks);
+      if (targetStatus === "Completed" || targetStatus === "Done") {
+        setRatingTaskTarget({ ...target, status: targetStatus });
+      }
       return;
     }
     const completed = updatedTasks.filter((task) => task.status === "Completed" || task.status === "Done").length;
@@ -338,6 +345,17 @@ export function KanbanBoard({
       onUpdateEvent?.(currentEvent);
       showToast({ title: "Status not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
     });
+  }
+
+  async function handleRateTask(taskId: string, rating: number, feedback: string) {
+    try {
+      const updatedTask = await rateTaskInEvent(firebaseUser, currentEvent.id, taskId, rating, feedback);
+      handleSavedTask(updatedTask);
+      showToast({ title: "Rating saved", description: "Member performance rating recorded successfully.", tone: "success" });
+    } catch (error) {
+      showToast({ title: "Rating not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
+      throw error;
+    }
   }
 
   function handleSavedTask(updatedTask: Task) {
@@ -390,10 +408,12 @@ export function KanbanBoard({
     const draggedTask = tasks.find((task) => task.id === draggedId);
     if (!draggedTask || !canEditTask(draggedTask)) {
       setDraggedId(null);
+      setDragOverColumnStatus(null);
       return;
     }
     handleUpdateTaskStatus(draggedId, targetStatus);
     setDraggedId(null);
+    setDragOverColumnStatus(null);
   }
 
   const fetchedNames = committees.map((c) => c.name);
@@ -445,6 +465,29 @@ export function KanbanBoard({
 
 
       </div>
+
+      {/* Leader Unrated Tasks Review Banner */}
+      {isLeader && (() => {
+        const unrated = tasks.filter((t) => (t.status === "Completed" || t.status === "Done") && !t.performanceReview?.rating);
+        if (unrated.length === 0) return null;
+        return (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 border border-amber-200/90 p-3 text-xs text-amber-900 shadow-2xs">
+            <div className="flex items-center gap-2 font-semibold">
+              <Star size={16} className="text-amber-500 fill-amber-400 shrink-0" />
+              <span>
+                You have <strong className="font-extrabold text-amber-950">{unrated.length}</strong> completed subtask{unrated.length > 1 ? "s" : ""} waiting for your leader performance rating.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRatingTaskTarget(unrated[0])}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 font-bold text-white shadow-xs hover:bg-amber-700 transition cursor-pointer"
+            >
+              Review &amp; Rate Subtask
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Event Header Summary Card */}
       <div className="mb-3 min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs sm:mb-5 sm:p-6">
@@ -526,9 +569,22 @@ export function KanbanBoard({
       <div className="mb-4 hidden min-w-0 flex-wrap items-center justify-between gap-3 sm:flex">
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <div className="w-44 max-w-full">
-            <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white sm:min-h-9" dropdownClassName="[&_button]:min-h-11" portal />
-          </div>
+          <CustomSelect
+            value={selectedCommittee}
+            onChange={setSelectedCommittee}
+            options={[
+              { value: "All", label: "All Committees" },
+              ...allCommitteeNames.map((commName) => ({
+                value: commName,
+                label: commName,
+              })),
+            ]}
+            icon={<SlidersHorizontal size={13} className="text-slate-400" />}
+            containerClassName="w-auto min-w-[150px]"
+            buttonClassName="min-h-11 rounded-xl bg-white border-slate-200 px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:min-h-9"
+            dropdownClassName="shadow-xl border-slate-200/90 rounded-2xl [&_button]:min-h-11"
+            portal
+          />
 
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">
@@ -693,7 +749,14 @@ export function KanbanBoard({
                 tasks={getColumnTasks(status)}
                 onAddTask={isLeader ? () => setShowAddTaskModal(true) : undefined}
                 onDragStart={(id) => setDraggedId(id)}
+                onDragEnd={() => {
+                  setDraggedId(null);
+                  setDragOverColumnStatus(null);
+                }}
                 onDrop={handleDrop}
+                onTaskDragOver={(st) => setDragOverColumnStatus(st)}
+                draggedTaskId={draggedId}
+                dragOverColumnStatus={dragOverColumnStatus}
                 onReassignTask={isLeader ? (task) => setReassignTaskTarget(task) : undefined}
                 onSelectTask={(task) => setSelectedDetailTask(task)}
                 onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
@@ -837,6 +900,17 @@ export function KanbanBoard({
         onReorderStatusOrder={handleReorderStatusOrder}
         onDeleteStatus={handleDeleteCustomStatus}
       />
+
+      {ratingTaskTarget && (
+        <TaskRatingModal
+          key={ratingTaskTarget.id}
+          eventId={currentEvent.id}
+          isOpen={Boolean(ratingTaskTarget)}
+          onClose={() => setRatingTaskTarget(null)}
+          task={tasks.find((task) => task.id === ratingTaskTarget.id) || ratingTaskTarget}
+          onRate={handleRateTask}
+        />
+      )}
 
       {isLeader && confirmDeleteEvent && onDeleteEvent && (
         <ConfirmDeleteModal

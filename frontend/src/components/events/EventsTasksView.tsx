@@ -10,7 +10,7 @@ import { KanbanBoard } from "./KanbanBoard";
 import { TaskAssigneeMembersContext } from "./TaskAssignee";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import type { CustomStatusConfig } from "./statusUtils";
-import type { Event, Task } from "./types";
+import type { Event, EventStatus, Task } from "./types";
 import { isStartAfterEnd } from "./dateValidation";
 
 import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
@@ -124,7 +124,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
 
   function handleUpdateEvent(updatedEvent: Event) {
     setEvents((current) => current.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)));
-    setSelectedEvent(updatedEvent);
+    setSelectedEvent((current) => (current && current.id === updatedEvent.id ? updatedEvent : current));
   }
 
   async function handlePublishGoalTasks(
@@ -182,7 +182,10 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
     setActiveTab("events");
   }
 
-  function handleNewEvent() {
+  const [newEventInitialStatus, setNewEventInitialStatus] = useState<EventStatus>("Active");
+
+  function handleNewEvent(initialStatus: EventStatus = "Active") {
+    setNewEventInitialStatus(initialStatus);
     setCommittee("");
     setDateError("");
     setIsModalOpen(true);
@@ -207,7 +210,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
       await createEventFirestore(firebaseUser, effectiveOrgId, {
         title: title.trim(),
         description: description.trim(),
-        status: "Active",
+        status: newEventInitialStatus || "Active",
         committee: committee.trim(),
         startDate: startFormatted,
         endDate: endFormatted,
@@ -273,6 +276,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}
             onNewEvent={handleNewEvent}
+            onUpdateEvent={handleUpdateEvent}
           />
         )}
       </div>

@@ -138,14 +138,15 @@ export async function meController(request: AuthenticatedRequest, response: Resp
 export async function updateProfileController(request: AuthenticatedRequest, response: Response, next: NextFunction) {
   try {
     if (!request.authUser) throw new AppError("Authentication is required.", 401);
-    const { fullName, position, yearLevel, program, birthdate, skills } = request.body as Record<string, unknown>;
+    const { fullName, position, yearLevel, program, birthdate, skills, availability, status } = request.body as Record<string, unknown>;
     const user = await updateUserProfile(request.authUser.uid, {
       fullName: typeof fullName === "string" ? fullName : undefined,
       position: typeof position === "string" ? position : undefined,
       yearLevel: typeof yearLevel === "string" ? yearLevel : undefined,
       program: typeof program === "string" ? program : undefined,
       birthdate: typeof birthdate === "string" ? birthdate : undefined,
-      skills: Array.isArray(skills) ? skills.filter((s): s is string => typeof s === "string") : undefined
+      skills: Array.isArray(skills) ? skills.filter((s): s is string => typeof s === "string") : undefined,
+      availability: typeof availability === "string" ? availability : typeof status === "string" ? status : undefined
     });
     response.status(200).json({ user });
   } catch (error) { next(error); }

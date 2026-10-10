@@ -31,7 +31,13 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
     .filter((task: TaskRecord) => ownsProfileTask({ uid: id, fullName: name }, task))
     .map((task: TaskRecord) => ({ ...task, eventId: event.id, eventTitle: event.title, customStatuses: event.customStatuses })));
   const unfinished = tasks.filter((task: TaskRecord) => !["completed", "done", "cancelled", "canceled"].includes(String(task.status).trim().toLowerCase()));
-  const savedAvailability = data.availability || data.status;
+  const rawAvail = typeof data.availability === "string" && data.availability.trim()
+    ? data.availability.trim()
+    : typeof data.status === "string" && data.status.trim()
+    ? data.status.trim()
+    : "";
+  const validAvail = ["Available", "Busy", "On Leave"].find((v) => v.toLowerCase() === rawAvail.toLowerCase());
+  const resolvedAvailability = validAvail || (unfinished.length >= 4 ? "Busy" : "Available");
   const assignedTasks = tasks.map((task: TaskRecord) => ({
     id: task.id, title: task.title || task.description || "Untitled Subtask", eventTitle: task.eventTitle, eventId: task.eventId,
     dueDate: task.dueDate || "", deadline: task.deadline,
@@ -46,7 +52,7 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
     committeeName: typeof data.committeeName === "string" ? data.committeeName : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
     assignedTasks,
-    availability: ["Available", "Busy", "On Leave"].includes(savedAvailability) ? savedAvailability : unfinished.length >= 4 ? "Busy" : "Available"
+    availability: resolvedAvailability
   };
   if (!canViewMemberPerformance(user, id)) return publicProfile;
   let dated = 0;

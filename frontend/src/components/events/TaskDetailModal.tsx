@@ -4,6 +4,7 @@ import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 
 import {
   AlertTriangle,
+  Bell,
   Check,
   ChevronDown,
   Edit3,
@@ -20,6 +21,8 @@ import type { Task, TaskPriority, TaskStatus } from "./types";
 import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { type OrgMemberItem } from "./AddTaskModal";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
+import { sendNudgeEmail } from "@/services/notifications.service";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
@@ -64,7 +67,6 @@ export function TaskDetailModal({
   const reviewerName = useAuthStore((state) => state.profile?.fullName || "");
   const reviewerRole = useAuthStore((state) => state.profile?.role);
   const canViewReview = reviewerRole === "Student Leader" || reviewerRole === "Admin" || isTaskAssignedToUser(task, reviewerUID, reviewerName);
-  const [performanceRating, setPerformanceRating] = useState(task.performanceReview?.rating || 0);
 
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
@@ -76,6 +78,68 @@ export function TaskDetailModal({
   const [dateError, setDateError] = useState("");
   const [isLeaderOnly, setIsLeaderOnly] = useState<boolean>(Boolean(task.isLeaderOnly));
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sendingNudge, setSendingNudge] = useState(false);
+
+  async function handleSendManualNudge() {
+    setSendingNudge(true);
+    try {
+      const assignedMember = activeRoster.find((m) =>
+        selectedMemberId ? m.id === selectedMemberId : task.assignedMemberUID ? m.id === task.assignedMemberUID : m.name === (task.assignedMemberName || task.assignee?.name)
+      );
+
+      const targetUID = assignedMember?.id || task.assignedMemberUID || reviewerUID;
+      const targetName = assignedMember?.name || task.assignedMemberName || task.assignee?.name || "Team Member";
+
+      const dueDateStr = dueDate || task.dueDate || task.deadline;
+      let nudgeType = "3_days_prior";
+      let isUrgent = false;
+
+      if (dueDateStr) {
+        const parsedDate = new Date(dueDateStr);
+        if (!isNaN(parsedDate.getTime())) {
+          const diffDays = Math.ceil((parsedDate.getTime() - Date.now()) / (1000 * 3600 * 24));
+          if (diffDays <= 1) {
+            nudgeType = "1_day_prior";
+            isUrgent = true;
+          }
+        }
+      }
+
+      const res = await sendNudgeEmail({
+        recipientUID: targetUID,
+        taskTitle: title.trim() || task.title,
+        eventName: "Organization Event",
+        deadline: dueDateStr || "Upcoming",
+        message: isUrgent
+          ? "Urgent Reminder: This task is due tomorrow!"
+          : "Contextual Nudge: Checking in on progress 3 days prior to deadline.",
+        isUrgent,
+        nudgeType
+      });
+
+      if (res.success) {
+        useToastStore.getState().showToast({
+          title: "Nudge Email Sent",
+          description: `Successfully sent ${nudgeType === "1_day_prior" ? "1-Day Prior (Urgent)" : "3-Days Prior"} nudge for "${title || task.title}" to ${targetName}.`,
+          tone: "success"
+        });
+      } else {
+        useToastStore.getState().showToast({
+          title: "Could Not Send Nudge",
+          description: res.error || "Failed to deliver email nudge.",
+          tone: "error"
+        });
+      }
+    } catch (err: any) {
+      useToastStore.getState().showToast({
+        title: "Error Sending Nudge",
+        description: err.message || "An unexpected error occurred.",
+        tone: "error"
+      });
+    } finally {
+      setSendingNudge(false);
+    }
+  }
 
   // Assignee selection
   const currentMemberMatch = activeRoster.find(
@@ -108,10 +172,6 @@ export function TaskDetailModal({
     return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
   });
   const selectedAssignee = activeRoster.find((member) => member.id === selectedMemberId);
-  const reviewAssigneeUID = selectedAssignee?.id || task.assignedMemberUID;
-  const reviewAssigneeName = selectedAssignee?.name || task.assignedMemberName || task.assignee?.name || "";
-  const isOwnTask = reviewAssigneeUID ? reviewAssigneeUID === reviewerUID : Boolean(reviewerName && reviewAssigneeName.trim().toLowerCase() === reviewerName.trim().toLowerCase());
-  const canRate = isLeader && canEdit && !isOwnTask && Boolean(reviewAssigneeUID || reviewAssigneeName) && ["completed", "done"].includes(status.toLowerCase());
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -152,10 +212,7 @@ export function TaskDetailModal({
         name: selectedMember.name
       } : task.assignee,
       assignedMemberName: selectedMember?.name ?? task.assignedMemberName ?? null,
-      assignedMemberUID: selectedMember?.id ?? task.assignedMemberUID ?? null,
-      performanceReview: canRate && performanceRating > 0 && performanceRating !== task.performanceReview?.rating
-        ? { rating: performanceRating }
-        : task.performanceReview ?? null
+      assignedMemberUID: selectedMember?.id ?? task.assignedMemberUID ?? null
     };
 
     onUpdateTask(updated);
@@ -252,7 +309,7 @@ export function TaskDetailModal({
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">Assignee</label>
               <CustomSelect
                 value={selectedMemberId}
-                onChange={(value) => { setSelectedMemberId(value); setPerformanceRating(0); }}
+                onChange={setSelectedMemberId}
                 options={assigneeOptions}
                 placeholder="Select a member"
                 buttonClassName="py-2 text-xs"
@@ -319,16 +376,15 @@ export function TaskDetailModal({
           </div> : null}
 
           {/* ADDITIONAL METADATA BADGES */}
-          {canRate ? <fieldset className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-            <legend className="px-1 text-xs font-semibold text-slate-700">Leader performance review</legend>
-            <p className="text-xs text-slate-500">Rate this member&apos;s completed task. The rating appears on their profile.</p>
-            <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Performance rating">
-              {[1, 2, 3, 4, 5].map((rating) => <button key={rating} type="button" role="radio" aria-checked={performanceRating === rating} aria-label={`${rating} ${rating === 1 ? "star" : "stars"}`} onClick={() => setPerformanceRating(rating)} className="rounded-lg p-1.5 transition hover:bg-amber-100">
-                <Star size={22} className={rating <= performanceRating ? "fill-amber-400 text-amber-400" : "text-slate-300"} />
-              </button>)}
-            </div>
-            <p className="mt-2 text-[10px] text-slate-500">{performanceRating ? `${performanceRating}/5 — saved with your changes` : "No rating selected"}</p>
-          </fieldset> : canViewReview && task.performanceReview ? <p className="text-xs text-slate-500">Leader performance rating: {task.performanceReview.rating}/5</p> : null}
+          {canViewReview && task.performanceReview ? (
+            <section aria-label="Leader performance review" className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+              <h4 className="text-xs font-semibold text-slate-700">Leader performance review</h4>
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                <Star size={16} className="fill-amber-400 text-amber-400" /> {task.performanceReview.rating}/5
+              </p>
+              {task.performanceReview.feedback ? <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-600">{task.performanceReview.feedback}</p> : null}
+            </section>
+          ) : null}
           {(typeof task.matchPercentage === "number" || (task.blockedBy && task.blockedBy > 0) || task.isAiGenerated) && (
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
               {task.isAiGenerated && (
@@ -364,13 +420,46 @@ export function TaskDetailModal({
           <TaskAttachments eventId={eventId} task={task} canAdd={canEdit} onTaskUpdated={onAttachmentsUpdated} />
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
-            {isLeader && canEdit && onDeleteTask ? <button
-              type="button" onClick={() => setConfirmDelete(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
-            ><Trash2 size={14} />Delete task</button> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {isLeader && canEdit && onDeleteTask ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                >
+                  <Trash2 size={14} />
+                  Delete task
+                </button>
+              ) : null}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={handleSendManualNudge}
+                  disabled={sendingNudge}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 hover:text-blue-800 disabled:opacity-50"
+                  title="Test or dispatch an adviser-recommended nudge email right now"
+                >
+                  <Bell size={14} className="text-blue-600" />
+                  {sendingNudge ? "Sending Nudge..." : "Send Nudge Email"}
+                </button>
+              )}
+            </div>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-              <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">{canEdit ? "Cancel" : "Close"}</button>
-              {canEdit ? <button type="submit" className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700">{isLeader ? "Save changes" : "Update status"}</button> : null}
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                {canEdit ? "Cancel" : "Close"}
+              </button>
+              {canEdit ? (
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700"
+                >
+                  {isLeader ? "Save changes" : "Update status"}
+                </button>
+              ) : null}
             </div>
           </div>
         </form>

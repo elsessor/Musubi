@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   AlertTriangle,
+  Bell,
   Calendar as CalendarIcon,
   Check,
   CheckCircle2,
@@ -36,6 +37,7 @@ import {
   type OrganizationMember
 } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { sendNudgeEmail } from "@/services/notifications.service";
 import {
   delegateSubtasksHeuristically,
   findBestMemberForSubtask
@@ -602,6 +604,25 @@ type OldTaskCardProps = {
   onToggleLeaderOnly: () => void;
 };
 
+function formatSubtaskDate(subtask: Subtask): string {
+  if (subtask.deadline) {
+    const parsed = new Date(subtask.deadline);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+  }
+  if (subtask.dueDate) {
+    const parsed = new Date(subtask.dueDate);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+  }
+  const days = typeof subtask.estimatedDays === "number" && subtask.estimatedDays > 0 ? subtask.estimatedDays : 7;
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + days);
+  return targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function OldTaskCard({
   subtask,
   customStatuses,
@@ -694,7 +715,7 @@ function OldTaskCard({
 
         <span className="flex items-center gap-1.5">
           <CalendarIcon size={13} className="text-slate-400" />
-          Aug 11, 2026
+          {formatSubtaskDate(subtask)}
         </span>
       </div>
 
@@ -934,6 +955,45 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
     e.preventDefault();
     if (!title.trim()) return;
 
+    const targetDueDate = new Date(selectedYear, selectedMonth, selectedDay);
+    const threeDaysPriorDate = new Date(targetDueDate.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const oneDayPriorDate = new Date(targetDueDate.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const subtaskNudges = [
+      {
+        nudgeUID: `${subtask.id}_3d`,
+        triggerDate: threeDaysPriorDate,
+        nudgeType: "3 Days Prior",
+        sent: false
+      },
+      {
+        nudgeUID: `${subtask.id}_1d`,
+        triggerDate: oneDayPriorDate,
+        nudgeType: "1 Day Prior",
+        sent: false
+      }
+    ];
+
+    if (sendNudgeAlert) {
+      const assignedMember = members.find((m) => m.name === assigneeName);
+      const isUrgent = estimatedDays <= 1;
+      const nudgeType = estimatedDays <= 1 ? "1_day_prior" : estimatedDays <= 3 ? "3_days_prior" : "standard";
+      sendNudgeEmail({
+        recipientEmail: assignedMember?.email,
+        recipientUID: assignedMember?.id,
+        taskTitle: title.trim(),
+        eventName: "Organization Task",
+        deadline: formattedDeadline,
+        message: estimatedDays <= 1
+          ? "Urgent Reminder: This task is due within 1 day!"
+          : estimatedDays <= 3
+          ? "Priority Nudge: 3 days remaining before deadline."
+          : undefined,
+        isUrgent,
+        nudgeType
+      }).catch((err) => console.warn("Failed to dispatch email nudge:", err));
+    }
+
     onSave({
       ...subtask,
       title: title.trim(),
@@ -944,7 +1004,8 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
       isLeaderOnly,
       requiredSkills: skills,
       dueDate: formattedDeadline,
-      deadline: formattedDeadline
+      deadline: formattedDeadline,
+      nudges: subtaskNudges
     });
   }
 
@@ -1012,37 +1073,45 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
               buttonClassName="py-3 text-sm font-semibold"
             />
             {bestMatch && (
-              <div className="mt-2.5 rounded-2xl bg-indigo-50/80 p-3 border border-indigo-100/90 shadow-2xs space-y-1.5">
+              <div className="mt-2.5 rounded-2xl border border-blue-100 bg-slate-50/70 p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
-                    <Sparkles size={14} className="text-indigo-600 shrink-0" />
-                    <span>AI Match Suggestion</span>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                    <Sparkles size={14} className="text-blue-600 shrink-0" />
+                    <span>Recommended Assignee</span>
                   </div>
-                  <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-extrabold text-indigo-700">
+                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-200/50">
                     {bestMatch.score}% Match
                   </span>
                 </div>
-                <p className="text-xs font-semibold text-indigo-900">
-                  {bestMatch.member.name} <span className="font-normal text-indigo-700">({bestMatch.member.position || bestMatch.member.role || "Member"})</span>
+                <p className="text-xs font-bold text-slate-900">
+                  {bestMatch.member.name}{" "}
+                  <span className="font-normal text-slate-500">
+                    ({bestMatch.member.position || bestMatch.member.role || "Member"})
+                  </span>
                 </p>
                 {bestMatch.explanation && (
-                  <p className="text-[11px] font-medium text-indigo-700/90">
+                  <p className="text-[11px] font-medium text-slate-600">
                     {bestMatch.explanation}
                   </p>
                 )}
                 {bestMatch.member.skills && bestMatch.member.skills.length > 0 && (
-                  <div className="pt-1 flex flex-wrap gap-1 items-center">
-                    <span className="text-[10px] font-bold text-indigo-600 mr-1">Onboarding Skills:</span>
+                  <div className="pt-1 flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                      Member Skills:
+                    </span>
                     {bestMatch.member.skills.map((sk) => {
                       const isMatched = bestMatch.matchedSkills.includes(sk);
                       return (
                         <span
                           key={sk}
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            isMatched ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-white/80 text-indigo-700 border border-indigo-200"
+                          className={`rounded-md px-2 py-0.5 text-[10px] font-semibold flex items-center gap-1 ${
+                            isMatched
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
+                              : "bg-white text-slate-500 border border-slate-200/60"
                           }`}
                         >
-                          {sk} {isMatched ? "✓" : ""}
+                          {sk}
+                          {isMatched && <Check size={11} className="stroke-[2.5] text-emerald-600" />}
                         </span>
                       );
                     })}
@@ -1052,42 +1121,44 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
             )}
           </div>
 
-          {/* Contextual Nudges & Real-time Workload Feature Card */}
-          <div className="rounded-2xl bg-gradient-to-br from-amber-50/90 via-orange-50/70 to-amber-100/50 p-3.5 border border-amber-200/90 shadow-2xs space-y-2">
+          {/* Schedule & Auto-Reminder Card */}
+          <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5 space-y-2.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-extrabold text-amber-950">
-                <span className="flex size-5 items-center justify-center rounded-full bg-amber-500 text-white font-black text-[10px]">
-                  ⚡
-                </span>
-                <span>Contextual Nudge Alert</span>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                <Bell size={14} className="text-blue-600 shrink-0" />
+                <span>Adviser-Recommended Nudges</span>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-extrabold text-amber-900 border border-amber-300/80">
-                <span className="size-1.5 rounded-full bg-amber-600 animate-pulse" />
-                Real-Time Nudge Active
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200/60">
+                <span className="size-1.5 rounded-full bg-emerald-500" />
+                3-Day & 1-Day Active
               </span>
             </div>
 
-            <div className="text-xs space-y-1 text-amber-950 font-medium leading-relaxed">
+            <div className="text-xs text-slate-600 space-y-1.5 font-normal leading-relaxed">
               <p>
-                Assigned to <span className="font-bold text-slate-900">{assigneeName}</span>. Estimated completion in{" "}
-                <span className="font-extrabold text-blue-700">{estimatedDays} day{estimatedDays > 1 ? "s" : ""}</span> (
-                <span className="font-extrabold text-slate-900">{formattedDeadline}</span>).
+                Assigned to <span className="font-semibold text-slate-900">{assigneeName}</span> · Due in{" "}
+                <span className="font-semibold text-slate-900">{estimatedDays} day{estimatedDays > 1 ? "s" : ""}</span> ({formattedDeadline}).
               </p>
-              <p className="text-[11px] text-amber-800 font-semibold">
-                {estimatedDays <= 3
-                  ? "⚠️ Priority Nudge: Tight turnaround time (3 days or less). Immediate deadline alert queued for member."
-                  : "💡 Workload Nudge: Standard progress tracking alert scheduled for member."}
-              </p>
+              <div className="rounded-xl border border-slate-200/70 bg-white p-2.5 space-y-1.5 text-[11px]">
+                <div className="flex items-center gap-2 text-amber-700">
+                  <span className="size-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span><strong>3 Days Prior:</strong> Contextual progress check email sent to {assigneeName}.</span>
+                </div>
+                <div className="flex items-center gap-2 text-rose-600">
+                  <span className="size-1.5 rounded-full bg-rose-500 shrink-0" />
+                  <span><strong>1 Day Prior:</strong> Urgent final deadline reminder email sent 24h before due date.</span>
+                </div>
+              </div>
             </div>
 
-            <label className="flex items-center gap-2 pt-1 border-t border-amber-200/60 cursor-pointer select-none text-xs font-bold text-amber-900">
+            <label className="flex items-center gap-2 pt-2 border-t border-slate-200/60 cursor-pointer select-none text-xs font-semibold text-slate-700 hover:text-slate-900 transition">
               <input
                 type="checkbox"
                 checked={sendNudgeAlert}
                 onChange={(e) => setSendNudgeAlert(e.target.checked)}
-                className="size-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
               />
-              <span>Dispatch Contextual Nudge Notification on Save</span>
+              <span>Send initial assignment notification nudge to member on save</span>
             </label>
           </div>
 

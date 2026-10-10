@@ -118,7 +118,7 @@ test("server records completion transitions, preserves history and leaves legacy
 test("leader reviews record attribution; member attempts cannot forge ratings", () => {
   const original = task({ status: "Done", completedAt: recordedTime });
   const reviewed = recordTaskPerformance([{ ...original, performanceReview: { rating: 4, reviewerUID: "forged" } }], [original], leader, recordedTime)[0];
-  assert.deepEqual(reviewed.performanceReview, { rating: 4, reviewerUID: "leader", reviewedAt: recordedTime });
+  assert.deepEqual(reviewed.performanceReview, { rating: 4, feedback: "", reviewerUID: "leader", reviewedAt: recordedTime });
   assert.deepEqual(recordTaskPerformance([{ ...reviewed, performanceReview: { rating: 5 } }], [reviewed], member)[0].performanceReview, reviewed.performanceReview);
   assert.equal(recordTaskPerformance([{ ...original, performanceReview: { rating: 5 } }], [original], member)[0].performanceReview, null);
   assert.equal(recordTaskPerformance([{ ...reviewed, status: "In Progress" }], [reviewed], leader)[0].performanceReview, null);

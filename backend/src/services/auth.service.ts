@@ -13,6 +13,12 @@ import { assertCanPostAnnouncement, canViewAnnouncement } from "../utils/announc
 import { getDateRangeError } from "../utils/dateRange.js";
 import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
 import { getAdminAccountStatus, type AdminAccountStatus } from "../utils/adminAccountStatus.js";
+import { appCache } from "../utils/cache.js";
+
+export function invalidateUserCache(uid: string) {
+  appCache.delete("user_profile:" + uid);
+  appCache.delete("jwt_payload:" + uid);
+}
 
 const DEFAULT_ROLE: UserRole = "Organization Member";
 const validRoles: UserRole[] = ["Admin", "Student Leader", "Organization Member"];
@@ -31,6 +37,12 @@ function createAppJwt(payload: JwtPayload): string {
 
 function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData): FirestoreUser {
   const role = isUserRole(data.role) ? data.role : DEFAULT_ROLE;
+  const rawAvail = typeof data.availability === "string" && data.availability.trim()
+    ? data.availability.trim()
+    : typeof data.status === "string" && data.status.trim()
+    ? data.status.trim()
+    : "Available";
+  const validAvail = ["Available", "Busy", "On Leave"].find((v) => v.toLowerCase() === rawAvail.toLowerCase()) || "Available";
 
   return {
     uid,
@@ -45,15 +57,15 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
     birthdate: typeof data.birthdate === "string" ? data.birthdate : null,
     profilePicture: typeof data.profilePicture === "string" ? data.profilePicture : null,
     skills: Array.isArray(data.skills) ? data.skills.filter((skill): skill is string => typeof skill === "string") : [],
-    availability: typeof data.availability === "string" ? data.availability : null,
-    status: typeof data.status === "string" ? data.status : null,
+    availability: validAvail,
+    status: validAvail,
     onboardingCompleted: data.onboardingCompleted === true,
     createdAt: data.createdAt ?? firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     lastLogin: data.lastLogin ?? firebaseAdmin.firestore.FieldValue.serverTimestamp()
   };
 }
 
-async function getOrCreateUserDocument(uid: string, clientFullName?: string): Promise<FirestoreUser> {
+async function getOrCreateUserDocument(uid: string, clientFullName?: string, updateLastLogin = false): Promise<FirestoreUser> {
   const userRef = firestore.collection("users").doc(uid);
   const snapshot = await userRef.get();
   const firebaseUser = await firebaseAuth.getUser(uid);
@@ -82,9 +94,17 @@ async function getOrCreateUserDocument(uid: string, clientFullName?: string): Pr
     let orgName = typeof data.organizationName === "string" && data.organizationName.trim() ? data.organizationName : null;
     if (typeof data.organizationId === "string" && data.organizationId.trim()) {
       try {
-        const orgDoc = await firestore.collection("organizations").doc(data.organizationId).get();
-        if (orgDoc.exists && typeof orgDoc.data()?.name === "string" && orgDoc.data()?.name.trim()) {
-          orgName = orgDoc.data()?.name;
+        const orgCacheKey = "org_doc:" + data.organizationId;
+        let orgData = appCache.get<any>(orgCacheKey);
+        if (!orgData) {
+          const orgDoc = await firestore.collection("organizations").doc(data.organizationId).get();
+          if (orgDoc.exists) {
+            orgData = orgDoc.data();
+            appCache.set(orgCacheKey, orgData, 180_000);
+          }
+        }
+        if (orgData && typeof orgData?.name === "string" && orgData.name.trim()) {
+          orgName = orgData.name;
           if (data.organizationName !== orgName) {
             await userRef.update({ organizationName: orgName });
           }
@@ -94,9 +114,11 @@ async function getOrCreateUserDocument(uid: string, clientFullName?: string): Pr
       }
     }
     const user = normalizeUserDocument(uid, { ...data, fullName: currentFullName, organizationName: orgName });
-    await userRef.update({
-      lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-    });
+    if (updateLastLogin) {
+      await userRef.update({
+        lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+      });
+    }
     return user;
   }
 
@@ -142,7 +164,7 @@ export async function loginWithFirebaseToken(idToken: string, clientFullName?: s
   }
 
   const decodedToken = await firebaseAuth.verifyIdToken(idToken);
-  const user = await getOrCreateUserDocument(decodedToken.uid, clientFullName);
+  const user = await getOrCreateUserDocument(decodedToken.uid, clientFullName, true);
 
   const payload: JwtPayload = {
     uid: user.uid,
@@ -199,13 +221,19 @@ export async function verifyAppJwtAsync(token: string): Promise<JwtPayload> {
   } catch {
     try {
       const decoded = await firebaseAuth.verifyIdToken(token);
-      const user = await getOrCreateUserDocument(decoded.uid);
-      return {
+      const cacheKey = "jwt_payload:" + decoded.uid;
+      const cached = appCache.get<JwtPayload>(cacheKey);
+      if (cached) return cached;
+
+      const user = await getOrCreateUserDocument(decoded.uid, undefined, false);
+      const payload: JwtPayload = {
         uid: user.uid,
         email: user.email,
         role: user.role,
         organizationId: user.organizationId
       };
+      appCache.set(cacheKey, payload, 60_000);
+      return payload;
     } catch {
       throw new AppError("Invalid or expired authorization token.", 401);
     }
@@ -213,6 +241,10 @@ export async function verifyAppJwtAsync(token: string): Promise<JwtPayload> {
 }
 
 export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]> {
+  const cacheKey = "user_profile:" + uid;
+  const cached = appCache.get<LoginResponse["user"]>(cacheKey);
+  if (cached) return cached;
+
   const snapshot = await firestore.collection("users").doc(uid).get();
 
   if (!snapshot.exists) {
@@ -223,9 +255,17 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
   let orgName = typeof data.organizationName === "string" && data.organizationName.trim() ? data.organizationName : null;
   if (typeof data.organizationId === "string" && data.organizationId.trim()) {
     try {
-      const orgDoc = await firestore.collection("organizations").doc(data.organizationId).get();
-      if (orgDoc.exists && typeof orgDoc.data()?.name === "string" && orgDoc.data()?.name.trim()) {
-        const latestOrgName = orgDoc.data()?.name;
+      const orgCacheKey = "org_doc:" + data.organizationId;
+      let orgData = appCache.get<any>(orgCacheKey);
+      if (!orgData) {
+        const orgDoc = await firestore.collection("organizations").doc(data.organizationId).get();
+        if (orgDoc.exists) {
+          orgData = orgDoc.data();
+          appCache.set(orgCacheKey, orgData, 180_000);
+        }
+      }
+      if (orgData && typeof orgData?.name === "string" && orgData.name.trim()) {
+        const latestOrgName = orgData.name;
         if (data.organizationName !== latestOrgName) {
           orgName = latestOrgName;
           await snapshot.ref.update({ organizationName: latestOrgName });
@@ -238,7 +278,7 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
 
   const user = normalizeUserDocument(uid, { ...data, organizationName: orgName });
 
-  return {
+  const profile: LoginResponse["user"] = {
     uid: user.uid,
     fullName: user.fullName,
     email: user.email,
@@ -255,11 +295,14 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     status: user.status,
     onboardingCompleted: user.onboardingCompleted
   };
+
+  appCache.set(cacheKey, profile, 60_000);
+  return profile;
 }
 
 export async function updateUserProfile(
   uid: string,
-  input: { fullName?: string; position?: string; yearLevel?: string; program?: string; birthdate?: string; skills?: string[] }
+  input: { fullName?: string; position?: string; yearLevel?: string; program?: string; birthdate?: string; skills?: string[]; availability?: string; status?: string }
 ): Promise<LoginResponse["user"]> {
   const userRef = firestore.collection("users").doc(uid);
   const snap = await userRef.get();
@@ -284,8 +327,17 @@ export async function updateUserProfile(
   if (typeof input.program === "string") updates.program = input.program.trim();
   if (typeof input.birthdate === "string") updates.birthdate = input.birthdate.trim();
   if (Array.isArray(input.skills)) updates.skills = input.skills.filter((s): s is string => typeof s === "string");
+  if (typeof input.availability === "string" && input.availability.trim()) {
+    updates.availability = input.availability.trim();
+    updates.status = input.availability.trim();
+  } else if (typeof input.status === "string" && input.status.trim()) {
+    updates.status = input.status.trim();
+    updates.availability = input.status.trim();
+  }
 
   await userRef.set(updates, { merge: true });
+  invalidateUserCache(uid);
+  appCache.deletePrefix("members:");
 
   const updatedUser = await getCurrentUser(uid);
   writeAuditLog({
@@ -342,6 +394,8 @@ export async function updateCurrentUserProfile(uid: string, input: {
   if (skills.length > 50 || skills.some((skill) => skill.length > 100)) throw new AppError("Review the skills and try again.", 400);
 
   await firestore.collection("users").doc(uid).update({ fullName, position, yearLevel, program, birthdate, skills });
+  invalidateUserCache(uid);
+  appCache.deletePrefix("members:");
   return getCurrentUser(uid);
 }
 
@@ -390,6 +444,11 @@ export async function reviewOrganizationRequest(uid: string, requestId: string, 
 export async function getOrganizationForUser(uid: string, organizationId: string) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to this organization.", 403);
+
+  const cacheKey = "org_record:" + organizationId;
+  const cached = appCache.get<any>(cacheKey);
+  if (cached) return cached;
+
   const snapshot = await firestore.collection("organizations").doc(organizationId).get();
   if (!snapshot.exists) throw new AppError("Organization profile is not available yet.", 404);
 
@@ -399,7 +458,7 @@ export async function getOrganizationForUser(uid: string, organizationId: string
       ? ((value as { toDate: () => Date }).toDate()).toISOString()
       : null;
 
-  return {
+  const record = {
     id: snapshot.id,
     name: typeof data.name === "string" ? data.name : "Untitled organization",
     type: typeof data.type === "string" ? data.type : "Unspecified",
@@ -413,6 +472,9 @@ export async function getOrganizationForUser(uid: string, organizationId: string
     createdAt: asIsoString(data.createdAt),
     updatedAt: asIsoString(data.updatedAt)
   };
+
+  appCache.set(cacheKey, record, 180_000);
+  return record;
 }
 
 export async function getOrganizationDirectory(uid: string) {
@@ -517,15 +579,24 @@ export async function createOrganization(uid: string, input: { name: string; typ
 export async function getOrganizationMembers(uid: string, organizationId: string) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to these members.", 403);
-  const [snapshot, eventSnapshot] = await Promise.all([
-    firestore.collection("users").where("organizationId", "==", organizationId).get(),
-    firestore.collection("events").where("orgId", "==", organizationId).get()
-  ]);
-  const events = eventSnapshot.docs.map((document) => ({ ...document.data(), id: document.id }));
-  return snapshot.docs.map((document) => memberForViewer(user, document.id, document.data(), events));
+
+  const cacheKey = "members:" + organizationId;
+  let rawMembers = appCache.get<{ id: string; data: any; events: any[] }[]>(cacheKey);
+  if (!rawMembers) {
+    const [snapshot, eventSnapshot] = await Promise.all([
+      firestore.collection("users").where("organizationId", "==", organizationId).get(),
+      firestore.collection("events").where("orgId", "==", organizationId).get()
+    ]);
+    const events = eventSnapshot.docs.map((document) => ({ ...document.data(), id: document.id }));
+    rawMembers = snapshot.docs.map((document) => ({ id: document.id, data: document.data(), events }));
+    appCache.set(cacheKey, rawMembers, 30_000);
+  }
+
+  return rawMembers.map((member) => memberForViewer(user, member.id, member.data, member.events));
 }
 
 export async function removeOrganizationMember(uid: string, organizationId: string, memberId: string) {
+  appCache.deletePrefix("members:");
   const leader = await getCurrentUser(uid);
   if (leader.role !== "Student Leader" || leader.organizationId !== organizationId) {
     throw new AppError("Only this organization's student leader can remove members.", 403);
@@ -1168,21 +1239,28 @@ export async function watchAdminMemberDirectory(
 
   let active = true;
   let generation = 0;
-  const refresh = async () => {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const trigger = () => {
+    if (!active) return;
     const currentGeneration = ++generation;
-    try {
-      const directory = await buildAdminMemberDirectory();
-      if (active && currentGeneration === generation) onData(directory);
-    } catch (error) {
-      if (active && currentGeneration === generation) onError(error instanceof Error ? error : new Error(String(error)));
-    }
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      debounceTimer = null;
+      try {
+        const directory = await buildAdminMemberDirectory();
+        if (active && currentGeneration === generation) onData(directory);
+      } catch (error) {
+        if (active && currentGeneration === generation) onError(error instanceof Error ? error : new Error(String(error)));
+      }
+    }, 2500);
   };
   const reportError = (error: Error) => { if (active) onError(error); };
-  const unsubscribeUsers = firestore.collection("users").onSnapshot(refresh, reportError);
-  const unsubscribeJoinRequests = firestore.collection("organization_join_requests").onSnapshot(refresh, reportError);
+  const unsubscribeUsers = firestore.collection("users").onSnapshot(trigger, reportError);
+  const unsubscribeJoinRequests = firestore.collection("organization_join_requests").onSnapshot(trigger, reportError);
 
   return () => {
     active = false;
+    if (debounceTimer) clearTimeout(debounceTimer);
     unsubscribeUsers();
     unsubscribeJoinRequests();
   };
@@ -1397,6 +1475,8 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     orgId: targetOrgId
   });
 
+  appCache.deletePrefix("events_raw:");
+  appCache.deletePrefix("members:");
   return { id: eventRef.id };
 }
 
@@ -1461,6 +1541,8 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
     orgId: user.organizationId ?? (typeof beforeData.orgId === "string" ? beforeData.orgId : null)
   });
 
+  appCache.deletePrefix("events_raw:");
+  appCache.deletePrefix("members:");
   return { success: true };
 }
 
@@ -1480,6 +1562,9 @@ export async function deleteEventForUser(uid: string, eventId: string) {
   }
 
   await docRef.delete();
+  appCache.deletePrefix("events_raw:");
+  appCache.deletePrefix("members:");
+
   writeAuditLog({
     actorUID: uid,
     actorName: user.fullName,
@@ -1501,6 +1586,8 @@ export async function clearEventsForOrg(uid: string, organizationId: string) {
   snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
   await batch.commit();
 
+  appCache.deletePrefix("events_raw:");
+  appCache.deletePrefix("members:");
   return { success: true };
 }
 
@@ -1508,12 +1595,26 @@ export async function getEventsForUser(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
   const targetOrgId = orgId || user.organizationId || "default-org";
   assertEventAccess(user, targetOrgId);
-  const organization = (await firestore.collection("organizations").doc(targetOrgId).get()).data();
-  const snapshot = await firestore.collection("events").where("orgId", "==", targetOrgId).get();
-  return snapshot.docs.map((docSnap) => {
-    const data = docSnap.data();
+
+  const orgCacheKey = "org_doc:" + targetOrgId;
+  let organization = appCache.get<any>(orgCacheKey);
+  if (!organization) {
+    const orgDoc = await firestore.collection("organizations").doc(targetOrgId).get();
+    organization = orgDoc.data();
+    if (organization) appCache.set(orgCacheKey, organization, 180_000);
+  }
+
+  const eventsCacheKey = "events_raw:" + targetOrgId;
+  let rawEvents = appCache.get<any[]>(eventsCacheKey);
+  if (!rawEvents) {
+    const snapshot = await firestore.collection("events").where("orgId", "==", targetOrgId).get();
+    rawEvents = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    appCache.set(eventsCacheKey, rawEvents, 30_000);
+  }
+
+  return rawEvents.map((data) => {
     return {
-      id: docSnap.id,
+      id: data.id,
       title: typeof data.title === "string" ? data.title : "Untitled Event",
       description: typeof data.description === "string" ? data.description : "",
       status: typeof data.status === "string" && data.status.trim()
@@ -1616,6 +1717,8 @@ export async function createAnnouncementService(
     targetName: payload.title
   });
 
+  appCache.deletePrefix("announcements:");
+
   return {
     id: topRef.id,
     ...payload,
@@ -1627,13 +1730,36 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
   const user = await getCurrentUser(uid);
   const targetOrgId = orgId || user.organizationId;
   if (user.role !== "Admin" && orgId && orgId !== user.organizationId) throw new AppError("You do not have access to this organization's announcements.", 403);
-  const member = user.role === "Organization Member" ? (await firestore.collection("users").doc(uid).get()).data() : null;
 
-  const snapshot = await firestore.collection("announcements").get();
+  const cacheKey = `announcements:${targetOrgId || "all"}`;
+  let rawList = appCache.get<any[]>(cacheKey);
+
+  if (!rawList) {
+    let snapshot: FirebaseFirestore.QuerySnapshot;
+    if (targetOrgId) {
+      snapshot = await firestore.collection("announcements")
+        .where("organizationId", "==", targetOrgId)
+        .limit(50)
+        .get();
+      if (snapshot.empty) {
+        const legacySnap = await firestore.collection("announcements")
+          .where("orgId", "==", targetOrgId)
+          .limit(50)
+          .get();
+        if (!legacySnap.empty) {
+          snapshot = legacySnap;
+        }
+      }
+    } else {
+      snapshot = await firestore.collection("announcements").limit(50).get();
+    }
+    rawList = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    appCache.set(cacheKey, rawList, 45_000);
+  }
+
   const list: any[] = [];
 
-  snapshot.docs.forEach((docSnap) => {
-    const data = docSnap.data();
+  rawList.forEach((data) => {
     const itemOrgId = data.organizationId || data.orgId;
     const targetAudience = data.targetAudience || "All Members";
 
@@ -1649,12 +1775,12 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
     }
 
     // 2. Audience / Role Filter
-    if (!canViewAnnouncement({ ...user, committeeId: typeof member?.committeeId === "string" ? member.committeeId : null }, data)) {
+    if (!canViewAnnouncement(user, data)) {
       return;
     }
 
     list.push({
-      id: docSnap.id,
+      id: data.id,
       organizationId: itemOrgId,
       title: typeof data.title === "string" ? data.title : "Untitled Announcement",
       content: typeof data.content === "string" ? data.content : "",

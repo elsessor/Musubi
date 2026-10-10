@@ -42,5 +42,10 @@ export const env = {
   firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim() || ".firebase-service-account.json",
   jwtSecret: readEnv("JWT_SECRET"),
   jwtExpiresIn: readEnv("JWT_EXPIRES_IN"),
-  frontendUrl: readEnv("FRONTEND_URL")
+  frontendUrl: readEnv("FRONTEND_URL"),
+  gmailUser: process.env.GMAIL_USER?.trim() || "noreply.musubi@gmail.com",
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD?.trim() || "",
+  resendApiKey: process.env.RESEND_API_KEY?.trim() || "",
+  resendFromEmail: process.env.RESEND_FROM_EMAIL?.trim() || "Musubi Workflow <onboarding@resend.dev>",
+  brevoApiKey: process.env.BREVO_API_KEY?.trim() || ""
 };

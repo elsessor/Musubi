@@ -6,6 +6,7 @@ import { AppError } from "../utils/AppError.js";
 import { applyTaskStatusUpdate, assertCanContributeTask, assertEventAccess, isTaskLeader, type TaskActor, type TaskRecord } from "../utils/taskPermissions.js";
 import { MAX_TASK_ATTACHMENTS, normalizeAttachmentContentType, splitAttachmentFile, validateAttachmentLink, validateAttachmentName, type TaskAttachment } from "../utils/taskAttachments.js";
 import { recordTaskPerformance } from "../utils/taskPerformance.js";
+import { appCache } from "../utils/cache.js";
 
 function getTask(event: TaskRecord, taskId: string): TaskRecord {
   const task = Array.isArray(event.tasks) ? event.tasks.find((item: TaskRecord) => item.id === taskId) : null;
@@ -38,6 +39,8 @@ export async function updateTaskStatusForUser(uid: string, eventId: string, task
     transaction.update(eventRef, { tasks, progress: tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
     return { event, task: updated };
   });
+  appCache.deletePrefix("events_raw:");
+  appCache.deletePrefix("members:");
   logTaskAction(user, result.event, result.task, `Updated subtask status to ${result.task.status}`);
   return { task: result.task };
 }
@@ -63,6 +66,8 @@ async function saveAttachment(uid: string, eventId: string, taskId: string, atta
     transaction.update(eventRef, { tasks: event.tasks.map((item: TaskRecord) => item.id === taskId ? task : item), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
     return { event, task };
   });
+  appCache.deletePrefix("events_raw:");
+  appCache.deletePrefix("members:");
   logTaskAction(user, result.event, result.task, `Added attachment: ${attachment.name}`);
   return { task: result.task };
 }
@@ -102,3 +107,37 @@ export async function downloadTaskFileForUser(uid: string, eventId: string, task
   if (bytes.length !== metadata.size) throw new AppError("This attachment is incomplete. Please try again.", 500);
   return { attachment, bytes };
 }
+
+export async function rateTaskForUser(uid: string, eventId: string, taskId: string, input: unknown) {
+  const user = await getCurrentUser(uid);
+  const eventRef = eventReference(eventId);
+  const ratingData = input && typeof input === "object" && !Array.isArray(input) ? (input as Record<string, any>) : {};
+  const ratingNum = Number(ratingData.rating);
+  const feedbackStr = typeof ratingData.feedback === "string" ? ratingData.feedback : "";
+  if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+    throw new AppError("Performance ratings must be between 1 and 5 stars.", 400);
+  }
+  const result = await firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(eventRef);
+    if (!snapshot.exists) throw new AppError("Event not found.", 404);
+    const event = snapshot.data() || {};
+    const original = getTask(event, taskId);
+    assertEventAccess(user, event.orgId);
+    const ratingTarget = {
+      ...original,
+      performanceReview: {
+        rating: ratingNum,
+        feedback: feedbackStr
+      }
+    };
+    const updated = recordTaskPerformance([ratingTarget], [original], { uid, fullName: user.fullName, isLeader: isTaskLeader(user) })[0];
+    const tasks = (event.tasks || []).map((task: TaskRecord) => (task.id === taskId ? updated : task));
+    transaction.update(eventRef, { tasks, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+    return { event, task: updated };
+  });
+  appCache.deletePrefix("events_raw:");
+  appCache.deletePrefix("members:");
+  logTaskAction(user, result.event, result.task, `Rated subtask performance: ${ratingNum}/5 stars`);
+  return { task: result.task };
+}
+

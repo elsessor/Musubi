@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { collection, doc, onSnapshot, query, updateDoc, arrayUnion, limit } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, updateDoc, arrayUnion, limit, where } from "firebase/firestore";
 import { getFirebaseDb } from "../firebase/config";
 import { subscribeEventsFirestore } from "./events.service";
 import { subscribeAnnouncementsFirestore } from "./announcements.service";
@@ -206,17 +206,43 @@ export function subscribeNotificationsFirestore(
             const now = new Date();
             const diffDays = parsedDate && !isNaN(parsedDate.getTime()) ? Math.ceil((parsedDate.getTime() - now.getTime()) / (1000 * 3600 * 24)) : 99;
 
-            if (diffDays <= 3 || task.priority === "Critical" || task.priority === "High") {
+            if (diffDays <= 1 && diffDays >= 0) {
               eventNotifs.push({
-                id: `event_task_alert_${event.id}_${task.id}`,
+                id: `event_task_alert_1d_${event.id}_${task.id}`,
                 orgId: targetOrgId,
-                title: taskTitle,
+                title: `${taskTitle} (Due Tomorrow - 1 Day Left)`,
                 description: `@ ${event.title}`,
                 type: "nudge",
                 nudgeCategory: "deadline",
                 unread: true,
-                dueDate: dueDateStr || "Aug 30",
-                time: dueDateStr || "Aug 30",
+                dueDate: dueDateStr || "Tomorrow",
+                time: dueDateStr || "Tomorrow",
+                createdAt: new Date().toISOString()
+              });
+            } else if (diffDays <= 3 && diffDays > 1) {
+              eventNotifs.push({
+                id: `event_task_alert_3d_${event.id}_${task.id}`,
+                orgId: targetOrgId,
+                title: `${taskTitle} (Approaching - 3 Days Left)`,
+                description: `@ ${event.title}`,
+                type: "nudge",
+                nudgeCategory: "deadline",
+                unread: true,
+                dueDate: dueDateStr || "3 Days",
+                time: dueDateStr || "3 Days",
+                createdAt: new Date().toISOString()
+              });
+            } else if (task.priority === "Critical" || task.priority === "High") {
+              eventNotifs.push({
+                id: `event_task_alert_prio_${event.id}_${task.id}`,
+                orgId: targetOrgId,
+                title: `${taskTitle} (${task.priority} Priority)`,
+                description: `@ ${event.title}`,
+                type: "nudge",
+                nudgeCategory: "deadline",
+                unread: true,
+                dueDate: dueDateStr || "Upcoming",
+                time: dueDateStr || "Upcoming",
                 createdAt: new Date().toISOString()
               });
             } else {
@@ -228,8 +254,8 @@ export function subscribeNotificationsFirestore(
                 type: "nudge",
                 nudgeCategory: "followup",
                 unread: true,
-                dueDate: dueDateStr || "Aug 30",
-                time: dueDateStr || "Aug 30",
+                dueDate: dueDateStr || "Upcoming",
+                time: dueDateStr || "Upcoming",
                 createdAt: new Date().toISOString()
               });
             }
@@ -241,7 +267,9 @@ export function subscribeNotificationsFirestore(
   });
 
   // 3. Subscribe to direct notifications
-  const notifQuery = query(collection(db, "notifications"), limit(50));
+  const notifQuery = targetOrgId
+    ? query(collection(db, "notifications"), where("orgId", "==", targetOrgId), limit(20))
+    : query(collection(db, "notifications"), limit(20));
   const unsubNotifs = onSnapshot(
     notifQuery,
     (snapshot) => {
@@ -279,7 +307,9 @@ export function subscribeNotificationsFirestore(
   );
 
   // 4. Subscribe to audit logs
-  const auditQuery = query(collection(db, "audit_logs"), limit(40));
+  const auditQuery = targetOrgId
+    ? query(collection(db, "audit_logs"), where("orgId", "==", targetOrgId), limit(15))
+    : query(collection(db, "audit_logs"), limit(15));
   const unsubAudit = onSnapshot(
     auditQuery,
     (snapshot) => {
@@ -374,5 +404,54 @@ export async function markAllNotificationsAsRead(user: User | null, notification
   const directIds = notificationIds.filter((id) => !id.startsWith("audit_") && !id.startsWith("event_") && !id.startsWith("announcement_"));
   if (user && directIds.length > 0) {
     await Promise.all(directIds.map((id) => markNotificationAsRead(user, id)));
+  }
+}
+
+export async function sendNudgeEmail(input: {
+  recipientEmail?: string;
+  recipientUID?: string;
+  taskTitle: string;
+  eventName?: string;
+  deadline?: string;
+  message?: string;
+  isUrgent?: boolean;
+  nudgeType?: "3_days_prior" | "1_day_prior" | string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://musubi-backend-4roe.onrender.com";
+    const res = await fetch(`${apiBaseUrl}/email/nudge`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || "Failed to send email" };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.warn("Failed to dispatch nudge email:", err);
+    return { success: false, error: err.message || "Network error" };
+  }
+}
+
+export async function checkAndDispatchDueNudges(): Promise<{ success: boolean; processedCount?: number; error?: string }> {
+  try {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://musubi-backend-4roe.onrender.com";
+    const res = await fetch(`${apiBaseUrl}/email/check-due-nudges`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await res.json();
+    return { success: res.ok, processedCount: data.processedCount };
+  } catch (err: any) {
+    console.warn("Failed to trigger automated due nudges check:", err);
+    return { success: false, error: err.message };
   }
 }

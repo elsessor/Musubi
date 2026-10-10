@@ -1,0 +1,7 @@
+{
+  "recipientEmail": "noreply.musubi@gmail.com",
+  "taskTitle": "Test Email Nudge Verification",
+  "eventName": "Musubi Integration Test",
+  "deadline": "Oct 15, 2026",
+  "message": "This is a test notification email from Musubi Workflow System."
+}

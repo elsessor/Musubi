@@ -42,6 +42,15 @@ export function writeAuditLog(data: AuditLogData): void {
       console.error("[audit] Failed to write audit log:", err);
     });
 
+  if (
+    data.actionCategory === "Security & Access" ||
+    data.actionCategory === "User Management" ||
+    data.action.toLowerCase().includes("signed in") ||
+    data.action.toLowerCase().includes("login")
+  ) {
+    return;
+  }
+
   let notifType: "ai" | "task" | "organization" | "system" = "system";
   let title = "System Notification";
 
@@ -54,6 +63,8 @@ export function writeAuditLog(data: AuditLogData): void {
   } else if (data.actionCategory === "Organization") {
     notifType = "organization";
     title = "Organization Update";
+  } else {
+    return;
   }
 
   firestore

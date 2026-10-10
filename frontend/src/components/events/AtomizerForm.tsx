@@ -332,6 +332,15 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
             const dueDate = new Date();
             dueDate.setDate(dueDate.getDate() + Math.max(1, st.estimatedDays || 1));
 
+            const matchedMember = members.find((m) => m.name === memberName);
+            const targetDue = dueDate;
+            const threeDaysBefore = new Date(targetDue.getTime() - 3 * 24 * 3600 * 1000).toISOString().split("T")[0];
+            const oneDayBefore = new Date(targetDue.getTime() - 1 * 24 * 3600 * 1000).toISOString().split("T")[0];
+            const subtaskNudges = st.nudges && st.nudges.length > 0 ? st.nudges : [
+              { nudgeUID: `${st.id}_3d`, triggerDate: threeDaysBefore, nudgeType: "3 Days Prior", sent: false },
+              { nudgeUID: `${st.id}_1d`, triggerDate: oneDayBefore, nudgeType: "1 Day Prior", sent: false }
+            ];
+
             return {
               id: st.id,
               title: st.title,
@@ -345,9 +354,11 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
                 name: memberName
               },
               assignedMemberName: memberName,
+              assignedMemberUID: matchedMember?.id || null,
               requiredSkills: st.requiredSkills,
               isLeaderOnly: st.isLeaderOnly,
-              isAiGenerated: st.isAiGenerated
+              isAiGenerated: st.isAiGenerated,
+              nudges: subtaskNudges
             } as Task;
           });
 

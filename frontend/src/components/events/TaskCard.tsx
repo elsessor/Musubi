@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Calendar, ChevronDown, Lock, UserCheck, Zap } from "lucide-react";
+import { AlertTriangle, Calendar, ChevronDown, GripVertical, Lock, Star, UserCheck, Zap } from "lucide-react";
 import { useState } from "react";
 import type { Task, TaskPriority } from "./types";
 import { OverdueBadge } from "./overdue";
@@ -9,17 +9,25 @@ import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
 
-
-
 type TaskCardProps = {
   task: Task;
+  isDragging?: boolean;
   onDragStart?: (taskId: string) => void;
+  onDragEnd?: () => void;
   onReassign?: (task: Task) => void;
   onSelectTask?: (task: Task) => void;
   onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
 };
 
-export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdatePriority }: TaskCardProps) {
+export function TaskCard({
+  task,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
+  onReassign,
+  onSelectTask,
+  onUpdatePriority
+}: TaskCardProps) {
   const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
   function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority), role); }
@@ -31,36 +39,57 @@ export function TaskCard({ task, onDragStart, onReassign, onSelectTask, onUpdate
   return (
     <div
       draggable={canDrag}
-      onDragStart={(event) => { if (canDrag) onDragStart?.(task.id); else event.preventDefault(); }}
+      onDragStart={(event) => {
+        if (canDrag) {
+          event.stopPropagation();
+          event.dataTransfer.setData("text/plain", task.id);
+          onDragStart?.(task.id);
+        } else {
+          event.preventDefault();
+        }
+      }}
+      onDragEnd={() => {
+        onDragEnd?.();
+      }}
       onClick={() => onSelectTask?.(task)}
-      className="group flex min-w-0 cursor-pointer flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:border-blue-300 hover:shadow-md active:cursor-grabbing"
+      className={`group relative flex min-w-0 flex-col gap-3 rounded-xl border bg-white p-4 shadow-xs transition-all ${
+        canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+      } ${
+        isDragging
+          ? "opacity-30 scale-95 border-2 border-dashed border-blue-400 shadow-none"
+          : "border-slate-200 hover:border-blue-300 hover:shadow-md"
+      }`}
     >
-      {/* Blocker alert */}
-      {task.blockedBy && task.blockedBy > 0 ? (
-        <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
-          <AlertTriangle size={12} className="shrink-0 text-amber-500" />
-          Blocked by {task.blockedBy} {task.blockedBy === 1 ? "task" : "tasks"}
+      {/* Top Header Row with Badges and Drag Handle */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {task.isLeaderOnly && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+              <Lock size={10} /> Leader Only
+            </span>
+          )}
+          {task.isAiGenerated && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+              <Zap size={10} /> AI Generated
+            </span>
+          )}
+          {task.committee && (
+            <span className="inline-flex items-center rounded-full max-w-full truncate bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+              {task.committee}
+            </span>
+          )}
+          {task.performanceReview?.rating ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200" title={`Rated ${task.performanceReview.rating}/5 stars by Leader`}>
+              <Star size={10} className="fill-amber-400 text-amber-500" />
+              {task.performanceReview.rating}/5 Rating
+            </span>
+          ) : null}
+          <OverdueBadge task={task} />
         </div>
-      ) : null}
 
-      {/* Badges row */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {task.isLeaderOnly && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-            <Lock size={10} /> Leader Only
-          </span>
+        {canDrag && (
+          <GripVertical size={13} className="text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
         )}
-        {task.isAiGenerated && (
-          <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
-            <Zap size={10} /> AI Generated
-          </span>
-        )}
-        {task.committee && (
-          <span className="inline-flex items-center rounded-full max-w-full truncate bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-            {task.committee}
-          </span>
-        )}
-        <OverdueBadge task={task} />
       </div>
 
       {/* Title & Description */}

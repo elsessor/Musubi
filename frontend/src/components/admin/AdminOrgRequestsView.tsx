@@ -131,7 +131,7 @@ export function AdminOrgRequestsView() {
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       void fetchRequests();
-    }, 25000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [firebaseUser]);
 
