@@ -118,6 +118,7 @@ export type Subtask = {
   deadline?: string;
   status?: TaskStatus;
   validationWarnings?: string[];
+  nudges?: Nudge[];
 };
 
 export type GoalDraft = {

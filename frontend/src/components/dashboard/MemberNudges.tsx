@@ -53,8 +53,8 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
       ) : (
         <div className="mt-4 space-y-3">
           {nudges.map((nudge) => {
-            const isDeadline = nudge.type === "Deadline Alert";
-            const isFollowUp = nudge.type === "Follow-up";
+            const isDeadline = nudge.type === "Deadline Alert" || nudge.type.includes("1 Day");
+            const isFollowUp = nudge.type === "Follow-up" || nudge.type.includes("3 Days");
 
             const cardClasses = isDeadline
               ? "bg-rose-50/60 border-rose-100 hover:border-rose-200"

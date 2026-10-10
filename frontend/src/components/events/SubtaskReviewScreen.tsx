@@ -955,16 +955,42 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
     e.preventDefault();
     if (!title.trim()) return;
 
+    const targetDueDate = new Date(selectedYear, selectedMonth, selectedDay);
+    const threeDaysPriorDate = new Date(targetDueDate.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const oneDayPriorDate = new Date(targetDueDate.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const subtaskNudges = [
+      {
+        nudgeUID: `${subtask.id}_3d`,
+        triggerDate: threeDaysPriorDate,
+        nudgeType: "3 Days Prior",
+        sent: false
+      },
+      {
+        nudgeUID: `${subtask.id}_1d`,
+        triggerDate: oneDayPriorDate,
+        nudgeType: "1 Day Prior",
+        sent: false
+      }
+    ];
+
     if (sendNudgeAlert) {
       const assignedMember = members.find((m) => m.name === assigneeName);
+      const isUrgent = estimatedDays <= 1;
+      const nudgeType = estimatedDays <= 1 ? "1_day_prior" : estimatedDays <= 3 ? "3_days_prior" : "standard";
       sendNudgeEmail({
         recipientEmail: assignedMember?.email,
         recipientUID: assignedMember?.id,
         taskTitle: title.trim(),
         eventName: "Organization Task",
         deadline: formattedDeadline,
-        message: estimatedDays <= 3 ? "Priority Nudge: Short deadline assigned for this task." : undefined,
-        isUrgent: estimatedDays <= 3
+        message: estimatedDays <= 1
+          ? "Urgent Reminder: This task is due within 1 day!"
+          : estimatedDays <= 3
+          ? "Priority Nudge: 3 days remaining before deadline."
+          : undefined,
+        isUrgent,
+        nudgeType
       }).catch((err) => console.warn("Failed to dispatch email nudge:", err));
     }
 
@@ -978,7 +1004,8 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
       isLeaderOnly,
       requiredSkills: skills,
       dueDate: formattedDeadline,
-      deadline: formattedDeadline
+      deadline: formattedDeadline,
+      nudges: subtaskNudges
     });
   }
 
@@ -1098,29 +1125,30 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
           <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5 space-y-2.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-                <Bell size={14} className="text-slate-600 shrink-0" />
-                <span>Task Schedule & Reminders</span>
+                <Bell size={14} className="text-blue-600 shrink-0" />
+                <span>Adviser-Recommended Nudges</span>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200/60">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200/60">
                 <span className="size-1.5 rounded-full bg-emerald-500" />
-                Auto-Reminder Active
+                3-Day & 1-Day Active
               </span>
             </div>
 
-            <div className="text-xs text-slate-600 space-y-1 font-normal leading-relaxed">
+            <div className="text-xs text-slate-600 space-y-1.5 font-normal leading-relaxed">
               <p>
-                Assigned to <span className="font-semibold text-slate-900">{assigneeName}</span> · Estimated completion in{" "}
+                Assigned to <span className="font-semibold text-slate-900">{assigneeName}</span> · Due in{" "}
                 <span className="font-semibold text-slate-900">{estimatedDays} day{estimatedDays > 1 ? "s" : ""}</span> ({formattedDeadline}).
               </p>
-              {estimatedDays <= 3 ? (
-                <p className="text-[11px] text-amber-700 font-medium">
-                  Tight turnaround time (3 days or less). A priority reminder will be sent to the assignee.
-                </p>
-              ) : (
-                <p className="text-[11px] text-slate-500">
-                  Standard progress check reminder is scheduled before the deadline.
-                </p>
-              )}
+              <div className="rounded-xl border border-slate-200/70 bg-white p-2.5 space-y-1.5 text-[11px]">
+                <div className="flex items-center gap-2 text-amber-700">
+                  <span className="size-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span><strong>3 Days Prior:</strong> Contextual progress check email sent to {assigneeName}.</span>
+                </div>
+                <div className="flex items-center gap-2 text-rose-600">
+                  <span className="size-1.5 rounded-full bg-rose-500 shrink-0" />
+                  <span><strong>1 Day Prior:</strong> Urgent final deadline reminder email sent 24h before due date.</span>
+                </div>
+              </div>
             </div>
 
             <label className="flex items-center gap-2 pt-2 border-t border-slate-200/60 cursor-pointer select-none text-xs font-semibold text-slate-700 hover:text-slate-900 transition">
@@ -1130,7 +1158,7 @@ function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModa
                 onChange={(e) => setSendNudgeAlert(e.target.checked)}
                 className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
               />
-              <span>Send assignment notification & reminder to member on save</span>
+              <span>Send initial assignment notification nudge to member on save</span>
             </label>
           </div>
 

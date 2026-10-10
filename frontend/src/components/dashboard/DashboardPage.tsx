@@ -18,6 +18,7 @@ import { getDashboardNavItems } from "@/utils/routes";
 import { subscribeAuditLogsFirestore, type AuditLogRecord } from "@/services/audit.service";
 import { getOrganization, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 import { subscribeEventsFirestore } from "@/services/events.service";
+import { checkAndDispatchDueNudges } from "@/services/notifications.service";
 import type { Event, Task } from "@/components/events/types";
 
 function formatGreetingDate(date = new Date()) {
@@ -364,6 +365,10 @@ export function DashboardPage() {
     ];
   }, [memberSubtasks]);
 
+  useEffect(() => {
+    void checkAndDispatchDueNudges();
+  }, []);
+
   const memberNudges: NudgeItem[] = useMemo(() => {
     const nudgesList: NudgeItem[] = [];
 
@@ -389,7 +394,25 @@ export function DashboardPage() {
           const now = new Date();
           const diffDays = Math.ceil((parsedDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
 
-          if (diffDays <= 3 || task.priority === "Critical" || task.priority === "High") {
+          if (diffDays <= 1 && diffDays >= 0) {
+            nudgesList.push({
+              id: `nudge_1d_${task.id}`,
+              type: "1 Day Prior (Urgent)",
+              title: task.title || task.description || "Subtask",
+              date: dueDateStr,
+              eventTitle: task.eventTitle,
+              taskId: task.id
+            });
+          } else if (diffDays <= 3 && diffDays > 1) {
+            nudgesList.push({
+              id: `nudge_3d_${task.id}`,
+              type: "3 Days Prior",
+              title: task.title || task.description || "Subtask",
+              date: dueDateStr,
+              eventTitle: task.eventTitle,
+              taskId: task.id
+            });
+          } else if (task.priority === "Critical" || task.priority === "High") {
             nudgesList.push({
               id: `nudge_deadline_${task.id}`,
               type: "Deadline Alert",

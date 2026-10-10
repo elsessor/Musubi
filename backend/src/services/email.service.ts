@@ -10,6 +10,7 @@ type NudgeEmailParams = {
   assigneeName?: string;
   message?: string;
   isUrgent?: boolean;
+  nudgeType?: "3_days_prior" | "1_day_prior" | string;
 };
 
 let transporter: Transporter | null = null;
@@ -53,10 +54,15 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
       eventName = "Organization Event",
       deadline = "Upcoming Deadline",
       message,
-      isUrgent = false
+      isUrgent = false,
+      nudgeType
     } = params;
 
-    const subject = isUrgent
+    const subject = nudgeType === "1_day_prior"
+      ? `🚨 Urgent Nudge: "${taskTitle}" is due tomorrow! (${eventName})`
+      : nudgeType === "3_days_prior"
+      ? `🔔 3-Day Reminder: "${taskTitle}" is due in 3 days (${eventName})`
+      : isUrgent
       ? `🚨 Urgent Nudge: "${taskTitle}" is due soon!`
       : `🔔 Task Nudge: "${taskTitle}" (${eventName})`;
 

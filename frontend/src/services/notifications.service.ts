@@ -206,17 +206,43 @@ export function subscribeNotificationsFirestore(
             const now = new Date();
             const diffDays = parsedDate && !isNaN(parsedDate.getTime()) ? Math.ceil((parsedDate.getTime() - now.getTime()) / (1000 * 3600 * 24)) : 99;
 
-            if (diffDays <= 3 || task.priority === "Critical" || task.priority === "High") {
+            if (diffDays <= 1 && diffDays >= 0) {
               eventNotifs.push({
-                id: `event_task_alert_${event.id}_${task.id}`,
+                id: `event_task_alert_1d_${event.id}_${task.id}`,
                 orgId: targetOrgId,
-                title: taskTitle,
+                title: `${taskTitle} (Due Tomorrow - 1 Day Left)`,
                 description: `@ ${event.title}`,
                 type: "nudge",
                 nudgeCategory: "deadline",
                 unread: true,
-                dueDate: dueDateStr || "Aug 30",
-                time: dueDateStr || "Aug 30",
+                dueDate: dueDateStr || "Tomorrow",
+                time: dueDateStr || "Tomorrow",
+                createdAt: new Date().toISOString()
+              });
+            } else if (diffDays <= 3 && diffDays > 1) {
+              eventNotifs.push({
+                id: `event_task_alert_3d_${event.id}_${task.id}`,
+                orgId: targetOrgId,
+                title: `${taskTitle} (Approaching - 3 Days Left)`,
+                description: `@ ${event.title}`,
+                type: "nudge",
+                nudgeCategory: "deadline",
+                unread: true,
+                dueDate: dueDateStr || "3 Days",
+                time: dueDateStr || "3 Days",
+                createdAt: new Date().toISOString()
+              });
+            } else if (task.priority === "Critical" || task.priority === "High") {
+              eventNotifs.push({
+                id: `event_task_alert_prio_${event.id}_${task.id}`,
+                orgId: targetOrgId,
+                title: `${taskTitle} (${task.priority} Priority)`,
+                description: `@ ${event.title}`,
+                type: "nudge",
+                nudgeCategory: "deadline",
+                unread: true,
+                dueDate: dueDateStr || "Upcoming",
+                time: dueDateStr || "Upcoming",
                 createdAt: new Date().toISOString()
               });
             } else {
@@ -228,8 +254,8 @@ export function subscribeNotificationsFirestore(
                 type: "nudge",
                 nudgeCategory: "followup",
                 unread: true,
-                dueDate: dueDateStr || "Aug 30",
-                time: dueDateStr || "Aug 30",
+                dueDate: dueDateStr || "Upcoming",
+                time: dueDateStr || "Upcoming",
                 createdAt: new Date().toISOString()
               });
             }
@@ -389,6 +415,7 @@ export async function sendNudgeEmail(input: {
   deadline?: string;
   message?: string;
   isUrgent?: boolean;
+  nudgeType?: "3_days_prior" | "1_day_prior" | string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://musubi-backend-4roe.onrender.com";
@@ -408,5 +435,23 @@ export async function sendNudgeEmail(input: {
   } catch (err: any) {
     console.warn("Failed to dispatch nudge email:", err);
     return { success: false, error: err.message || "Network error" };
+  }
+}
+
+export async function checkAndDispatchDueNudges(): Promise<{ success: boolean; processedCount?: number; error?: string }> {
+  try {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://musubi-backend-4roe.onrender.com";
+    const res = await fetch(`${apiBaseUrl}/email/check-due-nudges`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await res.json();
+    return { success: res.ok, processedCount: data.processedCount };
+  } catch (err: any) {
+    console.warn("Failed to trigger automated due nudges check:", err);
+    return { success: false, error: err.message };
   }
 }
