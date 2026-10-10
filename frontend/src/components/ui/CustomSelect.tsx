@@ -4,6 +4,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/components/ui/utils";
+import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
 
 export type CustomSelectOption = {
   value: string;
@@ -11,6 +12,7 @@ export type CustomSelectOption = {
   description?: string;
   sublabel?: string;
   initials?: string;
+  profilePicture?: string | null;
   color?: string;
   indicatorClass?: string;
   labelClass?: string;
@@ -121,7 +123,7 @@ export function CustomSelect({
             return (
               <button key={opt.value} type="button" onClick={() => { onChange(opt.value); setIsOpen(false); }} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-left transition select-none cursor-pointer", isSelected ? opt.selectedClass || "bg-blue-50 text-blue-700 font-bold" : "text-slate-700 hover:bg-slate-100/80 hover:text-slate-900")}>
                 <div className="flex min-w-0 items-center gap-2 truncate">
-                  {opt.initials && <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white", opt.color || "bg-blue-600")}>{opt.initials}</span>}
+                  {opt.initials || opt.profilePicture !== undefined ? <MemberAvatar member={{ name: opt.label, initials: opt.initials, profilePicture: opt.profilePicture }} className="size-5 shrink-0" fallbackClassName={opt.color || "bg-blue-600"} /> : null}
                   <div className="min-w-0 flex-1">
                     <div className="truncate">
                     {opt.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", opt.indicatorClass)} />}
@@ -154,16 +156,9 @@ export function CustomSelect({
       >
         <div className="flex items-center gap-2 truncate text-left">
           {icon}
-          {selectedOption?.initials && (
-            <span
-              className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white",
-                selectedOption.color || "bg-blue-600"
-              )}
-            >
-              {selectedOption.initials}
-            </span>
-          )}
+          {selectedOption && (selectedOption.initials || selectedOption.profilePicture !== undefined) ? (
+            <MemberAvatar member={{ name: selectedOption.label, initials: selectedOption.initials, profilePicture: selectedOption.profilePicture }} className="size-5 shrink-0" fallbackClassName={selectedOption.color || "bg-blue-600"} />
+          ) : null}
           <span className="truncate">
           {selectedOption ? (
               <span className={cn(selectedOption.labelClass)}>

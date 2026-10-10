@@ -252,6 +252,7 @@ export function delegateSubtasksHeuristically(
     return {
       ...st,
       assigneeName: match.member.name,
+      assignedMemberUID: match.member.id,
       requiredSkills: effectiveSkills,
       aiMetadata: {
         ...st.aiMetadata,

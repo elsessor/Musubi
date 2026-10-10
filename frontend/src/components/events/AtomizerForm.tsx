@@ -10,6 +10,8 @@ import { atomizeGoal } from "@/services/auth.service";
 import { delegateSubtasksHeuristically, inferSkillsFromTask } from "@/utils/heuristicDelegation";
 import type { OrganizationMember } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { parseScheduleDate } from "@/utils/dateRange";
+import { resolveSubtaskAssignee } from "@/utils/subtaskAssignment";
 
 const DEFAULT_STATUS_LIST: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
@@ -264,6 +266,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
       const rawSubtasks: Subtask[] = data.tasks.map((item, idx) => ({
         id: `subtask-ai-${Date.now()}-${idx}`,
+        confirmed: false,
         title: item.title,
         description:
           (item as unknown as { description?: string }).description ||
@@ -329,10 +332,12 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
             const memberInitials = memberName !== "Unassigned"
               ? memberName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
               : "UA";
-            const dueDate = new Date();
-            dueDate.setDate(dueDate.getDate() + Math.max(1, st.estimatedDays || 1));
+            const dueDate = parseScheduleDate(st.dueDate || st.deadline) || new Date();
+            if (!parseScheduleDate(st.dueDate || st.deadline)) {
+              dueDate.setDate(dueDate.getDate() + Math.max(1, st.estimatedDays || 1));
+            }
 
-            const matchedMember = members.find((m) => m.name === memberName);
+            const matchedMember = resolveSubtaskAssignee(st, members);
             const targetDue = dueDate;
             const threeDaysBefore = new Date(targetDue.getTime() - 3 * 24 * 3600 * 1000).toISOString().split("T")[0];
             const oneDayBefore = new Date(targetDue.getTime() - 1 * 24 * 3600 * 1000).toISOString().split("T")[0];
@@ -347,14 +352,15 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               description: st.description,
               status: st.status || "To Do",
               priority: st.priority,
-              dueDate: dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+              startDate: st.startDate || "",
+              dueDate: st.dueDate || st.deadline || dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
               assignee: {
                 initials: memberInitials,
                 color: "bg-[#1e3a5f]",
                 name: memberName
               },
               assignedMemberName: memberName,
-              assignedMemberUID: matchedMember?.id || null,
+              assignedMemberUID: st.assignedMemberUID || matchedMember?.id || null,
               requiredSkills: st.requiredSkills,
               isLeaderOnly: st.isLeaderOnly,
               isAiGenerated: st.isAiGenerated,

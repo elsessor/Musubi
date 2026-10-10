@@ -103,6 +103,7 @@ export type GeneratedTask = {
 
 export type Subtask = {
   id: string;
+  confirmed?: boolean;
   title: string;
   description: string;
   requiredSkills: string[];
@@ -115,6 +116,8 @@ export type Subtask = {
   };
   priority: TaskPriority;
   assigneeName?: string;
+  assignedMemberUID?: string | null;
+  startDate?: string;
   dueDate?: string;
   deadline?: string;
   status?: TaskStatus;

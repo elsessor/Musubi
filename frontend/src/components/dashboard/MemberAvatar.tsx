@@ -5,11 +5,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/components/ui/utils";
 
 export function MemberAvatar({ member, className, fallbackClassName }: {
-  member?: { name: string; profilePicture?: string | null };
+  member?: { name: string; profilePicture?: string | null; initials?: string };
   className?: string;
   fallbackClassName?: string;
 }) {
-  const initials = member?.name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  const initials = member?.initials || member?.name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
   return (
     <Avatar className={cn("size-8", className)} aria-hidden="true">
       {member?.profilePicture ? <AvatarImage src={member.profilePicture} alt="" className="object-cover" /> : null}

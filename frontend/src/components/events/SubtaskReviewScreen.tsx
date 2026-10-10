@@ -3,16 +3,10 @@
 import {
   AlertCircle,
   AlertTriangle,
-  Bell,
   Calendar as CalendarIcon,
-  Check,
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
-  ChevronRight,
-  Clock,
   Edit2,
-  Edit3,
   Layers,
   Loader2,
   Lock,
@@ -23,12 +17,11 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
-  User,
   Wrench,
   X,
   Zap
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { validateSubtaskSafeguards } from "./starterTemplates";
 import type { GoalDraft, Subtask, TaskPriority } from "./types";
 import {
@@ -37,17 +30,20 @@ import {
   type OrganizationMember
 } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
-import { sendNudgeEmail } from "@/services/notifications.service";
 import {
   delegateSubtasksHeuristically,
   findBestMemberForSubtask
 } from "@/utils/heuristicDelegation";
-import { cn } from "@/components/ui/utils";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { useToastStore } from "@/store/toastStore";
+import { CustomSelect } from "@/components/ui/CustomSelect";
+import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
 
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { AtomizedTaskEditModal } from "./AtomizedTaskEditModal";
+import { parseScheduleDate } from "@/utils/dateRange";
+import { resolveSubtaskAssignee, uniqueOrganizationMembers } from "@/utils/subtaskAssignment";
 
 const PRIORITY_BADGES = PRIORITY_CONFIG;
 
@@ -97,16 +93,19 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
     setSubtasks(updated);
   }
 
-  function handleConfirmTask(id: string) {
+  function handleToggleConfirmation(id: string) {
     setSubtasks((prev) =>
       prev.map((st) => {
         if (st.id !== id) return st;
+        if (st.confirmed) return { ...st, confirmed: false };
         let assignee = st.assigneeName;
+        let assignedMemberUID = st.assignedMemberUID;
         if (!assignee || assignee === "Luis Garcia" || assignee.trim() === "") {
           const best = findBestMemberForSubtask(st, liveMembers);
           assignee = best?.member.name || liveMembers[0]?.name || "Unassigned";
+          assignedMemberUID = best?.member.id || liveMembers[0]?.id || null;
         }
-        return { ...st, status: "To Do", assigneeName: assignee };
+        return { ...st, confirmed: true, assigneeName: assignee, assignedMemberUID: assignedMemberUID || resolveSubtaskAssignee(st, liveMembers)?.id || null };
       })
     );
   }
@@ -194,6 +193,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
 
       const updatedTempSubtask: Subtask = {
         ...target,
+        confirmed: false,
         title: newTitle,
         description: newDescription,
         priority: newPriority,
@@ -208,7 +208,8 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
 
       const finalSubtask: Subtask = {
         ...updatedTempSubtask,
-        assigneeName: assignedName
+        assigneeName: assignedName,
+        assignedMemberUID: bestMemberMatch?.member.id || target.assignedMemberUID || null
       };
 
       setSubtasks((prev) => prev.map((st) => (st.id === id ? finalSubtask : st)));
@@ -239,6 +240,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
     const created: Subtask = {
       ...newSubtask,
       id: `manual-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      confirmed: false,
       isAiGenerated: false
     };
     setSubtasks((prev) => [created, ...prev]);
@@ -328,13 +330,14 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
           requiredSkills: fixedSkills,
           isLeaderOnly: fixedLeaderOnly,
           assigneeName: fixedAssignee,
+          assignedMemberUID: fixedAssignee === currentAssignee ? st.assignedMemberUID || resolveSubtaskAssignee(st, liveMembers)?.id || null : best?.member.id || liveMembers[0]?.id || null,
           aiMetadata: fixedAiMetadata
         };
       })
     );
   }
 
-  const confirmedCount = subtasks.filter((s) => s.status === "To Do").length;
+  const confirmedCount = subtasks.filter((s) => s.confirmed).length;
   const isPublished = currentGoal.status === "Active";
   const subtasksWithWarnings = subtasks.filter((st) => validateSubtaskSafeguards(st).length > 0);
   const displayedSubtasks = showOnlyWarnings
@@ -540,9 +543,10 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
             <OldTaskCard
               key={st.id}
               subtask={st}
+              assignedMember={resolveSubtaskAssignee(st, liveMembers)}
               customStatuses={customStatuses}
               isRegenerating={!!regeneratingIds[st.id]}
-              onConfirm={() => handleConfirmTask(st.id)}
+              onConfirm={() => handleToggleConfirmation(st.id)}
               onEdit={() => setEditingSubtask(st)}
               onDelete={() => setPendingDeleteSubtask(st)}
               onRegenerate={() => void handleRegenerateSubtask(st.id)}
@@ -554,7 +558,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
 
       {/* Edit AI Task Modal (Exact Old UI Design from Screenshot 2) */}
       {editingSubtask && (
-        <OldEditTaskModal
+        <AtomizedTaskEditModal
           subtask={editingSubtask}
           members={liveMembers}
           onClose={() => setEditingSubtask(null)}
@@ -600,6 +604,7 @@ export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack,
 
 type OldTaskCardProps = {
   subtask: Subtask;
+  assignedMember?: OrganizationMember;
   customStatuses: CustomStatusConfig[];
   isRegenerating: boolean;
   onConfirm: () => void;
@@ -611,14 +616,14 @@ type OldTaskCardProps = {
 
 function formatSubtaskDate(subtask: Subtask): string {
   if (subtask.deadline) {
-    const parsed = new Date(subtask.deadline);
-    if (!isNaN(parsed.getTime())) {
+    const parsed = parseScheduleDate(subtask.deadline);
+    if (parsed) {
       return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     }
   }
   if (subtask.dueDate) {
-    const parsed = new Date(subtask.dueDate);
-    if (!isNaN(parsed.getTime())) {
+    const parsed = parseScheduleDate(subtask.dueDate);
+    if (parsed) {
       return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     }
   }
@@ -630,6 +635,7 @@ function formatSubtaskDate(subtask: Subtask): string {
 
 function OldTaskCard({
   subtask,
+  assignedMember,
   customStatuses,
   isRegenerating,
   onConfirm,
@@ -638,7 +644,7 @@ function OldTaskCard({
   onRegenerate,
   onToggleLeaderOnly
 }: OldTaskCardProps) {
-  const isConfirmed = subtask.status === "To Do";
+  const isConfirmed = subtask.confirmed === true;
   const priorityBadge = PRIORITY_BADGES[subtask.priority];
   const matchScore = subtask.aiMetadata?.confidenceScore ?? (subtask.isAiGenerated ? 95 : 0);
   const warnings = validateSubtaskSafeguards(subtask);
@@ -671,7 +677,7 @@ function OldTaskCard({
         </div>
       )}
 
-      {/* Card Header Row: Needs Review / Confirmed Pill & Priority */}
+      {/* Confirmation and priority */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="contents">
           {isConfirmed ? (
@@ -681,7 +687,7 @@ function OldTaskCard({
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-3 py-1 text-xs font-bold text-[#d97706]">
-              Needs Review
+              Unconfirmed
             </span>
           )}
 
@@ -713,8 +719,8 @@ function OldTaskCard({
 
       {/* Assignee & Date Row */}
       <div className="mt-2 flex min-w-0 flex-col gap-1.5 text-xs font-medium leading-5 text-slate-500 sm:flex-row sm:flex-wrap sm:gap-x-4">
-        <span className="flex min-w-0 items-start gap-1.5">
-          <User size={13} className="mt-1 shrink-0 text-slate-400" />
+        <span className="flex min-w-0 items-center gap-1.5">
+          <MemberAvatar member={subtask.assigneeName && subtask.assigneeName !== "Unassigned" ? { name: subtask.assigneeName, profilePicture: assignedMember?.profilePicture } : undefined} className="size-6 shrink-0" />
           <span className="min-w-0 break-words">{subtask.assigneeName || "Unassigned"}</span>
         </span>
 
@@ -836,512 +842,16 @@ function OldTaskCard({
         <button
           type="button"
           onClick={onConfirm}
-          className="min-h-11 rounded-xl bg-[#1e3a5f] px-2 py-2.5 text-xs font-bold text-white shadow-2xs transition hover:bg-[#152943] sm:text-sm"
+          aria-pressed={isConfirmed}
+          className={`min-h-11 rounded-xl px-2 py-2.5 text-xs font-bold shadow-2xs transition sm:text-sm ${isConfirmed ? "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100" : "bg-[#1e3a5f] text-white hover:bg-[#152943]"}`}
         >
-          {isConfirmed ? "Confirmed" : "Confirm"}
+          {isConfirmed ? "Unconfirm" : "Confirm"}
         </button>
       </div>
     </div>
   );
 }
 
-import { CustomSelect } from "@/components/ui/CustomSelect";
-
-// ── Old Edit Task Modal (Exact Design from Screenshot 2) ─────────────────────
-
-type OldEditTaskModalProps = {
-  subtask: Subtask;
-  members: OrganizationMember[];
-  onClose: () => void;
-  onSave: (updated: Subtask) => void;
-};
-
-function OldEditTaskModal({ subtask, members, onClose, onSave }: OldEditTaskModalProps) {
-  // Dynamic initial date: parse subtask deadline if present, otherwise calculate from today + estimatedDays
-  const initialDate = useMemo(() => {
-    if (subtask.dueDate || subtask.deadline) {
-      const parsed = new Date(subtask.dueDate || subtask.deadline || "");
-      if (!isNaN(parsed.getTime())) return parsed;
-    }
-    const d = new Date();
-    d.setDate(d.getDate() + (subtask.estimatedDays || 7));
-    return d;
-  }, [subtask]);
-
-  const [title, setTitle] = useState(subtask.title);
-  const [description, setDescription] = useState(subtask.description);
-  const [priority, setPriority] = useState<TaskPriority>(subtask.priority);
-  const [estimatedDays, setEstimatedDays] = useState<number>(subtask.estimatedDays || 7);
-  const [isLeaderOnly, setIsLeaderOnly] = useState(subtask.isLeaderOnly);
-  const [skills, setSkills] = useState<string[]>(subtask.requiredSkills);
-  const [newSkillInput, setNewSkillInput] = useState("");
-  const [sendNudgeAlert, setSendNudgeAlert] = useState(true);
-
-  // Calendar states defaulting to today / parsed subtask deadline
-  const [currentMonth, setCurrentMonth] = useState<number>(initialDate.getMonth());
-  const [currentYear, setCurrentYear] = useState<number>(initialDate.getFullYear());
-  const [selectedDay, setSelectedDay] = useState<number>(initialDate.getDate());
-  const [selectedMonth, setSelectedMonth] = useState<number>(initialDate.getMonth());
-  const [selectedYear, setSelectedYear] = useState<number>(initialDate.getFullYear());
-
-  const MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-  const MONTH_NAMES_SHORT = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-  ];
-
-  function handlePrevMonth() {
-    if (currentMonth === 0) {
-      setCurrentMonth(11);
-      setCurrentYear((prev) => prev - 1);
-    } else {
-      setCurrentMonth((prev) => prev - 1);
-    }
-  }
-
-  function handleNextMonth() {
-    if (currentMonth === 11) {
-      setCurrentMonth(0);
-      setCurrentYear((prev) => prev + 1);
-    } else {
-      setCurrentMonth((prev) => prev + 1);
-    }
-  }
-
-  // Real-time synchronization: Estimated Days -> Calendar Deadline
-  function handleEstimatedDaysChange(days: number) {
-    const validDays = Math.max(1, Math.min(90, days));
-    setEstimatedDays(validDays);
-    const target = new Date();
-    target.setDate(target.getDate() + validDays);
-    setSelectedDay(target.getDate());
-    setSelectedMonth(target.getMonth());
-    setSelectedYear(target.getFullYear());
-    setCurrentMonth(target.getMonth());
-    setCurrentYear(target.getFullYear());
-  }
-
-  // Real-time synchronization: Calendar Day Click -> Estimated Days
-  function handleSelectCalendarDay(day: number) {
-    setSelectedDay(day);
-    setSelectedMonth(currentMonth);
-    setSelectedYear(currentYear);
-    const targetDate = new Date(currentYear, currentMonth, day);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffTime = targetDate.getTime() - today.getTime();
-    const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-    setEstimatedDays(diffDays);
-  }
-
-  const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-
-  const bestMatch = findBestMemberForSubtask({ title, description, requiredSkills: skills }, members);
-  const initialAssignee =
-    subtask.assigneeName && subtask.assigneeName !== "Luis Garcia"
-      ? subtask.assigneeName
-      : bestMatch?.member.name || members[0]?.name || "Unassigned";
-
-  const [assigneeName, setAssigneeName] = useState(initialAssignee);
-
-  function handleAddSkill() {
-    const trimmed = newSkillInput.trim();
-    if (trimmed && !skills.includes(trimmed)) {
-      setSkills([...skills, trimmed]);
-      setNewSkillInput("");
-    }
-  }
-
-  const formattedDeadline = `${MONTH_NAMES_SHORT[selectedMonth]} ${selectedDay}, ${selectedYear}`;
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
-
-    const targetDueDate = new Date(selectedYear, selectedMonth, selectedDay);
-    const threeDaysPriorDate = new Date(targetDueDate.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const oneDayPriorDate = new Date(targetDueDate.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-    const subtaskNudges = [
-      {
-        nudgeUID: `${subtask.id}_3d`,
-        triggerDate: threeDaysPriorDate,
-        nudgeType: "3 Days Prior",
-        sent: false
-      },
-      {
-        nudgeUID: `${subtask.id}_1d`,
-        triggerDate: oneDayPriorDate,
-        nudgeType: "1 Day Prior",
-        sent: false
-      }
-    ];
-
-    if (sendNudgeAlert) {
-      const assignedMember = members.find((m) => m.name === assigneeName);
-      const isUrgent = estimatedDays <= 1;
-      const nudgeType = estimatedDays <= 1 ? "1_day_prior" : estimatedDays <= 3 ? "3_days_prior" : "standard";
-      sendNudgeEmail({
-        recipientEmail: assignedMember?.email,
-        recipientUID: assignedMember?.id,
-        taskTitle: title.trim(),
-        eventName: "Organization Task",
-        deadline: formattedDeadline,
-        message: estimatedDays <= 1
-          ? "Urgent Reminder: This task is due within 1 day!"
-          : estimatedDays <= 3
-          ? "Priority Nudge: 3 days remaining before deadline."
-          : undefined,
-        isUrgent,
-        nudgeType
-      }).catch((err) => console.warn("Failed to dispatch email nudge:", err));
-    }
-
-    onSave({
-      ...subtask,
-      title: title.trim(),
-      description: description.trim(),
-      assigneeName,
-      priority,
-      estimatedDays: Math.max(1, Number(estimatedDays) || 1),
-      isLeaderOnly,
-      requiredSkills: skills,
-      dueDate: formattedDeadline,
-      deadline: formattedDeadline,
-      nudges: subtaskNudges
-    });
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="max-h-[90dvh] w-full min-w-0 max-w-lg space-y-5 overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:rounded-3xl sm:p-6">
-        {/* Modal Header (Matching Screenshot 2) */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e0e7ff] text-[#3b82f6]">
-              <Edit2 size={18} />
-            </span>
-            <h3 className="text-lg font-bold text-slate-900">Edit AI Task</h3>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close task editor" className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-600">
-            <X size={20} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Title */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-              Task Title <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-              Description
-            </label>
-            <textarea
-              rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-                className="w-full resize-y rounded-2xl border border-slate-200 bg-[#f8fafc] px-3 py-2.5 text-sm leading-6 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-
-          {/* Assignee Selection */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-              Assignee
-            </label>
-            <CustomSelect
-              value={assigneeName}
-              onChange={setAssigneeName}
-              options={
-                members.length === 0
-                  ? [{ value: assigneeName, label: assigneeName || "Unassigned" }]
-                  : members.map((m) => ({
-                      value: m.name,
-                      label: m.name,
-                      sublabel: m.position || m.role
-                    }))
-              }
-              buttonClassName="py-3 text-sm font-semibold"
-            />
-            {bestMatch && (
-              <div className="mt-2.5 rounded-2xl border border-blue-100 bg-slate-50/70 p-3.5 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-                    <Sparkles size={14} className="text-blue-600 shrink-0" />
-                    <span>Recommended Assignee</span>
-                  </div>
-                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-200/50">
-                    {bestMatch.score}% Match
-                  </span>
-                </div>
-                <p className="text-xs font-bold text-slate-900">
-                  {bestMatch.member.name}{" "}
-                  <span className="font-normal text-slate-500">
-                    ({bestMatch.member.position || bestMatch.member.role || "Member"})
-                  </span>
-                </p>
-                {bestMatch.explanation && (
-                  <p className="text-[11px] font-medium text-slate-600">
-                    {bestMatch.explanation}
-                  </p>
-                )}
-                {bestMatch.member.skills && bestMatch.member.skills.length > 0 && (
-                  <div className="pt-1 flex flex-wrap gap-1.5 items-center">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
-                      Member Skills:
-                    </span>
-                    {bestMatch.member.skills.map((sk) => {
-                      const isMatched = bestMatch.matchedSkills.includes(sk);
-                      return (
-                        <span
-                          key={sk}
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-semibold flex items-center gap-1 ${
-                            isMatched
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
-                              : "bg-white text-slate-500 border border-slate-200/60"
-                          }`}
-                        >
-                          {sk}
-                          {isMatched && <Check size={11} className="stroke-[2.5] text-emerald-600" />}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Schedule & Auto-Reminder Card */}
-          <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3.5 space-y-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-                <Bell size={14} className="text-blue-600 shrink-0" />
-                <span>Adviser-Recommended Nudges</span>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200/60">
-                <span className="size-1.5 rounded-full bg-emerald-500" />
-                3-Day & 1-Day Active
-              </span>
-            </div>
-
-            <div className="text-xs text-slate-600 space-y-1.5 font-normal leading-relaxed">
-              <p>
-                Assigned to <span className="font-semibold text-slate-900">{assigneeName}</span> · Due in{" "}
-                <span className="font-semibold text-slate-900">{estimatedDays} day{estimatedDays > 1 ? "s" : ""}</span> ({formattedDeadline}).
-              </p>
-              <div className="rounded-xl border border-slate-200/70 bg-white p-2.5 space-y-1.5 text-[11px]">
-                <div className="flex items-center gap-2 text-amber-700">
-                  <span className="size-1.5 rounded-full bg-amber-500 shrink-0" />
-                  <span><strong>3 Days Prior:</strong> Contextual progress check email sent to {assigneeName}.</span>
-                </div>
-                <div className="flex items-center gap-2 text-rose-600">
-                  <span className="size-1.5 rounded-full bg-rose-500 shrink-0" />
-                  <span><strong>1 Day Prior:</strong> Urgent final deadline reminder email sent 24h before due date.</span>
-                </div>
-              </div>
-            </div>
-
-            <label className="flex items-center gap-2 pt-2 border-t border-slate-200/60 cursor-pointer select-none text-xs font-semibold text-slate-700 hover:text-slate-900 transition">
-              <input
-                type="checkbox"
-                checked={sendNudgeAlert}
-                onChange={(e) => setSendNudgeAlert(e.target.checked)}
-                className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span>Send initial assignment notification nudge to member on save</span>
-            </label>
-          </div>
-
-          {/* Dynamic Calendar Deadline Picker */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Deadline</span>
-              <span className="text-xs font-bold text-blue-600">
-                {formattedDeadline} · 11:59
-              </span>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 p-4 bg-white">
-              <div className="flex items-center justify-between mb-3 px-2">
-                <button
-                  type="button"
-                  onClick={handlePrevMonth}
-                  className="p-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <span className="font-bold text-slate-900 text-sm">
-                  {MONTH_NAMES[currentMonth]} {currentYear}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleNextMonth}
-                  className="p-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2">
-                <span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span>
-              </div>
-
-              <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-700">
-                {Array.from({ length: firstDayIndex }).map((_, idx) => (
-                  <span key={`empty-${idx}`} className="py-1 opacity-30" />
-                ))}
-                {Array.from({ length: daysInMonth }).map((_, idx) => {
-                  const day = idx + 1;
-                  const isSelected =
-                    selectedDay === day &&
-                    selectedMonth === currentMonth &&
-                    selectedYear === currentYear;
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => handleSelectCalendarDay(day)}
-                      className={`py-1.5 rounded-xl font-semibold transition ${
-                        isSelected
-                          ? "bg-[#1e3a5f] text-white shadow-2xs font-bold"
-                          : "hover:bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Priority & Estimated Days */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Priority</label>
-              <CustomSelect
-                value={priority}
-                onChange={(val) => setPriority(val as TaskPriority)}
-                options={ALL_PRIORITIES.map((value) => ({ value, label: value, indicatorClass: PRIORITY_CONFIG[value].dot, selectedClass: PRIORITY_CONFIG[value].classes }))}
-                buttonClassName="py-2.5 text-xs font-semibold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Estimated Days</label>
-              <input
-                type="number"
-                min={1}
-                max={90}
-                value={estimatedDays}
-                onChange={(e) => handleEstimatedDaysChange(Number(e.target.value))}
-                className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800"
-              />
-            </div>
-          </div>
-
-          {/* Required Skills Chip Input */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
-              Required Skills (Chip Input)
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={newSkillInput}
-                onChange={(e) => setNewSkillInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddSkill();
-                  }
-                }}
-                placeholder="Type skill name & enter"
-                className="min-h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2 text-xs text-slate-800"
-              />
-              <button
-                type="button"
-                onClick={handleAddSkill}
-                className="rounded-2xl bg-slate-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-900 shrink-0"
-              >
-                Add
-              </button>
-            </div>
-
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {skills.map((s) => (
-                <span
-                  key={s}
-                  className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 border border-blue-200"
-                >
-                  {s}
-                  <button
-                    type="button"
-                    onClick={() => setSkills(skills.filter((k) => k !== s))}
-                    className="text-blue-500 hover:text-blue-800"
-                  >
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Leader Only Restricted Toggle */}
-          <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">
-            <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isLeaderOnly}
-                onChange={(e) => setIsLeaderOnly(e.target.checked)}
-                className="size-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
-              />
-              <Shield size={14} className="text-amber-600" />
-              Leader Only Access Restricted
-            </label>
-          </div>
-
-          {/* Modal Action Buttons (Exact Screenshot 2 Design) */}
-          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-2xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              className="rounded-2xl bg-[#2563eb] py-3 text-sm font-bold text-white shadow-md hover:bg-blue-700 transition"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ── Old Add Subtask Modal ───────────────────────────────────────────────────
 
 type OldAddSubtaskModalProps = {
   members: OrganizationMember[];
@@ -1352,7 +862,9 @@ type OldAddSubtaskModalProps = {
 function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assigneeName, setAssigneeName] = useState(members[0]?.name || "Unassigned");
+  const availableMembers = uniqueOrganizationMembers(members);
+  const [selectedMemberId, setSelectedMemberId] = useState(availableMembers[0]?.id || "");
+  const assignedMember = availableMembers.find((member) => member.id === selectedMemberId);
   const [priority, setPriority] = useState<TaskPriority>("Medium");
   const [estimatedDays, setEstimatedDays] = useState(3);
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
@@ -1374,7 +886,8 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
     onAdd({
       title: title.trim(),
       description: description.trim() || "Leader-authored subtask created manually.",
-      assigneeName,
+      assigneeName: assignedMember?.name || "Unassigned",
+      assignedMemberUID: assignedMember?.id || null,
       requiredSkills: skills,
       estimatedDays: Math.max(1, Number(estimatedDays) || 1),
       isLeaderOnly,
@@ -1427,14 +940,15 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
               <CustomSelect
-                value={assigneeName}
-                onChange={setAssigneeName}
+                value={selectedMemberId}
+                onChange={setSelectedMemberId}
                 options={
-                  members.length === 0
-                    ? [{ value: assigneeName, label: assigneeName }]
-                    : members.map((m) => ({
-                        value: m.name,
+                  availableMembers.length === 0
+                    ? [{ value: "", label: "Unassigned" }]
+                    : availableMembers.map((m) => ({
+                        value: m.id,
                         label: m.name,
+                        profilePicture: m.profilePicture || null,
                         sublabel: m.position || m.role
                       }))
                 }

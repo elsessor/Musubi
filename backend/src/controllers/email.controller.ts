@@ -4,6 +4,7 @@ import { sendNudgeNotificationEmail } from "../services/email.service.js";
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { assertCanSendManualNudge } from "../utils/nudgePermissions.js";
 import { AppError } from "../utils/AppError.js";
+import { parseScheduleDate } from "../utils/dateRange.js";
 
 export async function sendNudgeEmailController(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -102,8 +103,8 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
       const dueDateStr = task.dueDate || task.deadline;
       if (!dueDateStr) continue;
 
-      const dueDate = new Date(dueDateStr);
-      if (isNaN(dueDate.getTime())) continue;
+      const dueDate = parseScheduleDate(dueDateStr);
+      if (!dueDate) continue;
 
       const dueMidnight = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate())).getTime();
       const diffDays = Math.round((dueMidnight - todayMidnight) / (1000 * 3600 * 24));

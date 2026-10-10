@@ -1,10 +1,11 @@
 import { AlertTriangle } from "lucide-react";
 import type { Task } from "./types";
+import { parseScheduleDate } from "@/utils/dateRange";
 
 function parseDate(value?: string) {
   if (!value) return null;
-  const parsed = new Date(value);
-  if (!Number.isNaN(parsed.getTime())) return parsed;
+  const parsed = parseScheduleDate(value);
+  if (parsed) return parsed;
   const fallback = new Date(`${value}, ${new Date().getFullYear()}`);
   return Number.isNaN(fallback.getTime()) ? null : fallback;
 }
