@@ -134,13 +134,13 @@ export default function NotificationsPage() {
       onLogout={logout}
       user={user}
     >
-      <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
+      <section className="mx-auto w-full max-w-[1680px] min-w-0 text-[#12213a]">
         {/* Header Title Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-[21px] font-bold tracking-[-0.02em] text-slate-900">Notifications</h1>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <h1 className="text-lg font-bold tracking-[-0.02em] text-slate-900 sm:text-[21px]">Notifications</h1>
             {unreadCount > 0 ? (
-              <span className="inline-flex items-center rounded-full bg-[#2563eb] px-2.5 py-0.5 text-xs font-bold text-white shadow-2xs">
+              <span className="inline-flex shrink-0 items-center rounded-full bg-[#2563eb] px-2 py-0.5 text-[11px] font-bold text-white shadow-2xs sm:px-2.5 sm:text-xs">
                 {unreadCount} new
               </span>
             ) : null}
@@ -149,18 +149,18 @@ export default function NotificationsPage() {
           <button
             type="button"
             onClick={handleMarkAllAsRead}
-            className="text-xs font-bold text-[#2563eb] hover:text-blue-700 transition self-start sm:self-auto"
+            className="shrink-0 text-[11px] font-bold text-[#2563eb] transition hover:text-blue-700 sm:text-xs"
           >
             Mark all as read
           </button>
         </div>
 
         {/* Filter Tabs Pill Bar (Student Leader vs Member View) */}
-        <div className="mt-5 flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 sm:mt-5 sm:gap-2">
           <button
             type="button"
             onClick={() => setActiveTab("all")}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
+            className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
               activeTab === "all"
                 ? "bg-[#1e3a5f] text-white shadow-2xs"
                 : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
@@ -174,7 +174,7 @@ export default function NotificationsPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("activity" as any)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
+                className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === ("activity" as any)
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
                     : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
@@ -186,7 +186,7 @@ export default function NotificationsPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("announcements")}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
+                className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === "announcements"
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
                     : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
@@ -200,7 +200,7 @@ export default function NotificationsPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("announcements")}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
+                className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === "announcements"
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
                     : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
@@ -212,7 +212,7 @@ export default function NotificationsPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("nudges")}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
+                className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === "nudges"
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
                     : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
@@ -224,7 +224,7 @@ export default function NotificationsPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("ratings")}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
+                className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === "ratings"
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
                     : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
@@ -238,11 +238,11 @@ export default function NotificationsPage() {
 
         {/* Notifications List */}
         {loading ? (
-          <div className="mt-6 rounded-2xl border border-[#dce3ed] bg-white p-10 text-center text-sm text-slate-500">
+          <div className="mt-4 rounded-2xl border border-[#dce3ed] bg-white p-6 text-center text-sm text-slate-500 sm:mt-6 sm:p-10">
             Fetching real-time notifications...
           </div>
         ) : filteredNotifs.length > 0 ? (
-          <div className="mt-6 space-y-3">
+          <div className="mt-4 space-y-2 sm:mt-6 sm:space-y-3">
             {filteredNotifs.map((notif) => {
               const isAnnouncement = notif.type === "announcement";
               const isDeadlineAlert = notif.nudgeCategory === "deadline";
@@ -258,14 +258,14 @@ export default function NotificationsPage() {
                         handleMarkAsRead(notif.id);
                         setSelectedNotif(notif);
                       }}
-                      className="group flex items-center justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs transition hover:border-slate-300 hover:shadow-md cursor-pointer"
+                      className="group flex min-w-0 cursor-pointer items-center justify-between rounded-2xl border border-slate-200/90 bg-white p-3 shadow-2xs transition hover:border-slate-300 hover:shadow-md sm:p-5"
                     >
-                      <div className="flex items-center gap-4 min-w-0 pr-4">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
-                          <Bell className="size-5" />
+                      <div className="flex min-w-0 items-center gap-2.5 pr-2 sm:gap-4 sm:pr-4">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600 sm:size-10 sm:rounded-2xl">
+                          <Bell className="size-4 sm:size-5" />
                         </div>
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
+                        <div className="min-w-0 space-y-0.5 sm:space-y-1">
+                          <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                             <span className="inline-flex items-center rounded-full bg-violet-100/80 px-2.5 py-0.5 text-[11px] font-bold text-violet-700">
                               Announcement
                             </span>
@@ -281,10 +281,10 @@ export default function NotificationsPage() {
                               <span className="size-2 rounded-full bg-blue-600 shrink-0" title="Unread" />
                             )}
                           </div>
-                          <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition truncate">
+                          <h3 className="truncate text-sm font-bold text-slate-900 transition group-hover:text-blue-600 sm:text-base">
                             {notif.title}
                           </h3>
-                          <p className="text-xs font-medium text-slate-400">
+                          <p className="text-[11px] font-medium text-slate-400 sm:text-xs">
                             Posted {formatDisplayDate(notif.createdAt || notif.time)}
                           </p>
                         </div>
@@ -302,14 +302,14 @@ export default function NotificationsPage() {
                       handleMarkAsRead(notif.id);
                       setSelectedNotif(notif);
                     }}
-                    className="group flex items-start gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs transition hover:border-slate-300 hover:shadow-md cursor-pointer"
+                    className="group flex min-w-0 cursor-pointer items-start gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-2xs transition hover:border-slate-300 hover:shadow-md sm:gap-4 sm:p-5"
                   >
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mt-0.5">
-                      <Sparkles className="size-5" />
+                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 sm:size-10 sm:rounded-2xl">
+                      <Sparkles className="size-4 sm:size-5" />
                     </div>
 
-                    <div className="space-y-1.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
+                    <div className="min-w-0 flex-1 space-y-1 sm:space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="inline-flex items-center rounded-full bg-blue-100/80 px-2.5 py-0.5 text-[11px] font-bold text-blue-700">
                           Activity
                         </span>
@@ -318,7 +318,7 @@ export default function NotificationsPage() {
                         )}
                       </div>
 
-                      <p className="text-sm font-semibold text-slate-800 leading-snug">
+                      <p className="line-clamp-2 text-xs font-semibold leading-snug text-slate-800 sm:line-clamp-none sm:text-sm">
                         {notif.title.includes(":") || notif.title.includes("alert") || notif.title.includes("due")
                           ? notif.title
                           : isDeadlineAlert
@@ -328,10 +328,10 @@ export default function NotificationsPage() {
                           : `${notif.title} ${notif.description ? `- ${notif.description}` : ""}`}
                       </p>
 
-                      <div className="flex items-center gap-3 text-xs text-slate-400 font-medium pt-0.5">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 pt-0.5 text-[11px] font-medium text-slate-400 sm:gap-3 sm:text-xs">
                         <span>{formatDisplayDate(notif.time || notif.createdAt)}</span>
-                        <span className="inline-flex items-center gap-1 font-bold text-blue-600">
-                          <Calendar className="size-3.5" />
+                        <span className="inline-flex min-w-0 items-center gap-1 font-bold text-blue-600">
+                          <Calendar className="size-3.5 shrink-0" />
                           {notif.description.replace(/^@\s*/, "") || "Task Activity"}
                         </span>
                       </div>
@@ -348,32 +348,32 @@ export default function NotificationsPage() {
                     handleMarkAsRead(notif.id);
                     setSelectedNotif(notif);
                   }}
-                  className="group flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-4.5 sm:p-5 shadow-2xs transition-all duration-200 hover:border-blue-200 hover:shadow-md cursor-pointer"
+                  className="group flex min-w-0 cursor-pointer items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all duration-200 hover:border-blue-200 hover:shadow-md sm:p-5"
                 >
-                  <div className="flex items-start sm:items-center gap-4 min-w-0 flex-1 pr-3">
+                  <div className="flex min-w-0 flex-1 items-start gap-2.5 pr-2 sm:items-center sm:gap-4 sm:pr-3">
                     {/* Left Icon Badge */}
                     {isAnnouncement ? (
-                      <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-600 border border-violet-100 shadow-2xs group-hover:bg-violet-100/80 group-hover:scale-105 transition-all">
-                        <Megaphone className="size-5" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-violet-100 bg-violet-50 text-violet-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-violet-100/80 sm:size-11 sm:rounded-2xl">
+                        <Megaphone className="size-4 sm:size-5" />
                       </div>
                     ) : isDeadlineAlert ? (
-                      <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 shadow-2xs group-hover:bg-rose-100/80 group-hover:scale-105 transition-all">
-                        <AlertCircle className="size-5" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-rose-100/80 sm:size-11 sm:rounded-2xl">
+                        <AlertCircle className="size-4 sm:size-5" />
                       </div>
                     ) : isFollowup ? (
-                      <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 border border-amber-100 shadow-2xs group-hover:bg-amber-100/80 group-hover:scale-105 transition-all">
-                        <Clock className="size-5" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-amber-100/80 sm:size-11 sm:rounded-2xl">
+                        <Clock className="size-4 sm:size-5" />
                       </div>
                     ) : (
-                      <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 shadow-2xs group-hover:bg-blue-100/80 group-hover:scale-105 transition-all">
-                        <Bell className="size-5" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-blue-100/80 sm:size-11 sm:rounded-2xl">
+                        <Bell className="size-4 sm:size-5" />
                       </div>
                     )}
 
                     {/* Content Details */}
-                    <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 space-y-1 sm:space-y-1.5">
                       {/* Badge / Header Row */}
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                         {isAnnouncement ? (
                           <>
                             <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-700 border border-violet-200/70">
@@ -426,12 +426,12 @@ export default function NotificationsPage() {
                       </div>
 
                       {/* Title */}
-                      <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">
+                      <h3 className="line-clamp-2 text-sm font-bold leading-snug text-slate-900 transition-colors group-hover:text-blue-600 sm:line-clamp-none sm:text-base">
                         {notif.title}
                       </h3>
 
                       {/* Meta Footer */}
-                      <p className="text-xs font-medium text-slate-400 flex items-center gap-2 flex-wrap">
+                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-medium text-slate-400 sm:gap-2 sm:text-xs">
                         {notif.authorName && (
                           <span>From <strong className="text-slate-600 font-semibold">{notif.authorName}</strong></span>
                         )}
@@ -441,15 +441,15 @@ export default function NotificationsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-center size-8 rounded-full bg-slate-50 border border-slate-100 group-hover:bg-blue-50 group-hover:border-blue-100 transition-all shrink-0">
-                    <ChevronRight className="size-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full border border-slate-100 bg-slate-50 transition-all group-hover:border-blue-100 group-hover:bg-blue-50 sm:size-8">
+                    <ChevronRight className="size-3.5 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600 sm:size-4" />
                   </div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
+          <div className="mt-4 flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center sm:mt-6 sm:p-12">
             <div className="flex size-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
               <Bell className="size-6" />
             </div>

@@ -119,16 +119,14 @@ export default function AnalyticsPage() {
       onLogout={logout}
       user={user}
     >
-      <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-[21px] font-bold tracking-[-0.02em]">Analytics &amp; Workload</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Live organizational telemetry, task velocity, and AI breakdown</p>
-          </div>
+      <section className="mx-auto w-full max-w-[1680px] min-w-0 text-[#12213a]">
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold tracking-[-0.02em] sm:text-[21px]">Analytics &amp; Workload</h1>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">Live organizational telemetry, task velocity, and AI breakdown</p>
         </div>
 
         {/* Dynamic Metric Cards */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-6 xl:grid-cols-4">
           <StatCard
             title="Task Completion Rate"
             value={`${completionRate}%`}
@@ -160,28 +158,28 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Task Workflow & Velocity Overview */}
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-3">
           {/* Main Telemetry & Events Velocity */}
-          <div className="lg:col-span-2 rounded-2xl border border-[#dce3ed] bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                  <TrendingUp size={20} />
+          <div className="min-w-0 rounded-2xl border border-[#dce3ed] bg-white p-4 shadow-sm sm:p-6 lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 sm:pb-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 sm:size-10">
+                  <TrendingUp className="size-4 sm:size-5" />
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Event &amp; Task Velocity</h3>
-                  <p className="text-xs text-slate-400">Real-time status breakdown across all active organizational events</p>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-slate-900 sm:text-base">Event &amp; Task Velocity</h3>
+                  <p className="text-[11px] text-slate-400 sm:text-xs">Real-time status breakdown across all active organizational events</p>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-600 sm:px-3 sm:text-xs">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 Live Sync
               </span>
             </div>
 
             {/* Workflow Distribution Bar */}
-            <div className="mt-6">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-2">
+            <div className="mt-4 sm:mt-6">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 text-[11px] font-semibold text-slate-600 sm:text-xs">
                 <span>Task Distribution ({allTasks.length} total)</span>
                 <span>{completedTasks.length} Completed ({completionRate}%)</span>
               </div>
@@ -197,7 +195,7 @@ export default function AnalyticsPage() {
                   <div className="w-full bg-slate-200" />
                 )}
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] sm:gap-4 sm:text-xs">
                 {statusDistribution.map((group) => <div key={group.key} className="flex items-center gap-1.5" title={group.events.join(", ")}>
                   <span className={"h-2.5 w-2.5 rounded-full " + group.theme.dot} />
                   <span className="font-medium text-slate-600">{group.status} ({group.count})</span>
@@ -206,12 +204,12 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Event List Telemetry */}
-            <div className="mt-6 space-y-3">
+            <div className="mt-4 space-y-2 sm:mt-6 sm:space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                 Active Events Telemetry ({events.length})
               </h4>
               {events.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400">
+                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400 sm:p-8">
                   No published events found. Create an event or atomize an event to track analytics.
                 </div>
               ) : (
@@ -223,15 +221,15 @@ export default function AnalyticsPage() {
                   return (
                     <div
                       key={event.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/50 p-4 transition hover:bg-slate-50"
+                      className="flex min-w-0 flex-col justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50/50 p-3 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:gap-4 sm:p-4"
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100/70 text-blue-600 font-bold text-xs">
-                          <Layers size={18} />
+                      <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-blue-100/70 text-xs font-bold text-blue-600 sm:size-9">
+                          <Layers className="size-4 sm:size-[18px]" />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h5 className="text-sm font-bold text-slate-900">{event.title}</h5>
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+                            <h5 className="min-w-0 break-words text-xs font-bold text-slate-900 sm:text-sm">{event.title}</h5>
                             <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${getStatusTheme(event.status, event.eventCustomStatuses).badge}`}>
                               {event.status}
                             </span>
@@ -242,7 +240,7 @@ export default function AnalyticsPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4 sm:w-48 shrink-0">
+                      <div className="flex min-w-0 items-center gap-4 pl-10 sm:w-48 sm:shrink-0 sm:pl-0">
                         <div className="w-full">
                           <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-1">
                             <span>{evTasks.length} subtasks</span>
@@ -264,20 +262,20 @@ export default function AnalyticsPage() {
           </div>
 
           {/* AI Telemetry & Highlights Side Panel */}
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-[#dce3ed] bg-white p-6 shadow-sm">
-              <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-500">
-                  <Sparkles size={20} />
+          <div className="min-w-0 space-y-4 sm:space-y-6">
+            <div className="rounded-2xl border border-[#dce3ed] bg-white p-4 shadow-sm sm:p-6">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3 sm:gap-3 sm:pb-4">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-500 sm:size-10">
+                  <Sparkles className="size-4 sm:size-5" />
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">AI Task Atomizer Stats</h3>
-                  <p className="text-xs text-slate-400">Automated breakdown telemetry</p>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-slate-900 sm:text-base">AI Task Atomizer Stats</h3>
+                  <p className="text-[11px] text-slate-400 sm:text-xs">Automated breakdown telemetry</p>
                 </div>
               </div>
 
-              <div className="mt-5 space-y-4">
-                <div className="flex items-center justify-between rounded-xl bg-amber-50/50 p-3.5 border border-amber-100">
+              <div className="mt-4 space-y-2.5 sm:mt-5 sm:space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-100 bg-amber-50/50 p-3 sm:p-3.5">
                   <div>
                     <span className="text-xs font-semibold text-slate-600 block">AI Generated Tasks</span>
                     <span className="text-lg font-extrabold text-slate-900">{aiTasks.length}</span>
@@ -287,7 +285,7 @@ export default function AnalyticsPage() {
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between rounded-xl bg-blue-50/50 p-3.5 border border-blue-100">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50/50 p-3 sm:p-3.5">
                   <div>
                     <span className="text-xs font-semibold text-slate-600 block">AI Event Runs</span>
                     <span className="text-lg font-extrabold text-slate-900">{aiEventsCount}</span>
@@ -335,13 +333,13 @@ function StatCard({
   color: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[#dce3ed] bg-white p-5 shadow-sm transition hover:shadow-md">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500">{title}</span>
-        <Icon className={`size-5 ${color}`} />
+    <div className="min-w-0 rounded-2xl border border-[#dce3ed] bg-white p-3 shadow-sm transition hover:shadow-md sm:p-5">
+      <div className="flex min-w-0 items-start justify-between gap-1.5">
+        <span className="min-w-0 break-words text-[11px] font-semibold leading-tight text-slate-500 sm:text-xs">{title}</span>
+        <Icon className={`size-4 shrink-0 sm:size-5 ${color}`} />
       </div>
-      <p className="mt-3 text-2xl font-extrabold text-slate-900">{value}</p>
-      <p className="mt-1 text-[11px] font-medium text-slate-400">{change}</p>
+      <p className="mt-2 break-words text-xl font-extrabold leading-tight text-slate-900 sm:mt-3 sm:text-2xl">{value}</p>
+      <p className="mt-1 break-words text-[10px] font-medium leading-snug text-slate-400 sm:text-[11px]">{change}</p>
     </div>
   );
 }
