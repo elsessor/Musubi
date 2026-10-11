@@ -16,6 +16,7 @@ import { getFirebaseDb } from "../firebase/config";
 import type { Event, EventStatus, Task } from "../components/events/types";
 import { useAuthStore } from "@/store/authStore";
 import { getDateRangeError } from "@/utils/dateRange";
+import { getEventMemberCount } from "@/utils/eventMembers";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 
@@ -63,7 +64,7 @@ export function normalizeEvent(id: string, data: Record<string, any>): Event {
     eventCustomStatuses: Array.isArray(data.eventCustomStatuses) ? data.eventCustomStatuses : [],
     startDate: typeof data.startDate === "string" ? data.startDate : "TBD",
     endDate: typeof data.endDate === "string" ? data.endDate : "TBD",
-    memberCount: typeof data.memberCount === "number" ? data.memberCount : 0,
+    memberCount: getEventMemberCount(data.tasks),
     progress: typeof data.progress === "number" ? data.progress : 0,
     committee: typeof data.committee === "string" ? data.committee : "General",
     tasks: Array.isArray(data.tasks)
@@ -188,7 +189,7 @@ export async function createEventFirestore(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ ...event, orgId })
+      body: JSON.stringify({ ...event, memberCount: getEventMemberCount(event.tasks), orgId })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -207,7 +208,7 @@ export async function createEventFirestore(
     status: event.status || "Active",
     startDate: event.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     endDate: event.endDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    memberCount: event.memberCount || 1,
+    memberCount: getEventMemberCount(event.tasks),
     progress: event.progress || 0,
     committee: event.committee ?? "",
     tasks: event.tasks || [],
@@ -223,6 +224,9 @@ export async function updateEventFirestore(
   eventId: string,
   update: Partial<Event>
 ): Promise<void> {
+  const payload = Array.isArray(update.tasks)
+    ? { ...update, memberCount: getEventMemberCount(update.tasks) }
+    : update;
   const token = await getValidToken(user);
   if (token) {
     const res = await fetch(`${API_BASE_URL}/auth/events/${eventId}`, {
@@ -231,7 +235,7 @@ export async function updateEventFirestore(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify(update)
+      body: JSON.stringify(payload)
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -244,7 +248,7 @@ export async function updateEventFirestore(
   const db = getFirebaseDb();
   const docRef = doc(db, "events", eventId);
   await updateDoc(docRef, {
-    ...update,
+    ...payload,
     updatedAt: serverTimestamp()
   });
   invalidateEventsCache();

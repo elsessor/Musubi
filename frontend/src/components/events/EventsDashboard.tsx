@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { Event, EventStatus } from "./types";
 import { isEventScheduledOnDay } from "@/utils/calendarSchedule";
+import { getEventMemberCount } from "@/utils/eventMembers";
 import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
@@ -666,7 +667,7 @@ export function EventsDashboard({
                     <td className="px-4 py-4 text-xs font-medium text-slate-600">
                       <span className="inline-flex items-center gap-1">
                         <Users size={13} className="text-slate-400" />
-                        {event.memberCount}
+                        {getEventMemberCount(event.tasks)}
                       </span>
                     </td>
                   </tr>
@@ -723,8 +724,11 @@ export function EventsDashboard({
                 </div>
 
                 <div className="mt-3 flex items-center justify-between text-xs text-slate-500 font-medium">
-                  <span>📅 {event.startDate} – {event.endDate}</span>
-                  <span className="flex items-center gap-1">👥 {event.memberCount} members</span>
+                  <span className="flex min-w-0 items-center gap-1">
+                    <Calendar size={12} className="shrink-0" />
+                    <span>{event.startDate} – {event.endDate}</span>
+                  </span>
+                  <span className="flex items-center gap-1">👥 {getEventMemberCount(event.tasks)} {getEventMemberCount(event.tasks) === 1 ? "member" : "members"}</span>
                 </div>
               </article>
             );
@@ -917,7 +921,7 @@ export function EventsDashboard({
                             </span>
                             <span className="flex items-center gap-1 font-semibold text-slate-600">
                               <Users size={12} className="text-slate-400" />
-                              {event.memberCount}
+                              {getEventMemberCount(event.tasks)}
                             </span>
                           </div>
                         </article>

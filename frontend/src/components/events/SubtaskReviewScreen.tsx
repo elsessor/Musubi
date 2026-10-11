@@ -21,7 +21,7 @@ import {
   X,
   Zap
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type SetStateAction } from "react";
 import { validateSubtaskSafeguards } from "./starterTemplates";
 import type { GoalDraft, Subtask, TaskPriority } from "./types";
 import {
@@ -49,15 +49,21 @@ const PRIORITY_BADGES = PRIORITY_CONFIG;
 
 type SubtaskReviewScreenProps = {
   goalDraft: GoalDraft;
+  onDraftChange: (update: (draft: GoalDraft) => GoalDraft) => void;
   customStatuses?: CustomStatusConfig[];
   members?: OrganizationMember[];
   onPublishGoal?: (publishedGoal: GoalDraft) => void;
   onBack?: () => void;
 };
 
-export function SubtaskReviewScreen({ goalDraft, members, onPublishGoal, onBack, customStatuses = [] }: SubtaskReviewScreenProps) {
-  const [currentGoal, setCurrentGoal] = useState<GoalDraft>(goalDraft);
-  const [subtasks, setSubtasks] = useState<Subtask[]>(goalDraft.subtasks);
+export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPublishGoal, onBack, customStatuses = [] }: SubtaskReviewScreenProps) {
+  const currentGoal = goalDraft;
+  const subtasks = goalDraft.subtasks;
+  const setCurrentGoal = (action: SetStateAction<GoalDraft>) => onDraftChange((current) => typeof action === "function" ? action(current) : action);
+  const setSubtasks = (action: SetStateAction<Subtask[]>) => onDraftChange((current) => ({
+    ...current,
+    subtasks: typeof action === "function" ? action(current.subtasks) : action
+  }));
   const [isEditingEventName, setIsEditingEventName] = useState(false);
   const [eventNameInput, setEventNameInput] = useState(goalDraft.eventName || "");
   const [liveMembers, setLiveMembers] = useState<OrganizationMember[]>(members || []);

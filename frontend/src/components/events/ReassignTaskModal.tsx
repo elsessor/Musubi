@@ -9,6 +9,7 @@ import {
   type OrganizationMember
 } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { getTaskAssigneeName } from "@/utils/taskAssignment";
 
 type ReassignTaskModalProps = {
   task: Task;
@@ -33,11 +34,11 @@ export function ReassignTaskModal({
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
 
   useEffect(() => {
-    const assigneeName = task.assignee?.name ?? "";
+    const assigneeName = getTaskAssigneeName(task).toLowerCase();
     if (members && members.length > 0) {
       setLiveMembers(members);
       const matched = members.find(
-        (m) => m.name.toLowerCase() === assigneeName.toLowerCase()
+        (m) => task.assignedMemberUID ? m.id === task.assignedMemberUID : m.name.trim().toLowerCase() === assigneeName
       );
       setSelectedMemberId(matched ? matched.id : members[0].id);
       return;
@@ -49,7 +50,7 @@ export function ReassignTaskModal({
         setLiveMembers(fetchedMembers);
         if (fetchedMembers.length > 0) {
           const matched = fetchedMembers.find(
-            (m) => m.name.toLowerCase() === assigneeName.toLowerCase()
+            (m) => task.assignedMemberUID ? m.id === task.assignedMemberUID : m.name.trim().toLowerCase() === assigneeName
           );
           setSelectedMemberId(matched ? matched.id : fetchedMembers[0].id);
         }
@@ -57,7 +58,7 @@ export function ReassignTaskModal({
       firebaseUser
     );
     return () => unsub();
-  }, [members, profile?.organizationId, firebaseUser, task.assignee?.name]);
+  }, [members, profile?.organizationId, firebaseUser, task.assignedMemberUID, task.assignedMemberName, task.assignee?.name]);
 
   const orgMembers: OrgMemberItem[] = liveMembers.map(memberToOrgItem);
 

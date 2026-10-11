@@ -3,6 +3,7 @@
 import { Calendar, Plus, Users } from "lucide-react";
 import type { Event } from "./types";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getEventMemberCount } from "@/utils/eventMembers";
 
 type EventCardProps = {
   event: Event;
@@ -55,7 +56,7 @@ export function EventCard({ event, onClick, customStatuses, compact = false }: E
         </span>
         <span className="flex items-center gap-1">
           <Users size={12} />
-          {event.memberCount}
+          {getEventMemberCount(event.tasks)}
         </span>
         {taskCount > 0 && (
           <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500 sm:ml-auto sm:bg-transparent sm:px-0 sm:text-xs sm:text-slate-400">{taskCount} tasks</span>

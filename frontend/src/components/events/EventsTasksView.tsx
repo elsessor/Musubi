@@ -14,6 +14,7 @@ import type { Event, EventStatus, Task } from "./types";
 import { isStartAfterEnd } from "./dateValidation";
 
 import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
+import { getEventMemberCount } from "@/utils/eventMembers";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { createEventFirestore, deleteEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
@@ -123,6 +124,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
   }
 
   function handleUpdateEvent(updatedEvent: Event) {
+    updatedEvent = { ...updatedEvent, memberCount: getEventMemberCount(updatedEvent.tasks) };
     setEvents((current) => current.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)));
     setSelectedEvent((current) => (current && current.id === updatedEvent.id ? updatedEvent : current));
   }
@@ -144,7 +146,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
           committee: "",
           startDate: startFormatted,
           endDate: endFormatted,
-          memberCount: 1,
+          memberCount: getEventMemberCount(publishedTasks),
           progress: 0,
           tasks: publishedTasks,
           customStatuses: workflow?.customStatuses || [],
@@ -214,7 +216,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
         committee: committee.trim(),
         startDate: startFormatted,
         endDate: endFormatted,
-        memberCount: 1,
+        memberCount: 0,
         progress: 0,
         tasks: []
       });

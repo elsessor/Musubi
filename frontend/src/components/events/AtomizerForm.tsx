@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Loader2, SlidersHorizontal, Zap } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type SetStateAction } from "react";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
@@ -12,8 +12,9 @@ import type { OrganizationMember } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { parseScheduleDate } from "@/utils/dateRange";
 import { resolveSubtaskAssignee } from "@/utils/subtaskAssignment";
+import { DEFAULT_ATOMIZER_STATUSES, EMPTY_ATOMIZER_DRAFT, useAtomizerDraftStore, type AtomizerDraftState } from "@/store/atomizerDraftStore";
 
-const DEFAULT_STATUS_LIST: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
+const DEFAULT_STATUS_LIST = DEFAULT_ATOMIZER_STATUSES;
 
 function ModernStatusDropdown({
   value,
@@ -194,30 +195,43 @@ type AtomizerFormProps = {
 
 export function AtomizerForm({ events, members = [], onPublishGoalTasks }: AtomizerFormProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
-  const [selectedEventId, setSelectedEventId] = useState("");
-  const [isCreateFromDescription, setIsCreateFromDescription] = useState(false);
-  const [newEventTitle, setNewEventTitle] = useState("");
-  const [defaultStatus, setDefaultStatus] = useState<TaskStatus>("To Do");
-  const [goalDescription, setGoalDescription] = useState("");
-  const [isAtomizing, setIsAtomizing] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [activeGoalDraft, setActiveGoalDraft] = useState<GoalDraft | null>(null);
+  const profile = useAuthStore((state) => state.profile);
+  const draftScope = JSON.stringify([firebaseUser?.uid || profile?.uid, profile?.organizationId?.trim()]);
+  const draft = useAtomizerDraftStore((state) => state.drafts[draftScope] || EMPTY_ATOMIZER_DRAFT);
+  const updateDraft = useAtomizerDraftStore((state) => state.updateDraft);
+  const { selectedEventId, isCreateFromDescription, newEventTitle, defaultStatus, goalDescription,
+    isAtomizing, errorMsg, activeGoalDraft, customStatuses, statusOrder, workflowSource } = draft;
+
+  function setDraftField<K extends keyof AtomizerDraftState>(field: K, action: SetStateAction<AtomizerDraftState[K]>) {
+    updateDraft(draftScope, (current) => ({
+      [field]: typeof action === "function" ? action(current[field]) : action
+    }));
+  }
+  const setSelectedEventId = (value: SetStateAction<string>) => setDraftField("selectedEventId", value);
+  const setIsCreateFromDescription = (value: SetStateAction<boolean>) => setDraftField("isCreateFromDescription", value);
+  const setNewEventTitle = (value: SetStateAction<string>) => setDraftField("newEventTitle", value);
+  const setDefaultStatus = (value: SetStateAction<TaskStatus>) => setDraftField("defaultStatus", value);
+  const setGoalDescription = (value: SetStateAction<string>) => setDraftField("goalDescription", value);
+  const setIsAtomizing = (value: SetStateAction<boolean>) => setDraftField("isAtomizing", value);
+  const setErrorMsg = (value: SetStateAction<string>) => setDraftField("errorMsg", value);
+  const setActiveGoalDraft = (value: SetStateAction<GoalDraft | null>) => setDraftField("activeGoalDraft", value);
+  const setCustomStatuses = (value: SetStateAction<CustomStatusConfig[]>) => setDraftField("customStatuses", value);
+  const setStatusOrder = (value: SetStateAction<string[]>) => setDraftField("statusOrder", value);
 
   // Manage Statuses Modal State
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
-  const [customStatuses, setCustomStatuses] = useState<CustomStatusConfig[]>([]);
-  const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_STATUS_LIST);
 
   const targetEvent = isCreateFromDescription ? undefined : events.find((event) => event.id === selectedEventId);
-  const workflowSource = useRef<string | null>(null);
   useEffect(() => {
-    const source = targetEvent?.id || "new";
-    if (workflowSource.current === source) return;
-    workflowSource.current = source;
-    setCustomStatuses(targetEvent?.customStatuses || []);
-    setStatusOrder(targetEvent?.statusOrder?.length ? targetEvent.statusOrder : [...DEFAULT_STATUS_LIST, ...(targetEvent?.customStatuses || []).map((status) => status.name)]);
-    setDefaultStatus("To Do");
-  }, [targetEvent]);
+    const source = isCreateFromDescription || !selectedEventId ? "new" : selectedEventId;
+    if (workflowSource === source || (source !== "new" && !targetEvent)) return;
+    updateDraft(draftScope, {
+      workflowSource: source,
+      customStatuses: targetEvent?.customStatuses || [],
+      statusOrder: targetEvent?.statusOrder?.length ? targetEvent.statusOrder : [...DEFAULT_STATUS_LIST, ...(targetEvent?.customStatuses || []).map((status) => status.name)],
+      defaultStatus: "To Do"
+    });
+  }, [draftScope, isCreateFromDescription, selectedEventId, targetEvent, updateDraft, workflowSource]);
 
   function handleAddStatus(name: string, color: StatusThemeColor, insertIndex?: number) {
     const newConfig: CustomStatusConfig = { name, color };
@@ -240,7 +254,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   }
 
   async function handleAtomize() {
-    if (!goalDescription.trim()) return;
+    if (isAtomizing || !goalDescription.trim()) return;
     if (!firebaseUser) {
       setErrorMsg("Your session has expired. Please sign in again.");
       return;
@@ -318,7 +332,9 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   if (activeGoalDraft) {
     return (
       <SubtaskReviewScreen
+        key={activeGoalDraft.id}
         goalDraft={activeGoalDraft}
+        onDraftChange={(update) => setActiveGoalDraft((current) => current ? update(current) : current)}
         customStatuses={customStatuses}
         members={members}
         onBack={() => setActiveGoalDraft(null)}

@@ -34,6 +34,7 @@ import { CustomSelect } from "@/components/ui/CustomSelect";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
+import { getEventMemberCount } from "@/utils/eventMembers";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { updateEventFirestore, updateTaskStatus, rateTaskInEvent } from "@/services/events.service";
@@ -76,6 +77,7 @@ export function KanbanBoard({
   const showToast = useToastStore((state) => state.showToast);
   const [currentEvent, setCurrentEvent] = useState<Event>(event);
   const [tasks, setTasks] = useState<Task[]>(event.tasks || []);
+  const memberCount = getEventMemberCount(tasks);
 
   const realRoster = Array.isArray(members) && members.length > 0 ? members.map(mapOrgMemberToItem) : undefined;
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -308,6 +310,8 @@ export function KanbanBoard({
       t.id === taskId
         ? {
             ...t,
+            assignedMemberUID: newAssignee.id,
+            assignedMemberName: newAssignee.name,
             assignee: {
               initials: newAssignee.initials,
               color: newAssignee.color,
@@ -519,7 +523,7 @@ export function KanbanBoard({
               </span>
               <span className={`${summaryExpanded ? "flex" : "hidden sm:flex"} items-center gap-1.5`}>
                 <Users size={13} className="text-slate-400" />
-                {currentEvent.memberCount} members
+                {memberCount} {memberCount === 1 ? "member" : "members"}
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="font-extrabold text-slate-800">{tasks.length}</span> total tasks

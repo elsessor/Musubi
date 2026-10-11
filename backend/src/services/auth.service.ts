@@ -14,6 +14,7 @@ import { getDateRangeError } from "../utils/dateRange.js";
 import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
 import { getAdminAccountStatus, type AdminAccountStatus } from "../utils/adminAccountStatus.js";
 import { appCache } from "../utils/cache.js";
+import { getEventMemberCount } from "../utils/eventMembers.js";
 
 export function invalidateUserCache(uid: string) {
   appCache.delete("user_profile:" + uid);
@@ -1453,7 +1454,7 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     status: input.status || "Active",
     startDate,
     endDate,
-    memberCount: typeof input.memberCount === "number" ? input.memberCount : 1,
+    memberCount: getEventMemberCount(input.tasks),
     progress: typeof input.progress === "number" ? input.progress : 0,
     committee: input.committee ?? "",
     customStatuses: Array.isArray(input.customStatuses) ? input.customStatuses : [],
@@ -1514,6 +1515,7 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
       }
       payload.tasks = recordTaskPerformance(preserveTaskAttachments(payload.tasks, originals), originals, { uid, fullName: user.fullName, isLeader: true });
     }
+    payload.memberCount = getEventMemberCount(Array.isArray(payload.tasks) ? payload.tasks : latest.tasks);
     transaction.update(docRef, payload);
   });
 
@@ -1623,7 +1625,7 @@ export async function getEventsForUser(uid: string, orgId?: string) {
       eventCustomStatuses: Array.isArray(organization?.eventCustomStatuses) ? organization.eventCustomStatuses : [],
       startDate: typeof data.startDate === "string" ? data.startDate : "TBD",
       endDate: typeof data.endDate === "string" ? data.endDate : "TBD",
-      memberCount: typeof data.memberCount === "number" ? data.memberCount : 0,
+      memberCount: getEventMemberCount(data.tasks),
       progress: typeof data.progress === "number" ? data.progress : 0,
       committee: typeof data.committee === "string" ? data.committee : "General",
       tasks: Array.isArray(data.tasks)
