@@ -124,6 +124,29 @@ test("leader reviews record attribution; member attempts cannot forge ratings", 
   assert.equal(recordTaskPerformance([{ ...reviewed, status: "In Progress" }], [reviewed], leader)[0].performanceReview, null);
 });
 
+test("editing a saved rating replaces the review without adding another metrics sample", () => {
+  const original = task({ status: "Done", completedAt: recordedTime });
+  const reviewed = recordTaskPerformance([{ ...original, performanceReview: { rating: 3, feedback: "First review" } }], [original], leader, recordedTime)[0];
+  const editedAt = new Date(2026, 9, 9, 12).toISOString();
+  const edited = recordTaskPerformance([{ ...reviewed, performanceReview: { rating: 5, feedback: "Verified the submitted work" } }], [reviewed], leader, editedAt)[0];
+  assert.deepEqual(edited.performanceReview, { rating: 5, feedback: "Verified the submitted work", reviewerUID: leader.uid, reviewedAt: editedAt });
+  assert.equal(edited.completedAt, recordedTime);
+  const metrics = getProfileMetrics([edited as ProfileTask], now);
+  assert.equal(metrics.rating, 5);
+  assert.equal(metrics.ratingCount, 1);
+});
+
+test("feedback-only review edits are saved, while unrelated task saves preserve review attribution", () => {
+  const original = task({ status: "Completed", completedAt: recordedTime });
+  const reviewed = recordTaskPerformance([{ ...original, performanceReview: { rating: 4, feedback: "Good work" } }], [original], leader, recordedTime)[0];
+  const editedAt = new Date(2026, 9, 9, 12).toISOString();
+  const edited = recordTaskPerformance([{ ...reviewed, performanceReview: { rating: 4, feedback: "Attachments verified" } }], [reviewed], leader, editedAt)[0];
+  assert.deepEqual(edited.performanceReview, { rating: 4, feedback: "Attachments verified", reviewerUID: leader.uid, reviewedAt: editedAt });
+  assert.deepEqual(recordTaskPerformance([{ ...edited, title: "Updated title" }], [edited], leader, "later")[0].performanceReview, edited.performanceReview);
+  const cleared = recordTaskPerformance([{ ...edited, performanceReview: { rating: 4, feedback: "" } }], [edited], leader, editedAt)[0];
+  assert.equal(cleared.performanceReview.feedback, "");
+});
+
 test("self-reviews and invalid ratings are rejected; reassignment clears stale reviews", () => {
   const original = task({ status: "Completed" });
   const reviewed = recordTaskPerformance([{ ...original, performanceReview: { rating: 5 } }], [original], leader, recordedTime)[0];

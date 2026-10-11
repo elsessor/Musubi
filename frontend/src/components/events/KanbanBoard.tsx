@@ -92,9 +92,23 @@ export function KanbanBoard({
 
   useEffect(() => {
     if (!mobileFiltersOpen) return;
+    const mobileViewport = window.matchMedia("(max-width: 639px)");
+    if (!mobileViewport.matches) {
+      setMobileFiltersOpen(false);
+      return;
+    }
     const dialog = mobileFiltersRef.current;
+    function closeOnDesktop() {
+      if (mobileViewport.matches) return;
+      dialog?.close();
+      setMobileFiltersOpen(false);
+    }
     dialog?.showModal();
-    return () => dialog?.close();
+    mobileViewport.addEventListener("change", closeOnDesktop);
+    return () => {
+      mobileViewport.removeEventListener("change", closeOnDesktop);
+      dialog?.close();
+    };
   }, [mobileFiltersOpen]);
 
   // Modals state
@@ -827,7 +841,7 @@ export function KanbanBoard({
         }} />
       )}
       {mobileFiltersOpen && (
-        <dialog ref={mobileFiltersRef} onCancel={() => setMobileFiltersOpen(false)} aria-labelledby="mobile-task-filters-title" className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40">
+        <dialog ref={mobileFiltersRef} onCancel={() => setMobileFiltersOpen(false)} aria-labelledby="mobile-task-filters-title" className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40 sm:hidden">
           <div className="mb-5 flex items-center justify-between">
             <h2 id="mobile-task-filters-title" className="text-lg font-bold">Filter tasks</h2>
             <button type="button" onClick={() => setMobileFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
@@ -853,6 +867,7 @@ export function KanbanBoard({
           onClose={() => setSelectedDetailTask(null)}
           onUpdateTask={handleUpdateTask}
           onAttachmentsUpdated={handleSavedTask}
+          onEditRating={setRatingTaskTarget}
           onDeleteTask={handleDeleteTask}
           customStatuses={customStatuses}
           statusOrder={statusOrder}
@@ -905,11 +920,14 @@ export function KanbanBoard({
 
       {ratingTaskTarget && (
         <TaskRatingModal
-          key={currentEvent.id}
+          key={`${currentEvent.id}:${ratingTaskTarget.performanceReview?.rating ? ratingTaskTarget.id : "pending"}`}
           eventId={currentEvent.id}
           isOpen={Boolean(ratingTaskTarget)}
           onClose={() => setRatingTaskTarget(null)}
-          tasks={tasks.filter((task) => (task.status === "Completed" || task.status === "Done") && !task.performanceReview?.rating)}
+          mode={ratingTaskTarget.performanceReview?.rating ? "edit" : "review"}
+          tasks={ratingTaskTarget.performanceReview?.rating
+            ? tasks.filter((task) => task.id === ratingTaskTarget.id)
+            : tasks.filter((task) => (task.status === "Completed" || task.status === "Done") && !task.performanceReview?.rating)}
           initialTaskId={ratingTaskTarget.id}
           onRate={handleRateTask}
         />

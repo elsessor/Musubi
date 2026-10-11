@@ -29,7 +29,7 @@ export function recordTaskPerformance(
     const requested = task.performanceReview;
     if (!requested) return updated;
     // Preserve existing reviews when an unrelated event/task field is saved.
-    if (oldReview && requested.rating === oldReview.rating) return updated;
+    if (oldReview && requested.rating === oldReview.rating && (requested.feedback || "") === (oldReview.feedback || "")) return updated;
     if (!Number.isInteger(requested.rating) || requested.rating < 1 || requested.rating > 5) {
       throw new AppError("Performance ratings must be between 1 and 5 stars.", 400);
     }

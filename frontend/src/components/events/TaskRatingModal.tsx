@@ -13,6 +13,7 @@ export type TaskRatingModalProps = {
   onClose: () => void;
   tasks: Task[];
   initialTaskId?: string;
+  mode?: "review" | "edit";
   onRate: (taskId: string, rating: number, feedback: string) => Promise<void>;
 };
 
@@ -25,7 +26,7 @@ const RATING_DESCRIPTIONS: Record<number, { text: string; color: string }> = {
   5: { text: "5 / 5 — Outstanding Execution", color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
 };
 
-export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId, onRate }: TaskRatingModalProps) {
+export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId, mode = "review", onRate }: TaskRatingModalProps) {
   const modalId = useId();
   const [selectedTaskId, setSelectedTaskId] = useState(initialTaskId || tasks[0]?.id || "");
   const [drafts, setDrafts] = useState<Record<string, { rating: number; feedback: string }>>({});
@@ -96,7 +97,7 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
         delete remaining[task.id];
         return remaining;
       });
-      const nextTask = tasks[selectedIndex + 1] || tasks.find((submission) => submission.id !== task.id);
+      const nextTask = mode === "edit" ? undefined : tasks[selectedIndex + 1] || tasks.find((submission) => submission.id !== task.id);
       if (nextTask) {
         setSelectedTaskId(nextTask.id);
         setHoverRating(0);
@@ -126,7 +127,7 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
               STUDENT LEADER REVIEW
             </p>
             <h2 id={`${modalId}-title`} className="break-words text-sm font-extrabold leading-snug text-slate-900 sm:text-base">
-              Rate Member Task Performance
+              {mode === "edit" ? "Edit Performance Rating" : "Rate Member Task Performance"}
             </h2>
           </div>
           <button
@@ -143,7 +144,7 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
         {/* Form content */}
         <form onSubmit={handleSubmit} className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
           <div className="min-h-0 min-w-0 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:space-y-4 sm:px-6 sm:py-4">
-          <section aria-label="Select submission" className="space-y-2">
+          {mode === "review" ? <section aria-label="Select submission" className="space-y-2">
             <h3 className="text-xs font-semibold text-slate-700">Select submission</h3>
             <CustomSelect
               value={task.id}
@@ -173,7 +174,7 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
                 Next <ChevronRight size={14} className="shrink-0" />
               </button>
             </div>
-          </section>
+          </section> : null}
 
           {/* Member & Task Context Card */}
           <div className="flex flex-wrap items-start justify-between gap-2 rounded-xl bg-slate-50 border border-slate-200/80 p-3 sm:items-center">
@@ -281,7 +282,7 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
                 "Saving..."
               ) : (
                 <>
-                  <Star size={14} className="fill-white" /> Submit Rating
+                  <Star size={14} className="fill-white" /> {mode === "edit" ? "Save Rating" : "Submit Rating"}
                 </>
               )}
             </button>

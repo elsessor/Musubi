@@ -40,6 +40,7 @@ type TaskDetailModalProps = {
   onClose: () => void;
   onUpdateTask: (updatedTask: Task) => void;
   onAttachmentsUpdated: (updatedTask: Task) => void;
+  onEditRating?: (task: Task) => void;
   onDeleteTask?: (taskId: string) => void;
   customStatuses?: CustomStatusConfig[];
   statusOrder?: string[];
@@ -55,6 +56,7 @@ export function TaskDetailModal({
   onClose,
   onUpdateTask,
   onAttachmentsUpdated,
+  onEditRating,
   onDeleteTask,
   customStatuses = [],
   statusOrder,
@@ -69,6 +71,9 @@ export function TaskDetailModal({
   const reviewerName = useAuthStore((state) => state.profile?.fullName || "");
   const reviewerRole = useAuthStore((state) => state.profile?.role);
   const canViewReview = reviewerRole === "Student Leader" || reviewerRole === "Admin" || isTaskAssignedToUser(task, reviewerUID, reviewerName);
+  const canEditRating = isLeader && canEdit && (reviewerRole === "Student Leader" || reviewerRole === "Admin")
+    && (task.status === "Completed" || task.status === "Done")
+    && !isTaskAssignedToUser(task, reviewerUID, reviewerName) && Boolean(onEditRating);
 
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
@@ -383,7 +388,14 @@ export function TaskDetailModal({
           {/* ADDITIONAL METADATA BADGES */}
           {canViewReview && task.performanceReview ? (
             <section aria-label="Leader performance review" className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-              <h4 className="text-xs font-semibold text-slate-700">Leader performance review</h4>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-xs font-semibold text-slate-700">Leader performance review</h4>
+                {canEditRating ? (
+                  <button type="button" onClick={() => onEditRating?.(task)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-blue-600 hover:bg-blue-50">
+                    <Edit3 size={14} /> Edit Rating
+                  </button>
+                ) : null}
+              </div>
               <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
                 <Star size={16} className="fill-amber-400 text-amber-400" /> {task.performanceReview.rating}/5
               </p>

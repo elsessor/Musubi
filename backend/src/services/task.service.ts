@@ -110,6 +110,7 @@ export async function downloadTaskFileForUser(uid: string, eventId: string, task
 
 export async function rateTaskForUser(uid: string, eventId: string, taskId: string, input: unknown) {
   const user = await getCurrentUser(uid);
+  if (!isTaskLeader(user)) throw new AppError("Only leaders and admins can rate task performance.", 403);
   const eventRef = eventReference(eventId);
   const ratingData = input && typeof input === "object" && !Array.isArray(input) ? (input as Record<string, any>) : {};
   const ratingNum = Number(ratingData.rating);
@@ -123,6 +124,9 @@ export async function rateTaskForUser(uid: string, eventId: string, taskId: stri
     const event = snapshot.data() || {};
     const original = getTask(event, taskId);
     assertEventAccess(user, event.orgId);
+    if (!["completed", "done"].includes(String(original.status || "").trim().toLowerCase())) {
+      throw new AppError("Only completed tasks can be rated.", 400);
+    }
     const ratingTarget = {
       ...original,
       performanceReview: {
