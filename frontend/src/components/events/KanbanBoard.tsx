@@ -815,7 +815,6 @@ export function KanbanBoard({
             onUpdateStatus={handleUpdateTaskStatus}
             onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
             onSelectTask={(task) => setSelectedDetailTask(task)}
-            onAddTask={isLeader ? () => setShowAddTaskModal(true) : undefined}
             customStatuses={customStatuses}
           />
         )}

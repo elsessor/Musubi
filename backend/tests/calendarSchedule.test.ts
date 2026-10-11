@@ -23,7 +23,47 @@ test("subtasks support saved ISO dates, deadline fields and start-only schedules
   for (const task of [{ dueDate: "2026-10-08" }, { dueDate: "TBD", deadline: "Oct 8, 2026" }, { startDate: "2026-10-08" }]) {
     assert.equal(isTaskScheduledOnDay(task, day(2026, 10, 8)), true);
   }
-  assert.equal(isTaskScheduledOnDay({ startDate: "2026-10-07", dueDate: "2026-10-08" }, day(2026, 10, 7)), false);
+  assert.equal(isTaskScheduledOnDay({ startDate: "2026-10-07", dueDate: "2026-10-08" }, day(2026, 10, 7)), true);
+});
+
+test("subtasks appear on every day from start through due date, including both endpoints", () => {
+  const task = { startDate: "Oct 7, 2026 at 09:00 AM", dueDate: "Oct 10, 2026 at 05:30 PM" };
+  for (const date of [7, 8, 9, 10]) {
+    assert.equal(isTaskScheduledOnDay(task, day(2026, 10, date)), true);
+  }
+  for (const date of [day(2026, 10, 6), day(2026, 10, 11), day(2027, 10, 8)]) {
+    assert.equal(isTaskScheduledOnDay(task, date), false);
+  }
+});
+
+test("subtask ranges cross month and year boundaries and support legacy deadlines", () => {
+  const task = { startDate: "2026-12-31", dueDate: "TBD", deadline: "Jan 2, 2027 at 02:30 PM" };
+  for (const date of [day(2026, 12, 31), day(2027, 1, 1), day(2027, 1, 2)]) {
+    assert.equal(isTaskScheduledOnDay(task, date), true);
+  }
+  for (const date of [day(2026, 12, 30), day(2027, 1, 3)]) {
+    assert.equal(isTaskScheduledOnDay(task, date), false);
+  }
+});
+
+test("subtask ranges use a single known date and reject invalid or reversed endpoints", () => {
+  for (const task of [
+    { startDate: "TBD", dueDate: "2026-10-08" },
+    { startDate: "2026-10-08", dueDate: "Not set" },
+    { startDate: "2026-10-08", dueDate: "2026-10-08" }
+  ]) {
+    assert.equal(isTaskScheduledOnDay(task, day(2026, 10, 8)), true);
+    assert.equal(isTaskScheduledOnDay(task, day(2026, 10, 7)), false);
+    assert.equal(isTaskScheduledOnDay(task, day(2026, 10, 9)), false);
+  }
+  for (const task of [
+    { startDate: "2026-10-09", dueDate: "2026-10-08" },
+    { startDate: "invalid", dueDate: "2026-10-08" },
+    { startDate: "2026-10-08", dueDate: "invalid" },
+    { startDate: "Oct 8", dueDate: "2026-10-08" }
+  ]) {
+    assert.equal(isTaskScheduledOnDay(task, day(2026, 10, 8)), false);
+  }
 });
 
 test("events occupy only their saved inclusive range across month and year boundaries", () => {

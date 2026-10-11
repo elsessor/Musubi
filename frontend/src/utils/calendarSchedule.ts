@@ -25,8 +25,9 @@ export function isEventScheduledOnDay(event: { startDate?: string; endDate?: str
 }
 
 export function isTaskScheduledOnDay(task: { dueDate?: string; deadline?: string; startDate?: string }, day: Date): boolean {
-  const value = [task.dueDate, task.deadline, task.startDate]
+  const endValue = [task.dueDate, task.deadline]
     .find((date) => date?.trim() && !/^(tbd|not set)$/i.test(date.trim()));
-  const scheduled = calendarDate(value);
-  return scheduled !== null && isSameCalendarDay(scheduled, day);
+  const startValue = [task.startDate, endValue]
+    .find((date) => date?.trim() && !/^(tbd|not set)$/i.test(date.trim()));
+  return isEventScheduledOnDay({ startDate: startValue, endDate: endValue }, day);
 }

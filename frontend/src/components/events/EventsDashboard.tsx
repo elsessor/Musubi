@@ -4,8 +4,6 @@ import {
   BookOpen,
   Calendar,
   CheckSquare,
-  ChevronLeft,
-  ChevronRight,
   Columns3,
   GripVertical,
   LayoutGrid,
@@ -23,6 +21,7 @@ import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { CalendarView } from "./CalendarView";
 
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
@@ -40,59 +39,6 @@ const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ s
   { mode: "kanban", title: "Kanban Columns", icon: Columns3 },
   { mode: "calendar", title: "Calendar View", icon: Calendar }
 ];
-
-function buildCalendarDays(currentDate: Date, events: Event[]) {
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-
-  const firstDayOfMonth = new Date(year, month, 1);
-  const startDayOfWeek = firstDayOfMonth.getDay();
-
-  const lastDateOfMonth = new Date(year, month + 1, 0).getDate();
-  const lastDateOfPrevMonth = new Date(year, month, 0).getDate();
-
-  const days: { dayNumber: number; month: "prev" | "current" | "next"; isToday: boolean; matchingEvents: Event[] }[] = [];
-
-  for (let i = startDayOfWeek - 1; i >= 0; i--) {
-    days.push({
-      dayNumber: lastDateOfPrevMonth - i,
-      month: "prev",
-      isToday: false,
-      matchingEvents: []
-    });
-  }
-
-  const today = new Date();
-
-  for (let d = 1; d <= lastDateOfMonth; d++) {
-    const isToday =
-      today.getFullYear() === year &&
-      today.getMonth() === month &&
-      today.getDate() === d;
-
-    const cellDate = new Date(year, month, d);
-    const matchingEvents = events.filter((event) => isEventScheduledOnDay(event, cellDate));
-
-    days.push({
-      dayNumber: d,
-      month: "current",
-      isToday,
-      matchingEvents
-    });
-  }
-
-  const remaining = (7 - (days.length % 7)) % 7;
-  for (let i = 1; i <= remaining; i++) {
-    days.push({
-      dayNumber: i,
-      month: "next",
-      isToday: false,
-      matchingEvents: []
-    });
-  }
-
-  return days;
-}
 
 type EventsDashboardProps = {
   events: Event[];
@@ -123,20 +69,11 @@ export function EventsDashboard({
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [calendarDate, setCalendarDate] = useState<Date>(() => new Date());
-  const [selectedCalendarDay, setSelectedCalendarDay] = useState(() => new Date().getDate());
   const [smallScreen, setSmallScreen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersDialogRef = useRef<HTMLDialogElement>(null);
   const [kanbanStatus, setKanbanStatus] = useState("Active");
   const compactMobile = smallScreen;
-
-  const calendarMonth = calendarDate.getMonth();
-  const calendarYear = calendarDate.getFullYear();
-  useEffect(() => {
-    const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
-    setSelectedCalendarDay((day) => Math.min(day, lastDay));
-  }, [calendarMonth, calendarYear]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 639px)");
@@ -981,114 +918,19 @@ export function EventsDashboard({
         </div>
       )}
 
-      {/* 5. Calendar View */}
-      {viewMode === "calendar" && compactMobile && (
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <h2 className="flex items-center gap-2 text-sm font-bold"><Calendar size={16} className="text-blue-600" />{calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" })}</h2>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => { const today = new Date(); setCalendarDate(today); setSelectedCalendarDay(today.getDate()); }} className="min-h-11 rounded-xl border border-slate-200 px-3 text-xs font-semibold">Today</button>
-              <button type="button" aria-label="Previous month" onClick={() => { setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1)); setSelectedCalendarDay(1); }} className="flex size-11 items-center justify-center rounded-lg hover:bg-slate-100"><ChevronLeft size={18} /></button>
-              <button type="button" aria-label="Next month" onClick={() => { setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1)); setSelectedCalendarDay(1); }} className="flex size-11 items-center justify-center rounded-lg hover:bg-slate-100"><ChevronRight size={18} /></button>
-            </div>
-          </div>
-          <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-400">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day} aria-label={day}>{day.charAt(0)}</span>)}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {buildCalendarDays(calendarDate, visible).map((day, index) => day.month !== "current" ? <div key={`blank-${index}`} /> : (
-              <button key={day.dayNumber} type="button" onClick={() => setSelectedCalendarDay(day.dayNumber)} aria-pressed={selectedCalendarDay === day.dayNumber} aria-label={`${calendarDate.toLocaleString("en-US", { month: "long" })} ${day.dayNumber}, ${day.matchingEvents.length} events`} className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-lg text-xs font-semibold ${selectedCalendarDay === day.dayNumber ? "bg-blue-600 text-white" : day.isToday ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"}`}>
-                {day.dayNumber}
-                <span aria-hidden="true" className={`size-1 rounded-full ${day.matchingEvents.length ? selectedCalendarDay === day.dayNumber ? "bg-white" : "bg-blue-500" : "bg-transparent"}`} />
-              </button>
-            ))}
-          </div>
-          <div className="space-y-2 border-t border-slate-100 pt-3">
-            <h3 className="text-sm font-bold">{calendarDate.toLocaleString("en-US", { month: "long" })} {selectedCalendarDay} · {visible.filter((event) => isEventScheduledOnDay(event, new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedCalendarDay))).length} events</h3>
-            {visible.filter((event) => isEventScheduledOnDay(event, new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedCalendarDay))).map((event) => (
-              <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} compact />
-            ))}
-            {!visible.some((event) => isEventScheduledOnDay(event, new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedCalendarDay))) && <p className="py-4 text-sm text-slate-500">No events scheduled for this day.</p>}
-          </div>
-        </section>
-      )}
-      {viewMode === "calendar" && !compactMobile && (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-4">
-            <button
-              type="button"
-              aria-label="Previous month"
-              onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}
-              className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <h3 className="text-base font-bold text-slate-900">
-                {calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" })}
-              </h3>
-              <button type="button" onClick={() => setCalendarDate(new Date())} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">
-                Today
-              </button>
-            </div>
-            <button
-              type="button"
-              aria-label="Next month"
-              onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}
-              className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/50 py-2.5 text-center text-[11px] font-semibold text-slate-500">
-            <div>SUN</div>
-            <div>MON</div>
-            <div>TUE</div>
-            <div>WED</div>
-            <div>THU</div>
-            <div>FRI</div>
-            <div>SAT</div>
-          </div>
-
-          <div className="grid grid-cols-7 divide-x divide-y divide-slate-100">
-            {buildCalendarDays(calendarDate, visible).map((day, idx) => {
-              const isCurrentMonth = day.month === "current";
-              const isToday = day.isToday;
-
-              return (
-                <div key={idx} className={`min-h-[90px] p-2 transition ${isCurrentMonth ? "bg-white" : "bg-slate-50/40 text-slate-400"}`}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span
-                      className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold ${
-                        isToday
-                          ? "bg-blue-600 text-white font-bold shadow-sm"
-                          : isCurrentMonth
-                          ? "text-slate-700"
-                          : "text-slate-400"
-                      }`}
-                    >
-                      {day.dayNumber}
-                    </span>
-                  </div>
-
-                  {day.matchingEvents.map((evt) => {
-                    const theme = getStatusTheme(evt.status, customStatuses);
-                    return (
-                      <button
-                        key={evt.id}
-                        onClick={() => onSelectEvent(evt)}
-                        className={`mt-1 block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] font-semibold ${theme.bg} ${theme.text}`}
-                      >
-                        {evt.title}
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {/* Calendar view is available to leaders and organization members. */}
+      {viewMode === "calendar" && (
+        <CalendarView
+          items={visible}
+          itemLabel="events"
+          getId={(event) => event.id}
+          getTitle={(event) => event.title}
+          getStatus={(event) => event.status}
+          getDescription={(event) => event.description}
+          isScheduled={isEventScheduledOnDay}
+          onSelect={onSelectEvent}
+          customStatuses={customStatuses}
+        />
       )}
 
       {visible.length === 0 && viewMode !== "calendar" && (
