@@ -10,8 +10,11 @@ import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssi
 import { TaskAssignee } from "./TaskAssignee";
 import { isTaskScheduledOnDay } from "@/utils/calendarSchedule";
 import { CalendarView } from "./CalendarView";
+import { TaskDependencyBadge } from "./TaskDependencies";
+import { isBlockedTaskStatus } from "@/utils/taskDependencies";
 
 type TaskCalendarViewProps = {
+  readOnly?: boolean;
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
   onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
@@ -19,11 +22,11 @@ type TaskCalendarViewProps = {
   customStatuses?: CustomStatusConfig[];
 };
 
-export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses }: TaskCalendarViewProps) {
+export function TaskCalendarView({ readOnly = false, tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses }: TaskCalendarViewProps) {
   const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
   const role = useAuthStore((state) => state.profile?.role);
-  function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
+  function canEditStatus(task: Task) { return !readOnly && canUpdateTaskStatus(task, uid, fullName, role); }
   const [selectedTaskSnapshot, setSelectedTask] = useState<Task | null>(null);
   const selectedTask = tasks.find((task) => task.id === selectedTaskSnapshot?.id) || null;
 
@@ -38,7 +41,8 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
         getDescription={(task) => task.description}
         isScheduled={isTaskScheduledOnDay}
         onSelect={(task) => onSelectTask ? onSelectTask(task) : setSelectedTask(task)}
-        renderDetails={(task) => <TaskAssignee task={task} />}
+        renderDetails={(task) => <><TaskAssignee task={task} /><TaskDependencyBadge task={task} /></>}
+        renderCompactIndicator={(task) => <TaskDependencyBadge task={task} compact />}
         customStatuses={customStatuses}
       />
 
@@ -61,12 +65,13 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
               <h3 className="text-base font-bold text-slate-900">{selectedTask.title || selectedTask.description}</h3>
               <p className="text-xs text-slate-500">{selectedTask.description}</p>
               <TaskAssignee task={selectedTask} />
+              <TaskDependencyBadge task={selectedTask} />
               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${getStatusTheme(selectedTask.status, customStatuses).badge}`}>{selectedTask.status}</span>
 
               <div className="flex items-center justify-between text-xs pt-2">
                 <span className="text-slate-400">Due: <strong className="text-slate-700">{selectedTask.dueDate}</strong></span>
                 <div className="flex min-w-0 items-center gap-2"><span className="text-slate-400">Priority:</span>
-                  {canUseTaskPriorityControl(selectedTask, uid, fullName, Boolean(onUpdatePriority), role) ? (
+                  {!readOnly && canUseTaskPriorityControl(selectedTask, uid, fullName, Boolean(onUpdatePriority), role) ? (
                     <div className="w-36 max-w-full">
                       <CustomSelect value={selectedTask.priority || "Medium"} portal onChange={(value) => {
                         const priority = value as TaskPriority;
@@ -82,11 +87,12 @@ export function TaskCalendarView({ tasks, onUpdateStatus, onUpdatePriority, onSe
               {canEditStatus(selectedTask) && selectedTask.status !== "Completed" && (
                 <button
                   type="button"
+                  disabled={isBlockedTaskStatus(selectedTask, "Completed")}
                   onClick={() => {
-                    if (canEditStatus(selectedTask)) onUpdateStatus(selectedTask.id, "Completed");
+                    if (canEditStatus(selectedTask) && !isBlockedTaskStatus(selectedTask, "Completed")) onUpdateStatus(selectedTask.id, "Completed");
                     setSelectedTask(null);
                   }}
-                  className="flex-1 rounded-xl bg-emerald-600 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors"
+                  className="flex-1 rounded-xl bg-emerald-600 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Mark Completed
                 </button>

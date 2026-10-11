@@ -7,8 +7,10 @@ import { PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
+import { TaskDependencyBadge } from "./TaskDependencies";
 
 type TaskCardProps = {
+  readOnly?: boolean;
   task: Task;
   isDragging?: boolean;
   onDragStart?: (taskId: string) => void;
@@ -18,6 +20,7 @@ type TaskCardProps = {
 };
 
 export function TaskCard({
+  readOnly = false,
   task,
   isDragging = false,
   onDragStart,
@@ -28,7 +31,7 @@ export function TaskCard({
   const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
   const role = useAuthStore((state) => state.profile?.role);
-  const canDrag = Boolean(onDragStart) && canUpdateTaskStatus(task, uid, fullName, role);
+  const canDrag = !readOnly && Boolean(onDragStart) && canUpdateTaskStatus(task, uid, fullName, role);
   const pCfg = priorityConfig[task.priority || "Medium"];
 
   return (
@@ -80,6 +83,7 @@ export function TaskCard({
             </span>
           ) : null}
           <OverdueBadge task={task} />
+          <TaskDependencyBadge task={task} />
         </div>
 
         {canDrag && (
@@ -109,7 +113,7 @@ export function TaskCard({
       </div>
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="min-w-0 flex-1"><TaskAssignee task={task} compactMobile /></div>
-        {onReassign ? <button
+        {onReassign && !readOnly && !task.archivedAt ? <button
           type="button"
           onClick={(event) => { event.stopPropagation(); onReassign(task); }}
           title="Reassign task delegation"

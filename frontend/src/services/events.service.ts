@@ -1,14 +1,11 @@
 import type { User } from "firebase/auth";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   getDocs,
   onSnapshot,
   query,
-  serverTimestamp,
-  updateDoc,
   where
 } from "firebase/firestore";
 
@@ -17,6 +14,7 @@ import type { Event, EventStatus, Task } from "../components/events/types";
 import { useAuthStore } from "@/store/authStore";
 import { getDateRangeError } from "@/utils/dateRange";
 import { getEventMemberCount } from "@/utils/eventMembers";
+import { getTaskDependencyError, withTaskDependencyState } from "@/utils/taskDependencies";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 
@@ -56,6 +54,9 @@ async function getValidToken(user: User | null): Promise<string> {
 export function normalizeEvent(id: string, data: Record<string, any>): Event {
   return {
     id,
+    archivedAt: typeof data.archivedAt === "string" ? data.archivedAt : null,
+    archivedByUID: typeof data.archivedByUID === "string" ? data.archivedByUID : null,
+    statusBeforeArchive: data.statusBeforeArchive,
     title: typeof data.title === "string" ? data.title : "Untitled Event",
     description: typeof data.description === "string" ? data.description : "",
     status: (typeof data.status === "string" && data.status.trim()
@@ -68,7 +69,7 @@ export function normalizeEvent(id: string, data: Record<string, any>): Event {
     progress: typeof data.progress === "number" ? data.progress : 0,
     committee: typeof data.committee === "string" ? data.committee : "General",
     tasks: Array.isArray(data.tasks)
-      ? data.tasks.map((t: any) => ({
+      ? withTaskDependencyState(data.tasks.map((t: any) => ({
         ...t,
         title: typeof t.title === "string" && t.title.trim()
           ? t.title
@@ -76,7 +77,7 @@ export function normalizeEvent(id: string, data: Record<string, any>): Event {
             ? t.description
             : "Untitled Subtask",
         description: typeof t.description === "string" ? t.description : ""
-      }))
+      })))
       : [],
     customStatuses: Array.isArray(data.customStatuses) ? data.customStatuses : [],
     statusOrder: Array.isArray(data.statusOrder) ? data.statusOrder : []
@@ -177,6 +178,8 @@ export async function createEventFirestore(
 ): Promise<string> {
   const error = getDateRangeError(event.startDate, event.endDate);
   if (error) throw new Error(error);
+  const dependencyError = getTaskDependencyError(event.tasks || []);
+  if (dependencyError) throw new Error(dependencyError);
   for (const task of event.tasks || []) {
     const taskError = getDateRangeError(task.startDate, task.dueDate || task.deadline, "Task");
     if (taskError) throw new Error(`${task.title || "Subtask"}: ${taskError}`);
@@ -200,23 +203,8 @@ export async function createEventFirestore(
     return data.id;
   }
 
-  const db = getFirebaseDb();
-  const targetOrgId = orgId || "default-org";
-  const docRef = await addDoc(collection(db, "events"), {
-    title: event.title || "New Event",
-    description: event.description || "",
-    status: event.status || "Active",
-    startDate: event.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    endDate: event.endDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    memberCount: getEventMemberCount(event.tasks),
-    progress: event.progress || 0,
-    committee: event.committee ?? "",
-    tasks: event.tasks || [],
-    orgId: targetOrgId,
-    createdAt: serverTimestamp()
-  });
-  invalidateEventsCache(targetOrgId);
-  return docRef.id;
+  // Task dependency checks must run in the backend transaction for every write.
+  throw new Error("Sign in again to create an event.");
 }
 
 export async function updateEventFirestore(
@@ -245,13 +233,7 @@ export async function updateEventFirestore(
     return;
   }
 
-  const db = getFirebaseDb();
-  const docRef = doc(db, "events", eventId);
-  await updateDoc(docRef, {
-    ...payload,
-    updatedAt: serverTimestamp()
-  });
-  invalidateEventsCache();
+  throw new Error("Sign in again to save event changes.");
 }
 
 export async function deleteEventFirestore(user: User | null, eventId: string): Promise<void> {

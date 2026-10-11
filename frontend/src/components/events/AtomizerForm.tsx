@@ -12,6 +12,7 @@ import type { OrganizationMember } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { parseScheduleDate } from "@/utils/dateRange";
 import { resolveSubtaskAssignee } from "@/utils/subtaskAssignment";
+import { resolveSuggestedTaskDependencies, requiresFinishedDependencies, withTaskDependencyState } from "@/utils/taskDependencies";
 import { DEFAULT_ATOMIZER_STATUSES, EMPTY_ATOMIZER_DRAFT, useAtomizerDraftStore, type AtomizerDraftState } from "@/store/atomizerDraftStore";
 
 const DEFAULT_STATUS_LIST = DEFAULT_ATOMIZER_STATUSES;
@@ -190,7 +191,7 @@ type AtomizerFormProps = {
     publishedTasks: Task[],
     newEventDetails?: { title: string; description: string },
     workflow?: { customStatuses: CustomStatusConfig[]; statusOrder: string[] }
-  ) => void;
+  ) => void | Promise<void>;
 };
 
 export function AtomizerForm({ events, members = [], onPublishGoalTasks }: AtomizerFormProps) {
@@ -278,8 +279,11 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         defaultStatus
       });
 
+      const generationId = Date.now();
+      const aiTaskIds = data.tasks.map((_, index) => `subtask-ai-${generationId}-${index}`);
       const rawSubtasks: Subtask[] = data.tasks.map((item, idx) => ({
-        id: `subtask-ai-${Date.now()}-${idx}`,
+        id: aiTaskIds[idx],
+        dependsOnTaskIds: resolveSuggestedTaskDependencies(aiTaskIds, item.dependencyIndexes, idx),
         confirmed: false,
         title: item.title,
         description:
@@ -300,10 +304,12 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         status: defaultStatus
       }));
 
+      const readySubtasks = withTaskDependencyState(rawSubtasks).map((task) => task.blockedBy && requiresFinishedDependencies(task.status)
+        ? { ...task, status: "To Do" as TaskStatus } : task);
       // Heuristically delegate subtasks to organization members with matching skills
       const delegatedSubtasks = members && members.length > 0
-        ? delegateSubtasksHeuristically(rawSubtasks, members)
-        : rawSubtasks;
+        ? delegateSubtasksHeuristically(readySubtasks, members)
+        : readySubtasks;
 
       const draft: GoalDraft = {
         id: `draft-${Date.now()}`,
@@ -337,9 +343,9 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         onDraftChange={(update) => setActiveGoalDraft((current) => current ? update(current) : current)}
         customStatuses={customStatuses}
         members={members}
+        existingTasks={targetEvent?.tasks || []}
         onBack={() => setActiveGoalDraft(null)}
-        onPublishGoal={(publishedGoal) => {
-          setActiveGoalDraft(publishedGoal);
+        onPublishGoal={async (publishedGoal) => {
           const targetId = isCreateFromDescription
             ? "CREATE_NEW"
             : selectedEventId || events[0]?.id || "culture-week";
@@ -364,6 +370,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
             return {
               id: st.id,
+              dependsOnTaskIds: st.dependsOnTaskIds || [],
+              archivedAt: st.archivedAt || null,
               title: st.title,
               description: st.description,
               status: st.status || "To Do",
@@ -385,7 +393,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           });
 
           if (onPublishGoalTasks) {
-            onPublishGoalTasks(
+            await onPublishGoalTasks(
               targetId,
               publishedTasks,
               isCreateFromDescription
@@ -397,6 +405,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               { customStatuses, statusOrder }
             );
           }
+          setActiveGoalDraft(publishedGoal);
         }}
       />
     );
@@ -450,7 +459,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               />
             ) : (
               <ModernEventDropdown
-                events={events}
+                events={events.filter((event) => event.status !== "Archived")}
                 value={selectedEventId}
                 onChange={setSelectedEventId}
               />

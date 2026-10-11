@@ -32,6 +32,9 @@ export function getDateRangeError(start: unknown, target: unknown, kind: "Event"
   const targetLabel = kind === "Task" ? "deadline" : "target date";
   if (present(start) && !startDate) return `${kind} start date is invalid. Choose a valid date and time.`;
   if (present(target) && !targetDate) return `${kind} ${targetLabel} is invalid. Choose a valid date and time.`;
-  if (startDate && targetDate && startDate > targetDate) return `${kind} ${targetLabel} must be on or after its start date and time.`;
+  if (startDate && targetDate) {
+    if (kind === "Task" && targetDate <= startDate) return "Task deadline must be later than its start date and time.";
+    if (startDate > targetDate) return `${kind} ${targetLabel} must be on or after its start date and time.`;
+  }
   return null;
 }

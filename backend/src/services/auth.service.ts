@@ -11,7 +11,8 @@ import { assertCanUpdateOrganization } from "../utils/organizationPermissions.js
 import { renameCommitteeReferences } from "../utils/committeeReferences.js";
 import { assertCanPostAnnouncement, canViewAnnouncement } from "../utils/announcementAccess.js";
 import { getDateRangeError } from "../utils/dateRange.js";
-import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments } from "../utils/taskPermissions.js";
+import { assertCanEditEvent, assertEventAccess, preserveTaskAttachments, recordTaskArchives } from "../utils/taskPermissions.js";
+import { assertTaskDependencies, withTaskDependencyState } from "../utils/taskDependencies.js";
 import { getAdminAccountStatus, type AdminAccountStatus } from "../utils/adminAccountStatus.js";
 import { appCache } from "../utils/cache.js";
 import { getEventMemberCount } from "../utils/eventMembers.js";
@@ -1439,10 +1440,14 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
   const user = await getCurrentUser(uid);
   const targetOrgId = input.orgId || user.organizationId || "default-org";
   assertCanEditEvent(user, targetOrgId);
+  if (input.tasks !== undefined && !Array.isArray(input.tasks)) throw new AppError("Tasks must be a list.", 400);
+  if (input.tasks?.some((task: unknown) => !task || typeof task !== "object" || Array.isArray(task))) throw new AppError("Choose valid tasks.", 400);
+  input.tasks = recordTaskArchives(input.tasks || [], [], uid);
   const startDate = input.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const endDate = input.endDate || new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const dateError = getDateRangeError(startDate, endDate);
   if (dateError) throw new AppError(dateError, 400);
+  assertTaskDependencies(input.tasks || []);
   for (const task of input.tasks || []) {
     const error = getDateRangeError(task.startDate, task.dueDate || task.deadline, "Task");
     if (error) throw new AppError(`${task.title || "Subtask"}: ${error}`, 400);
@@ -1452,6 +1457,7 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     title: input.title.trim(),
     description: (input.description || "").trim(),
     status: input.status || "Active",
+    ...(input.status === "Archived" ? { archivedAt: new Date().toISOString(), archivedByUID: uid, statusBeforeArchive: "Active" } : {}),
     startDate,
     endDate,
     memberCount: getEventMemberCount(input.tasks),
@@ -1459,7 +1465,7 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     committee: input.committee ?? "",
     customStatuses: Array.isArray(input.customStatuses) ? input.customStatuses : [],
     statusOrder: Array.isArray(input.statusOrder) ? input.statusOrder : [],
-    tasks: recordTaskPerformance(Array.isArray(input.tasks) ? input.tasks.map((task) => ({ ...task, performanceReview: null, attachments: [] })) : [], [], { uid, fullName: user.fullName, isLeader: false }),
+    tasks: withTaskDependencyState(recordTaskPerformance(Array.isArray(input.tasks) ? input.tasks.map((task) => ({ ...task, performanceReview: null, attachments: [] })) : [], [], { uid, fullName: user.fullName, isLeader: false })),
     orgId: targetOrgId,
     createdBy: uid,
     createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
@@ -1491,7 +1497,12 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
   const eventOrgId = typeof beforeData.orgId === "string" ? beforeData.orgId : null;
   assertCanEditEvent(user, eventOrgId);
   const updatePayload: Record<string, any> = { ...input };
+  if (input.tasks !== undefined && !Array.isArray(input.tasks)) throw new AppError("Tasks must be a list.", 400);
   delete updatePayload.id;
+  // Archive metadata comes from the server, not client-provided timestamps or actors.
+  delete updatePayload.archivedAt;
+  delete updatePayload.archivedByUID;
+  delete updatePayload.statusBeforeArchive;
   updatePayload.updatedAt = firebaseAdmin.firestore.FieldValue.serverTimestamp();
 
   await firestore.runTransaction(async (transaction) => {
@@ -1500,12 +1511,30 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
     const latest = latestSnapshot.data() || {};
     assertCanEditEvent(user, latest.orgId);
     const payload = { ...updatePayload };
+    if (typeof payload.status === "string") {
+      if (payload.status === "Archived") {
+        payload.archivedAt = latest.archivedAt || new Date().toISOString();
+        payload.archivedByUID = latest.archivedByUID || uid;
+        payload.statusBeforeArchive = latest.status === "Archived" ? latest.statusBeforeArchive || "Active" : latest.status || "Active";
+      } else if (latest.status === "Archived") {
+        payload.archivedAt = null;
+        payload.archivedByUID = null;
+      }
+    }
     if ("startDate" in payload || "endDate" in payload) {
       const error = getDateRangeError("startDate" in payload ? payload.startDate : latest.startDate, "endDate" in payload ? payload.endDate : latest.endDate);
       if (error) throw new AppError(error, 400);
     }
     if (Array.isArray(payload.tasks)) {
+      if (latest.status === "Archived" && (!payload.status || payload.status === "Archived")) throw new AppError("Restore this archived event before changing its subtasks.", 409);
       const originals = Array.isArray(latest.tasks) ? latest.tasks : [];
+      if (payload.tasks.some((task: unknown) => !task || typeof task !== "object" || Array.isArray(task))) throw new AppError("Choose valid tasks.", 400);
+      // Older clients that omit the new field must not silently erase prerequisites.
+      payload.tasks = payload.tasks.map((task: Record<string, any>) => ({ ...task,
+        dependsOnTaskIds: task.dependsOnTaskIds !== undefined ? task.dependsOnTaskIds : originals.find((original: Record<string, any>) => original.id === task.id)?.dependsOnTaskIds || []
+      }));
+      payload.tasks = recordTaskArchives(payload.tasks, originals, uid);
+      assertTaskDependencies(payload.tasks, originals);
       for (const task of payload.tasks) {
         const original = originals.find((item: any) => item.id === task.id);
         if (!original || task.startDate !== original.startDate || task.dueDate !== original.dueDate || task.deadline !== original.deadline) {
@@ -1514,12 +1543,17 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
         }
       }
       payload.tasks = recordTaskPerformance(preserveTaskAttachments(payload.tasks, originals), originals, { uid, fullName: user.fullName, isLeader: true });
+      payload.tasks = withTaskDependencyState(payload.tasks);
+      const activeTasks = payload.tasks.filter((task: any) => !task.archivedAt);
+      payload.progress = activeTasks.length ? Math.round(activeTasks.filter((task: any) => ["Completed", "Done"].includes(task.status)).length / activeTasks.length * 100) : 0;
     }
     payload.memberCount = getEventMemberCount(Array.isArray(payload.tasks) ? payload.tasks : latest.tasks);
     transaction.update(docRef, payload);
   });
 
   let actionMsg = `Updated event "${beforeData.title || "Event"}"`;
+  if (input.status === "Archived" && beforeData.status !== "Archived") actionMsg = `Archived event "${beforeData.title || "Event"}"`;
+  else if (beforeData.status === "Archived" && input.status && input.status !== "Archived") actionMsg = `Restored event "${beforeData.title || "Event"}"`;
   if (Array.isArray(input.tasks) && Array.isArray(beforeData.tasks)) {
     const newlyCompleted = input.tasks.filter(
       (t: any) =>
@@ -1530,6 +1564,10 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
       const taskTitles = newlyCompleted.map((t: any) => t.title || t.description || "Subtask").join(", ");
       actionMsg = `Completed subtask: ${taskTitles}`;
     }
+    const archived = input.tasks.filter((task: any) => task.archivedAt && !beforeData.tasks.find((original: any) => original.id === task.id)?.archivedAt);
+    const restored = input.tasks.filter((task: any) => task.archivedAt === null && beforeData.tasks.find((original: any) => original.id === task.id)?.archivedAt);
+    if (archived.length) actionMsg = `Archived subtask: ${archived.map((task: any) => task.title || "Subtask").join(", ")}`;
+    else if (restored.length) actionMsg = `Restored subtask: ${restored.map((task: any) => task.title || "Subtask").join(", ")}`;
   }
 
   writeAuditLog({

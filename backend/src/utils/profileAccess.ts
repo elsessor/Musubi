@@ -29,8 +29,8 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
   const name = typeof data.fullName === "string" ? data.fullName : "Unnamed member";
   const tasks: TaskRecord[] = events.flatMap((event) => (Array.isArray(event.tasks) ? event.tasks : [])
     .filter((task: TaskRecord) => ownsProfileTask({ uid: id, fullName: name }, task))
-    .map((task: TaskRecord) => ({ ...task, eventId: event.id, eventTitle: event.title, customStatuses: event.customStatuses })));
-  const unfinished = tasks.filter((task: TaskRecord) => !["completed", "done", "cancelled", "canceled"].includes(String(task.status).trim().toLowerCase()));
+    .map((task: TaskRecord) => ({ ...task, archivedAt: task.archivedAt || (event.status === "Archived" ? event.archivedAt || "archived" : null), eventId: event.id, eventTitle: event.title, customStatuses: event.customStatuses })));
+  const unfinished = tasks.filter((task: TaskRecord) => !task.archivedAt && !["completed", "done", "cancelled", "canceled", "archived"].includes(String(task.status).trim().toLowerCase()));
   const rawAvail = typeof data.availability === "string" && data.availability.trim()
     ? data.availability.trim()
     : typeof data.status === "string" && data.status.trim()
@@ -41,7 +41,7 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
   const assignedTasks = tasks.map((task: TaskRecord) => ({
     id: task.id, title: task.title || task.description || "Untitled Subtask", eventTitle: task.eventTitle, eventId: task.eventId,
     dueDate: task.dueDate || "", deadline: task.deadline,
-    status: task.status, customStatuses: task.customStatuses || []
+    status: task.status, archivedAt: task.archivedAt || null, customStatuses: task.customStatuses || []
   }));
   const publicProfile = {
     id, name,

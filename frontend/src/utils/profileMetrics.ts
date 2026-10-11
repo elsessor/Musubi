@@ -2,12 +2,13 @@ import type { Event, Task } from "@/components/events/types";
 import { isTaskAssignedToUser } from "./taskAssignment";
 
 export const PROFILE_TASK_CAPACITY = 5;
-export type ProfileTaskFilter = "all" | "done" | "active" | "pending" | "cancelled";
+export type ProfileTaskFilter = "all" | "done" | "active" | "pending" | "cancelled" | "archived";
 export type ProfileTask = Task & { eventId: string; eventTitle: string; customStatuses?: Event["customStatuses"] };
 
-export function getProfileTaskStatus(task: Pick<Task, "status">): Exclude<ProfileTaskFilter, "all"> {
+export function getProfileTaskStatus(task: Pick<Task, "status" | "archivedAt">): Exclude<ProfileTaskFilter, "all"> {
   const status = (task.status || "").trim().toLowerCase();
   if (status === "completed" || status === "done") return "done";
+  if (task.archivedAt || status === "archived") return "archived";
   if (status === "cancelled" || status === "canceled") return "cancelled";
   if (!status || status === "to do" || status === "pending") return "pending";
   return "active";
@@ -17,7 +18,7 @@ export function getAssignedProfileTasks(events: Event[], uid: string, fullName: 
   if (!uid) return [];
   return events.flatMap((event) => event.tasks
     .filter((task) => isTaskAssignedToUser(task, uid, fullName))
-    .map((task) => ({ ...task, eventId: event.id, eventTitle: event.title, customStatuses: event.customStatuses })));
+    .map((task) => ({ ...task, archivedAt: task.archivedAt || (event.status === "Archived" ? event.archivedAt || "archived" : null), eventId: event.id, eventTitle: event.title, customStatuses: event.customStatuses })));
 }
 
 function validDate(value: string | null | undefined): Date | null {
@@ -28,7 +29,7 @@ function validDate(value: string | null | undefined): Date | null {
 }
 
 export function getProfileMetrics(tasks: ProfileTask[], now = new Date()) {
-  const counts = { done: 0, active: 0, pending: 0, cancelled: 0 };
+  const counts = { done: 0, active: 0, pending: 0, cancelled: 0, archived: 0 };
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const weeks = Array.from({ length: Math.ceil(daysInMonth / 7) }, (_, i) => ({
     label: `Week ${i + 1}`,

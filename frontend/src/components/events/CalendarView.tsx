@@ -16,13 +16,14 @@ type CalendarViewProps<T> = {
   isScheduled: (item: T, date: Date) => boolean;
   onSelect: (item: T) => void;
   renderDetails?: (item: T) => ReactNode;
+  renderCompactIndicator?: (item: T) => ReactNode;
   customStatuses?: CustomStatusConfig[];
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const dateKey = (date: Date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 
-export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, getDescription, isScheduled, onSelect, renderDetails, customStatuses }: CalendarViewProps<T>) {
+export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, getDescription, isScheduled, onSelect, renderDetails, renderCompactIndicator, customStatuses }: CalendarViewProps<T>) {
   const [date, setDate] = useState(() => new Date());
   const [period, setPeriod] = useState<CalendarPeriod>("month");
   const [options, setOptions] = useState<CalendarDisplayOptions>({ showWeekends: true, showCancelled: true, showCompleted: true });
@@ -63,7 +64,7 @@ export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, 
     const theme = getStatusTheme(status, customStatuses);
     return compact ? (
       <button key={getId(item)} type="button" onClick={() => onSelect(item)} title={`${getTitle(item)} (${status})`} className={`mt-1 block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] font-semibold hover:opacity-90 ${theme.bg} ${theme.text}`}>
-        {getTitle(item)}
+        {renderCompactIndicator?.(item)}{getTitle(item)}
       </button>
     ) : (
       <button key={getId(item)} type="button" onClick={() => onSelect(item)} className="flex min-h-11 w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:bg-slate-50">

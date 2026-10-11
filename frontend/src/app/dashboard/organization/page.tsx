@@ -22,6 +22,7 @@ import {
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { OrganizationMemberTable } from "@/components/dashboard/OrganizationMemberTable";
+import { PendingJoinRequests } from "@/components/dashboard/PendingJoinRequests";
 import { OrganizationTypeSelect } from "@/components/dashboard/OrganizationTypeSelect";
 import { useLogout } from "@/hooks/useLogout";
 import { OrganizationAccessModal } from "@/components/dashboard/OrganizationAccessModal";
@@ -783,7 +784,19 @@ function MemberPreviewRow({ name, profilePicture, role, status, isYou }: { profi
 }
 
 function Members({ search, members: visibleMembers, onSearch, joinRequests, isLeader, reviewingRequestId, onReview, onViewProfile, onRemoveMember, currentUserId, currentUserName }: { search: string; members: MemberRow[]; onSearch: (value: string) => void; joinRequests: OrganizationJoinRequest[]; isLeader: boolean; reviewingRequestId: string; onReview: (id: string, status: "accepted" | "rejected") => void; onViewProfile: (member: MemberRow) => void; onRemoveMember: (member: MemberRow) => void; currentUserId?: string; currentUserName?: string }) {
-  return <div className="mt-6">{isLeader && joinRequests.length > 0 && <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 className="text-sm font-bold text-amber-950">Pending join requests ({joinRequests.length})</h3><div className="mt-3 space-y-3">{joinRequests.map((request) => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"><div><p className="text-sm font-bold text-slate-900">{request.name}</p><p className="text-xs text-slate-500">{request.position} · {request.email}</p></div><div className="flex gap-2"><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "rejected")} className="h-8 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600">Decline</button><button disabled={reviewingRequestId === request.id} onClick={() => onReview(request.id, "accepted")} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">Accept</button></div></div>)}</div></div>}<div className="flex items-center justify-between gap-4"><h2 className="text-[21px] font-bold">Member Management</h2></div><label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3"><Search className="size-4 text-slate-500" /><input className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} /></label><OrganizationMemberTable members={visibleMembers} onViewProfile={onViewProfile} onRemoveMember={onRemoveMember} isLeader={isLeader} currentUserId={currentUserId} currentUserName={currentUserName} /></div>;
+  return (
+    <div className="mt-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-[21px] font-bold">Member Management</h2>
+        {isLeader ? <PendingJoinRequests requests={joinRequests} reviewingRequestId={reviewingRequestId} onReview={onReview} /> : null}
+      </div>
+      <label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3">
+        <Search className="size-4 text-slate-500" />
+        <input className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} />
+      </label>
+      <OrganizationMemberTable members={visibleMembers} onViewProfile={onViewProfile} onRemoveMember={onRemoveMember} isLeader={isLeader} currentUserId={currentUserId} currentUserName={currentUserName} />
+    </div>
+  );
 }
 function Committees({ committees, members, canCreate, onCreate, currentUserId, currentUserName }: {
   committees: OrganizationCommitteeRecord[];

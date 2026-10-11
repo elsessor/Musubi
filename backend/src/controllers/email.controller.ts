@@ -91,12 +91,14 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
 
   for (const doc of eventsSnapshot.docs) {
     const eventData = doc.data();
+    if (eventData.status === "Archived") continue;
     const eventId = doc.id;
     const eventTitle = eventData.title || "Organization Event";
     const tasks: any[] = Array.isArray(eventData.tasks) ? eventData.tasks : [];
     let tasksUpdated = false;
 
     for (const task of tasks) {
+      if (task.archivedAt || task.status === "Archived") continue;
       const isCompleted = (task.status || "").toLowerCase().includes("completed") || (task.status || "").toLowerCase().includes("done");
       if (isCompleted) continue;
 

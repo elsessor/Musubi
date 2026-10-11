@@ -6,6 +6,7 @@ import { TaskCard } from "./TaskCard";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
 type KanbanColumnProps = {
+  readOnly?: boolean;
   status: TaskStatus;
   tasks: Task[];
   onAddTask?: () => void;
@@ -28,6 +29,7 @@ type KanbanColumnProps = {
 };
 
 export function KanbanColumn({
+  readOnly = false,
   status,
   tasks,
   onAddTask,
@@ -49,7 +51,7 @@ export function KanbanColumn({
   onTaskDragOver
 }: KanbanColumnProps) {
   const theme = getStatusTheme(status, customStatuses);
-  const isDraggableColumn = Boolean(isLeader && onColumnDragStart);
+  const isDraggableColumn = !readOnly && Boolean(isLeader && onColumnDragStart);
   const isTaskOverTarget = Boolean(draggedTaskId) && dragOverColumnStatus === status;
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -116,6 +118,7 @@ export function KanbanColumn({
         ) : (
           tasks.map((task) => (
             <TaskCard
+              readOnly={readOnly}
               key={task.id}
               task={task}
               isDragging={draggedTaskId === task.id}
@@ -129,7 +132,7 @@ export function KanbanColumn({
       </div>
 
       {/* Add task button */}
-      {isLeader && onAddTask ? <button
+      {isLeader && !readOnly && onAddTask ? <button
         type="button"
         onClick={onAddTask}
         className="mx-3 mb-3 flex min-h-11 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"

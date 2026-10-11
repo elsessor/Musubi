@@ -10,6 +10,8 @@ import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from 
 import type { OrganizationMember } from "@/services/auth.service";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
+import { TaskDependencySelector } from "./TaskDependencies";
+import { getTaskDependencyError } from "@/utils/taskDependencies";
 
 export type OrgMemberItem = {
   id: string;
@@ -66,6 +68,7 @@ export const MOCK_ROSTER: OrgMemberItem[] = [
 
 type AddTaskModalProps = {
   eventName: string;
+  tasks?: Task[];
   members?: OrganizationMember[];
   onClose: () => void;
   onAddTask: (newTask: Task) => void | Promise<void>;
@@ -77,6 +80,7 @@ type AddTaskModalProps = {
 
 export function AddTaskModal({
   eventName,
+  tasks = [],
   onClose,
   onAddTask,
   roster,
@@ -86,6 +90,7 @@ export function AddTaskModal({
 }: AddTaskModalProps) {
   const activeRoster = roster && roster.length > 0 ? roster : MOCK_ROSTER;
   const [title, setTitle] = useState("");
+  const [taskId] = useState(() => `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`);
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>("To Do");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
@@ -96,13 +101,16 @@ export function AddTaskModal({
   const [dateError, setDateError] = useState("");
   const [saving, setSaving] = useState(false);
   const [isLeaderOnly, setIsLeaderOnly] = useState(false);
+  const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>([]);
+  const scheduleError = getDateRangeError(startDate, dueDate, "Task");
 
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses);
 
   const committeeOptions = committees.map((c) => c.name);
   const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
-    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
+    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge,
+      disabled: Boolean(getTaskDependencyError([...tasks, { id: taskId, status: value, dependsOnTaskIds }], tasks)) };
   });
   const priorityOptions: CustomSelectOption[] = ALL_PRIORITIES.map((value) => ({
     value,
@@ -127,6 +135,7 @@ export function AddTaskModal({
     const nowStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const error = getDateRangeError(startDate.trim() || nowStr, dueDate.trim() || nowStr, "Task");
     setDateError(error || "");
+    if (error) return;
     const targetDue = new Date(dueDate.trim() || nowStr);
     const threeDaysBefore = !isNaN(targetDue.getTime())
       ? new Date(targetDue.getTime() - 3 * 24 * 3600 * 1000).toISOString().split("T")[0]
@@ -151,10 +160,11 @@ export function AddTaskModal({
     ];
 
     const newTask: Task = {
-      id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: taskId,
       title: title.trim(),
       description: description.trim() || "Leader-authored event task.",
       status,
+      dependsOnTaskIds,
       priority,
       committee,
       startDate: startDate.trim() || nowStr,
@@ -171,6 +181,8 @@ export function AddTaskModal({
       nudges: defaultNudges
     };
 
+    const dependencyError = getTaskDependencyError([...tasks, newTask], tasks);
+    if (dependencyError) { setDateError(dependencyError); return; }
     setSaving(true);
     try {
       await onAddTask(newTask);
@@ -228,6 +240,8 @@ export function AddTaskModal({
             />
           </div>
 
+          <TaskDependencySelector taskId={taskId} tasks={tasks} value={dependsOnTaskIds} onChange={setDependsOnTaskIds} />
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Status</label>
@@ -248,13 +262,17 @@ export function AddTaskModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="grid min-w-0 grid-cols-1 gap-3">
+            <div className="min-w-0">
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
               <CustomSelect
                 value={assigneeId}
                 onChange={(val) => setAssigneeId(val)}
                 options={assigneeOptions}
+                multiline
+                buttonClassName="min-h-11 rounded-xl"
+                dropdownClassName="[&_button]:min-h-11"
+                portal
               />
             </div>
 
@@ -292,10 +310,9 @@ export function AddTaskModal({
               />
             </div>
           </div>
-          {dateError ? <p className="text-xs font-semibold text-rose-600">{dateError}</p> : null}
+          {(scheduleError || dateError) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{scheduleError || dateError}</p>}
 
           {/* Leader Only Restriction */}
-          {(dateError || getDateRangeError(startDate, dueDate, "Task")) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{getDateRangeError(startDate, dueDate, "Task") || dateError}</p>}
           <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/70">
             <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer select-none">
               <input
@@ -319,7 +336,7 @@ export function AddTaskModal({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || Boolean(scheduleError)}
               className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md disabled:opacity-60"
             >
               {saving ? "Saving..." : "Add Task"}

@@ -16,14 +16,14 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
-  Trash2,
+  Archive,
   Wrench,
   X,
   Zap
 } from "lucide-react";
 import { useEffect, useState, type SetStateAction } from "react";
 import { validateSubtaskSafeguards } from "./starterTemplates";
-import type { GoalDraft, Subtask, TaskPriority } from "./types";
+import type { GoalDraft, Subtask, Task, TaskPriority } from "./types";
 import {
   rerollSubtask,
   subscribeOrganizationMembersFirestore,
@@ -35,7 +35,7 @@ import {
   findBestMemberForSubtask
 } from "@/utils/heuristicDelegation";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
-import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
+import { ConfirmArchiveModal } from "./ConfirmArchiveModal";
 import { useToastStore } from "@/store/toastStore";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
@@ -44,6 +44,8 @@ import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { AtomizedTaskEditModal } from "./AtomizedTaskEditModal";
 import { parseScheduleDate } from "@/utils/dateRange";
 import { resolveSubtaskAssignee, uniqueOrganizationMembers } from "@/utils/subtaskAssignment";
+import { getTaskDependencyError, withTaskDependencyState, type DependencyTask } from "@/utils/taskDependencies";
+import { TaskDependencyBadge, TaskDependencySelector } from "./TaskDependencies";
 
 const PRIORITY_BADGES = PRIORITY_CONFIG;
 
@@ -52,13 +54,16 @@ type SubtaskReviewScreenProps = {
   onDraftChange: (update: (draft: GoalDraft) => GoalDraft) => void;
   customStatuses?: CustomStatusConfig[];
   members?: OrganizationMember[];
-  onPublishGoal?: (publishedGoal: GoalDraft) => void;
+  existingTasks?: Task[];
+  onPublishGoal?: (publishedGoal: GoalDraft) => void | Promise<void>;
   onBack?: () => void;
 };
 
-export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPublishGoal, onBack, customStatuses = [] }: SubtaskReviewScreenProps) {
+export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, existingTasks = [], onPublishGoal, onBack, customStatuses = [] }: SubtaskReviewScreenProps) {
   const currentGoal = goalDraft;
-  const subtasks = goalDraft.subtasks;
+  const subtasks = withTaskDependencyState(goalDraft.subtasks, [...existingTasks, ...goalDraft.subtasks]);
+  const activeSubtasks = subtasks.filter((task) => !task.archivedAt);
+  const dependencyTasks = [...existingTasks, ...subtasks];
   const setCurrentGoal = (action: SetStateAction<GoalDraft>) => onDraftChange((current) => typeof action === "function" ? action(current) : action);
   const setSubtasks = (action: SetStateAction<Subtask[]>) => onDraftChange((current) => ({
     ...current,
@@ -72,7 +77,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [pendingDeleteSubtask, setPendingDeleteSubtask] = useState<Subtask | null>(null);
+  const [pendingArchiveSubtask, setPendingArchiveSubtask] = useState<Subtask | null>(null);
 
   function handleSaveEventName() {
     const trimmed = eventNameInput.trim();
@@ -95,8 +100,8 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
 
   function handleAutoAssignHeuristics() {
     if (liveMembers.length === 0) return;
-    const updated = delegateSubtasksHeuristically(subtasks, liveMembers);
-    setSubtasks(updated);
+    const updated = delegateSubtasksHeuristically(activeSubtasks, liveMembers);
+    setSubtasks((prev) => prev.map((task) => updated.find((item) => item.id === task.id) || task));
   }
 
   function handleToggleConfirmation(id: string) {
@@ -116,11 +121,17 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
     );
   }
 
-  function handleDeleteSubtask(id: string) {
-    const deleted = subtasks.find((subtask) => subtask.id === id);
-    if (!deleted) return;
-    setSubtasks((prev) => prev.filter((st) => st.id !== id));
-    useToastStore.getState().showToast({ title: "Subtask deleted", description: `${deleted.title} was removed from the event draft.`, tone: "success" });
+  function handleArchiveSubtask(id: string) {
+    if (currentGoal.status === "Active") return false;
+    const target = subtasks.find((subtask) => subtask.id === id);
+    if (!target) return false;
+    const archivedAt = target.archivedAt ? null : new Date().toISOString();
+    const updated = subtasks.map((task) => task.id === id ? { ...task, archivedAt } : task);
+    const dependencyError = getTaskDependencyError([...existingTasks, ...updated], existingTasks);
+    if (dependencyError) { useToastStore.getState().showToast({ title: "Cannot archive prerequisite", description: dependencyError, tone: "error" }); return false; }
+    setSubtasks((prev) => prev.map((task) => task.id === id ? { ...task, archivedAt } : task));
+    useToastStore.getState().showToast({ title: archivedAt ? "Subtask archived" : "Subtask restored", description: `${target.title} was ${archivedAt ? "archived" : "restored"} in the event draft.`, tone: "success" });
+    return true;
   }
 
   function handleToggleLeaderOnly(id: string) {
@@ -238,6 +249,8 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
   }
 
   function handleSaveTaskEdit(updated: Subtask) {
+    const dependencyError = getTaskDependencyError([...existingTasks, ...subtasks.map((task) => task.id === updated.id ? updated : task)], existingTasks);
+    if (dependencyError) { useToastStore.getState().showToast({ title: "Task dependency", description: dependencyError, tone: "error" }); return; }
     setSubtasks((prev) => prev.map((st) => (st.id === updated.id ? updated : st)));
     setEditingSubtask(null);
   }
@@ -249,27 +262,29 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
       confirmed: false,
       isAiGenerated: false
     };
+    const dependencyError = getTaskDependencyError([...existingTasks, created, ...subtasks], existingTasks);
+    if (dependencyError) { useToastStore.getState().showToast({ title: "Task dependency", description: dependencyError, tone: "error" }); return; }
     setSubtasks((prev) => [created, ...prev]);
     setShowAddModal(false);
   }
 
   async function handleConfirmPublish() {
+    const dependencyError = getTaskDependencyError(dependencyTasks, existingTasks);
+    if (dependencyError) { useToastStore.getState().showToast({ title: "Cannot publish tasks", description: dependencyError, tone: "error" }); return; }
     setPublishing(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
     const activeGoal: GoalDraft = {
       ...currentGoal,
       status: "Active",
       subtasks
     };
 
-    setCurrentGoal(activeGoal);
-    setPublishing(false);
-    setShowPublishModal(false);
-
-    if (onPublishGoal) {
-      onPublishGoal(activeGoal);
-    }
+    try {
+      await onPublishGoal?.(activeGoal);
+      setCurrentGoal(activeGoal);
+      setShowPublishModal(false);
+    } catch (error) {
+      useToastStore.getState().showToast({ title: "Tasks not published", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
+    } finally { setPublishing(false); }
   }
 
   const [showOnlyWarnings, setShowOnlyWarnings] = useState(false);
@@ -277,6 +292,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
   function handleAutoFixSafeguards() {
     setSubtasks((prev) =>
       prev.map((st) => {
+        if (st.archivedAt) return st;
         const warnings = validateSubtaskSafeguards(st);
         if (warnings.length === 0) return st;
 
@@ -343,12 +359,12 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
     );
   }
 
-  const confirmedCount = subtasks.filter((s) => s.confirmed).length;
+  const confirmedCount = activeSubtasks.filter((s) => s.confirmed).length;
   const isPublished = currentGoal.status === "Active";
-  const subtasksWithWarnings = subtasks.filter((st) => validateSubtaskSafeguards(st).length > 0);
+  const subtasksWithWarnings = activeSubtasks.filter((st) => validateSubtaskSafeguards(st).length > 0);
   const displayedSubtasks = showOnlyWarnings
-    ? subtasks.filter((st) => validateSubtaskSafeguards(st).length > 0)
-    : subtasks;
+    ? activeSubtasks.filter((st) => validateSubtaskSafeguards(st).length > 0)
+    : activeSubtasks;
 
   return (
     <div className="flex min-w-0 flex-col gap-4 rounded-2xl bg-[#f4f7fb] p-3 sm:gap-6 sm:rounded-3xl sm:p-6">
@@ -396,15 +412,15 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
 
           <button
             type="button"
-            disabled={subtasks.length === 0 || isPublished}
+            disabled={activeSubtasks.length === 0 || isPublished}
             onClick={() => setShowPublishModal(true)}
-            className={`col-span-2 inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-white shadow-sm transition xl:px-5 ${subtasks.length === 0 || isPublished
+            className={`col-span-2 inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-white shadow-sm transition xl:px-5 ${activeSubtasks.length === 0 || isPublished
                 ? "bg-slate-300 cursor-not-allowed opacity-70"
                 : "bg-[#1e3a5f] hover:bg-[#152943]"
               }`}
           >
             <Zap size={15} className="shrink-0" />
-            {isPublished ? "Event Published" : `Publish Event (${subtasks.length} subtasks)`}
+            {isPublished ? "Event Published" : `Publish Event (${activeSubtasks.length} subtasks)`}
           </button>
         </div>
       </div>
@@ -521,7 +537,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
         </div>
 
         <p className="text-xs font-medium leading-5 text-slate-500">
-          {confirmedCount}/{subtasks.length} confirmed · Review each task before adding to event
+          {confirmedCount}/{activeSubtasks.length} confirmed · Review each task before adding to event
         </p>
       </div>
 
@@ -554,7 +570,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
               isRegenerating={!!regeneratingIds[st.id]}
               onConfirm={() => handleToggleConfirmation(st.id)}
               onEdit={() => setEditingSubtask(st)}
-              onDelete={() => setPendingDeleteSubtask(st)}
+              onArchive={isPublished ? undefined : () => setPendingArchiveSubtask(st)}
               onRegenerate={() => void handleRegenerateSubtask(st.id)}
               onToggleLeaderOnly={() => handleToggleLeaderOnly(st.id)}
             />
@@ -566,6 +582,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
       {editingSubtask && (
         <AtomizedTaskEditModal
           subtask={editingSubtask}
+          subtasks={dependencyTasks}
           members={liveMembers}
           onClose={() => setEditingSubtask(null)}
           onSave={handleSaveTaskEdit}
@@ -576,29 +593,34 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, onPubli
       {showAddModal && (
         <OldAddSubtaskModal
           members={liveMembers}
+          subtasks={dependencyTasks}
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddManualSubtask}
         />
       )}
 
       {/* Publish Event Dialog */}
+      {subtasks.some((task) => task.archivedAt) ? <details className="rounded-xl border border-slate-200 bg-white p-3">
+        <summary className="cursor-pointer text-xs font-semibold text-slate-600">Archived subtasks ({subtasks.filter((task) => task.archivedAt).length})</summary>
+        <div className="mt-2 space-y-2">{subtasks.filter((task) => task.archivedAt).map((task) => <div key={task.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-2"><span className="min-w-0 break-words text-xs text-slate-700">{task.title}</span><button type="button" disabled={isPublished} onClick={() => handleArchiveSubtask(task.id)} className="min-h-9 shrink-0 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-blue-600 disabled:opacity-50">Restore</button></div>)}</div>
+      </details> : null}
       {showPublishModal && (
         <OldPublishGoalModal
           goalName={currentGoal.eventName || "Event Breakdown"}
-          subtasks={subtasks}
+          subtasks={activeSubtasks}
           isPublishing={publishing}
-          onConfirm={() => void handleConfirmPublish()}
+          onConfirm={handleConfirmPublish}
           onClose={() => setShowPublishModal(false)}
         />
       )}
-      {pendingDeleteSubtask && (
-        <ConfirmDeleteModal
+      {pendingArchiveSubtask && (
+        <ConfirmArchiveModal
           itemType="subtask"
-          itemName={pendingDeleteSubtask.title}
-          onCancel={() => setPendingDeleteSubtask(null)}
+          itemName={pendingArchiveSubtask.title}
+          onCancel={() => setPendingArchiveSubtask(null)}
           onConfirm={() => {
-            handleDeleteSubtask(pendingDeleteSubtask.id);
-            setPendingDeleteSubtask(null);
+            if (!handleArchiveSubtask(pendingArchiveSubtask.id)) return false;
+            setPendingArchiveSubtask(null);
           }}
         />
       )}
@@ -615,7 +637,7 @@ type OldTaskCardProps = {
   isRegenerating: boolean;
   onConfirm: () => void;
   onEdit: () => void;
-  onDelete: () => void;
+  onArchive?: () => void;
   onRegenerate: () => void;
   onToggleLeaderOnly: () => void;
 };
@@ -646,7 +668,7 @@ function OldTaskCard({
   isRegenerating,
   onConfirm,
   onEdit,
-  onDelete,
+  onArchive,
   onRegenerate,
   onToggleLeaderOnly
 }: OldTaskCardProps) {
@@ -702,6 +724,7 @@ function OldTaskCard({
               <Lock size={10} /> Leader Only
             </span>
           )}
+          <TaskDependencyBadge task={subtask} />
 
           {subtask.isTemplateBased ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-0.5 text-[11px] font-bold text-purple-800">
@@ -823,15 +846,15 @@ function OldTaskCard({
             </button>
           )}
 
-          <button
+          {onArchive ? <button
             type="button"
-            onClick={onDelete}
-            title="Delete subtask"
-            aria-label="Delete subtask"
-            className="inline-flex size-11 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 transition hover:bg-rose-100"
+            onClick={onArchive}
+            title="Archive subtask"
+            aria-label="Archive subtask"
+            className="inline-flex size-11 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100"
           >
-            <Trash2 size={12} />
-          </button>
+            <Archive size={12} />
+          </button> : null}
         </div>
       </div>
 
@@ -861,13 +884,15 @@ function OldTaskCard({
 
 type OldAddSubtaskModalProps = {
   members: OrganizationMember[];
+  subtasks: DependencyTask[];
   onClose: () => void;
   onAdd: (subtask: Omit<Subtask, "id" | "isAiGenerated">) => void;
 };
 
-function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps) {
+function OldAddSubtaskModal({ members, subtasks, onClose, onAdd }: OldAddSubtaskModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>([]);
   const availableMembers = uniqueOrganizationMembers(members);
   const [selectedMemberId, setSelectedMemberId] = useState(availableMembers[0]?.id || "");
   const assignedMember = availableMembers.find((member) => member.id === selectedMemberId);
@@ -891,6 +916,7 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
 
     onAdd({
       title: title.trim(),
+      dependsOnTaskIds,
       description: description.trim() || "Leader-authored subtask created manually.",
       assigneeName: assignedMember?.name || "Unassigned",
       assignedMemberUID: assignedMember?.id || null,
@@ -932,6 +958,7 @@ function OldAddSubtaskModal({ members, onClose, onAdd }: OldAddSubtaskModalProps
           </div>
 
           <div>
+            <TaskDependencySelector taskId="new-draft-task" tasks={subtasks} value={dependsOnTaskIds} onChange={setDependsOnTaskIds} />
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Description</label>
             <textarea
               rows={2}

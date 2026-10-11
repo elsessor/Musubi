@@ -1,5 +1,6 @@
 import type { UserRole } from "../types/auth.types.js";
 import { AppError } from "./AppError.js";
+import { assertTaskDependencies } from "./taskDependencies.js";
 
 export type TaskActor = { uid: string; fullName: string; role: UserRole; organizationId: string | null };
 export type TaskRecord = Record<string, any>;
@@ -21,6 +22,7 @@ export function assertCanEditEvent(user: TaskActor, orgId: unknown): void {
 
 export function assertCanContributeTask(user: TaskActor, orgId: unknown, task: TaskRecord): void {
   assertEventAccess(user, orgId);
+  if (task.archivedAt || String(task.status).toLowerCase() === "archived") throw new AppError("Restore this archived subtask before making changes.", 409);
   if (isTaskLeader(user)) return;
   const name = String(task.assignedMemberName || task.assignee?.name || task.assigneeName || "").trim().toLowerCase();
   const ownsTask = task.assignedMemberUID
@@ -39,7 +41,10 @@ export function applyTaskStatusUpdate(task: TaskRecord, input: unknown, event: T
     ...(Array.isArray(event.statusOrder) ? event.statusOrder : [])
   ]);
   if (typeof update.status !== "string" || !update.status.trim() || !allowed.has(update.status)) throw new AppError("Choose a valid task status.", 400);
-  return { ...task, status: update.status };
+  const updated = { ...task, status: update.status };
+  const originals = Array.isArray(event.tasks) ? event.tasks : [task];
+  assertTaskDependencies(originals.map((item: TaskRecord) => item.id === task.id ? updated : item), originals);
+  return updated;
 }
 
 // Only the attachment actions may change attachment records. Full event saves
@@ -47,4 +52,16 @@ export function applyTaskStatusUpdate(task: TaskRecord, input: unknown, event: T
 export function preserveTaskAttachments(tasks: TaskRecord[], originals: TaskRecord[]): TaskRecord[] {
   const byId = new Map(originals.map((task) => [task.id, task]));
   return tasks.map((task) => ({ ...task, attachments: byId.get(task.id)?.attachments || [] }));
+}
+
+export function recordTaskArchives(tasks: TaskRecord[], originals: TaskRecord[], uid: string, now = new Date().toISOString()): TaskRecord[] {
+  const byId = new Map(originals.map((task) => [task.id, task]));
+  const retained = [...tasks, ...originals.filter((task) => task.archivedAt && !tasks.some((item) => item.id === task.id))];
+  return retained.map((task) => {
+    const original = byId.get(task.id);
+    const archived = task.archivedAt !== undefined ? Boolean(task.archivedAt) : Boolean(original?.archivedAt);
+    if (original?.archivedAt && archived) return { ...original };
+    return { ...task, archivedAt: archived ? original?.archivedAt || now : null,
+      archivedByUID: archived ? original?.archivedByUID || uid : null };
+  });
 }

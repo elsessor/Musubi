@@ -735,6 +735,7 @@ export async function atomizeGoal(
   return organizationRequest<{
     tasks: Array<{
       title: string;
+      dependencyIndexes?: number[];
       priority: "Low" | "Medium" | "High" | "Critical";
       assigneeName: string;
       dueDateOffsetDays: number;

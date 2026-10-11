@@ -4,6 +4,7 @@ import { Calendar, Plus, Users } from "lucide-react";
 import type { Event } from "./types";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { getEventMemberCount } from "@/utils/eventMembers";
+import { isTaskArchived } from "@/utils/taskDependencies";
 
 type EventCardProps = {
   event: Event;
@@ -14,7 +15,7 @@ type EventCardProps = {
 
 export function EventCard({ event, onClick, customStatuses, compact = false }: EventCardProps) {
   const theme = getStatusTheme(event.status, customStatuses ?? event.eventCustomStatuses);
-  const taskCount = event.tasks.length;
+  const taskCount = event.tasks.filter((task) => !isTaskArchived(task)).length;
 
   return (
     <button

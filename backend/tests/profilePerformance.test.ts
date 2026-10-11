@@ -54,6 +54,26 @@ test("empty metrics have zero counts and unknown scores rather than invented per
   assert.equal(metrics.ratingCount, 0);
 });
 
+test("archives reduce active workload while retaining completed work and rating history", () => {
+  const archivedAt = recordedTime;
+  const review = { rating: 4, reviewerUID: "leader", reviewedAt: recordedTime };
+  const event = { id: "event", title: "Event", status: "Active", tasks: [
+    task({ id: "unfinished", archivedAt }),
+    task({ id: "done", status: "Completed", archivedAt, completedAt: recordedTime, performanceReview: review }),
+    task({ id: "active" })
+  ] } as Event;
+  let metrics = getProfileMetrics(getAssignedProfileTasks([event], "member", "Team Member"), now);
+  assert.equal(metrics.workload, 20);
+  assert.equal(metrics.counts.archived, 1);
+  assert.equal(metrics.counts.cancelled, 0);
+  assert.equal(metrics.counts.done, 1);
+  assert.equal(metrics.rating, 4);
+  metrics = getProfileMetrics(getAssignedProfileTasks([{ ...event, status: "Archived" }], "member", "Team Member"), now);
+  assert.equal(metrics.workload, 0);
+  assert.equal(metrics.rating, 4);
+  assert.equal(metrics.counts.done, 1);
+});
+
 test("scores use unfinished tasks, valid saved matches, and known completion deadlines", () => {
   const metrics = getProfileMetrics([
     task({ matchPercentage: 0 }), task({ status: "In Review", matchPercentage: 100 }),

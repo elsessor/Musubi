@@ -4,6 +4,7 @@ import { writeAuditLog } from "../utils/auditLog.js";
 
 export const TaskItemSchema = z.object({
   title: z.string().describe("Actionable task title"),
+  dependencyIndexes: z.array(z.number().int().min(0).max(9)).optional().default([]).describe("Zero-based indexes of earlier tasks that must be completed first; empty for independent tasks"),
   description: z.string().describe("Specific, actionable 1-2 sentence description explaining step-by-step what needs to be done for this subtask"),
   priority: z.enum(["Low", "Medium", "High", "Critical"]).describe("Priority level of the task"),
   assigneeName: z.string().describe("Suggested assignee or committee role"),
@@ -48,6 +49,7 @@ Guidelines:
 3. Suggest clear assignees (e.g., "Logistics Lead", "Ana Reyes", "Marco Dela Cruz", "Finance Officer").
 4. Provide sensible deadline offsets (1 to 20 days from today).
 5. Calculate a realistic AI Match Score (between 65% and 98%) reflecting suitability.
+6. Order prerequisites before dependent tasks. For each task, include dependencyIndexes with the zero-based indexes of only the earlier tasks that truly must be completed first. Use [] for independent tasks. Allow parallel work; do not make every task depend on the previous task.
 `;
 
     const candidateModels = [
@@ -71,7 +73,9 @@ Guidelines:
             prompt,
             output: { schema: AtomizeGoalOutputSchema }
           });
-          if (output) return output;
+          if (output) return { ...output, tasks: output.tasks.map((task, index) => ({ ...task,
+            dependencyIndexes: [...new Set(task.dependencyIndexes || [])].filter((dependency) => dependency >= 0 && dependency < index)
+          })) };
         } catch (err) {
           lastError = err;
           const errMsg = err instanceof Error ? err.message : String(err);

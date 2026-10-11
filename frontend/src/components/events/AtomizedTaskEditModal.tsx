@@ -14,9 +14,12 @@ import { resolveSubtaskAssignee, uniqueOrganizationMembers } from "@/utils/subta
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import type { Subtask, TaskPriority } from "./types";
+import { TaskDependencySelector } from "./TaskDependencies";
+import { getTaskDependencyError, type DependencyTask } from "@/utils/taskDependencies";
 
 type AtomizedTaskEditModalProps = {
   subtask: Subtask;
+  subtasks?: DependencyTask[];
   members: OrganizationMember[];
   onClose: () => void;
   onSave: (updated: Subtask) => void;
@@ -36,11 +39,12 @@ function deadlineInDays(days: number, start?: Date | null): string {
   return formatDeadline(date);
 }
 
-export function AtomizedTaskEditModal({ subtask, members, onClose, onSave }: AtomizedTaskEditModalProps) {
+export function AtomizedTaskEditModal({ subtask, subtasks = [subtask], members, onClose, onSave }: AtomizedTaskEditModalProps) {
   const panelId = useId();
   const [title, setTitle] = useState(subtask.title);
   const [description, setDescription] = useState(subtask.description);
   const [priority, setPriority] = useState<TaskPriority>(subtask.priority);
+  const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(subtask.dependsOnTaskIds || []);
   const [startDate, setStartDate] = useState(() => {
     if (subtask.startDate) return subtask.startDate;
     const today = new Date();
@@ -61,6 +65,7 @@ export function AtomizedTaskEditModal({ subtask, members, onClose, onSave }: Ato
   const [newSkillInput, setNewSkillInput] = useState("");
   const [sendNudgeAlert, setSendNudgeAlert] = useState(true);
   const [dateError, setDateError] = useState("");
+  const scheduleError = getDateRangeError(startDate, deadline, "Task");
   const availableMembers = uniqueOrganizationMembers(members);
   const bestMatch = findBestMemberForSubtask({ title, description, requiredSkills: skills }, availableMembers);
   const [selectedMemberId, setSelectedMemberId] = useState(() => subtask.assignedMemberUID
@@ -94,6 +99,8 @@ export function AtomizedTaskEditModal({ subtask, members, onClose, onSave }: Ato
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!title.trim()) return;
+    const dependencyError = getTaskDependencyError(subtasks.map((task) => task.id === subtask.id ? { ...task, dependsOnTaskIds } : task));
+    if (dependencyError) { setDateError(dependencyError); return; }
     const scheduleStart = parseScheduleDate(startDate);
     const targetDate = parseScheduleDate(deadline);
     const rangeError = getDateRangeError(startDate, deadline, "Task");
@@ -129,7 +136,7 @@ export function AtomizedTaskEditModal({ subtask, members, onClose, onSave }: Ato
         if (!result.success) useToastStore.getState().showToast({ title: "Could not send nudge", description: result.error || "The task was saved, but the email could not be sent.", tone: "error" });
       });
     }
-    onSave({ ...subtask, title: title.trim(), description: description.trim(), priority,
+    onSave({ ...subtask, title: title.trim(), description: description.trim(), priority, dependsOnTaskIds,
       assigneeName, assignedMemberUID: selectedMemberId || null, estimatedDays, isLeaderOnly, requiredSkills: skills,
       startDate: startDate.trim(), dueDate: deadline, deadline, nudges });
   }
@@ -179,6 +186,7 @@ export function AtomizedTaskEditModal({ subtask, members, onClose, onSave }: Ato
           </div>
 
           {/* Assignee Selection */}
+          <TaskDependencySelector taskId={subtask.id} tasks={subtasks} value={dependsOnTaskIds} onChange={setDependsOnTaskIds} />
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
               Assignee
@@ -290,7 +298,7 @@ export function AtomizedTaskEditModal({ subtask, members, onClose, onSave }: Ato
               <MiniCalendarPicker value={deadline} onChange={handleDeadlineChange} minDate={parseScheduleDate(startDate) || new Date()} placeholder="Select target date & time" includeTime />
             </div>
           </div>
-          {dateError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{dateError}</p> : null}
+          {(scheduleError || dateError) ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{scheduleError || dateError}</p> : null}
 
           {/* Priority */}
           <div>
@@ -376,7 +384,8 @@ export function AtomizedTaskEditModal({ subtask, members, onClose, onSave }: Ato
 
             <button
               type="submit"
-              className="rounded-2xl bg-[#2563eb] py-3 text-sm font-bold text-white shadow-md hover:bg-blue-700 transition"
+              disabled={Boolean(scheduleError)}
+              className="rounded-2xl bg-[#2563eb] py-3 text-sm font-bold text-white shadow-md hover:bg-blue-700 transition disabled:opacity-50"
             >
               Save Changes
             </button>

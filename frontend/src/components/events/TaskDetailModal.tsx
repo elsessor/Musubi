@@ -3,7 +3,6 @@
 import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 
 import {
-  AlertTriangle,
   Bell,
   Check,
   ChevronDown,
@@ -13,7 +12,7 @@ import {
   Shield,
   Sparkles,
   Star,
-  Trash2,
+  Archive,
   X,
   Zap
 } from "lucide-react";
@@ -28,20 +27,23 @@ import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
+import { ConfirmArchiveModal } from "./ConfirmArchiveModal";
 import { TaskAttachments } from "./TaskAttachments";
 import { TaskAssignee } from "./TaskAssignee";
 import { isTaskAssignedToUser } from "@/utils/taskAssignment";
+import { TaskDependencySelector } from "./TaskDependencies";
+import { getTaskDependencyError, isTaskArchived } from "@/utils/taskDependencies";
 
 
 type TaskDetailModalProps = {
   eventId: string;
   task: Task;
+  tasks?: Task[];
   onClose: () => void;
-  onUpdateTask: (updatedTask: Task) => void;
+  onUpdateTask: (updatedTask: Task) => void | boolean | Promise<void | boolean>;
   onAttachmentsUpdated: (updatedTask: Task) => void;
   onEditRating?: (task: Task) => void;
-  onDeleteTask?: (taskId: string) => void;
+  onArchiveTask?: (taskId: string) => void | boolean | Promise<void | boolean>;
   customStatuses?: CustomStatusConfig[];
   statusOrder?: string[];
   committees?: { id: string; name: string }[];
@@ -53,11 +55,12 @@ type TaskDetailModalProps = {
 export function TaskDetailModal({
   eventId,
   task,
+  tasks = [task],
   onClose,
   onUpdateTask,
   onAttachmentsUpdated,
   onEditRating,
-  onDeleteTask,
+  onArchiveTask,
   customStatuses = [],
   statusOrder,
   committees = [],
@@ -78,13 +81,17 @@ export function TaskDetailModal({
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
+  const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(task.dependsOnTaskIds || []);
   const [priority, setPriority] = useState<TaskPriority>(task.priority || "Medium");
   const [committee, setCommittee] = useState<string>(task.committee || committees[0]?.name || "");
   const [startDate, setStartDate] = useState<string>(task.startDate || "");
   const [dueDate, setDueDate] = useState<string>(task.dueDate || task.deadline || "");
   const [dateError, setDateError] = useState("");
+  const scheduleError = getDateRangeError(startDate, dueDate, "Task");
+  const [submitError, setSubmitError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [isLeaderOnly, setIsLeaderOnly] = useState<boolean>(Boolean(task.isLeaderOnly));
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const [sendingNudge, setSendingNudge] = useState(false);
 
   // Assignee selection
@@ -100,7 +107,14 @@ export function TaskDetailModal({
   const nudgeRecipientUID = nudgeRecipient?.id || selectedMemberId || task.assignedMemberUID;
   const canSendNudge = isLeader && canEdit && (reviewerRole === "Student Leader" || reviewerRole === "Admin")
     && Boolean(reviewerUID && nudgeRecipientUID && nudgeRecipientUID !== reviewerUID);
-  const canDeleteTask = isLeader && canEdit && Boolean(onDeleteTask);
+  const archived = isTaskArchived(task);
+  const canArchiveTask = isLeader && (canEdit || archived) && Boolean(onArchiveTask);
+  async function restoreTask() {
+    if (!onArchiveTask || saving) return;
+    setSaving(true);
+    try { if (await onArchiveTask(task.id) !== false) onClose(); }
+    finally { setSaving(false); }
+  }
 
   async function handleSendManualNudge() {
     if (!canSendNudge || sendingNudge) return;
@@ -179,16 +193,28 @@ export function TaskDetailModal({
   }));
   const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
-    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
+    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge,
+      disabled: Boolean(getTaskDependencyError(tasks.map((item) => item.id === task.id ? { ...item, status: value, dependsOnTaskIds } : item), tasks)) };
   });
   const selectedAssignee = activeRoster.find((member) => member.id === selectedMemberId);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function saveTask(updated: Task) {
+    setSaving(true);
+    try {
+      if (await onUpdateTask(updated) !== false) onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to save this task.");
+    } finally { setSaving(false); }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canEdit) return;
+    if (!canEdit || saving) return;
+    setSubmitError("");
+    const dependencyError = getTaskDependencyError(tasks.map((item) => item.id === task.id ? { ...item, status, dependsOnTaskIds } : item), tasks);
+    if (dependencyError) { setSubmitError(dependencyError); return; }
     if (!isLeader) {
-      onUpdateTask({ ...task, status });
-      onClose();
+      await saveTask({ ...task, status });
       return;
     }
     if (!title.trim()) return;
@@ -205,6 +231,7 @@ export function TaskDetailModal({
       title: title.trim(),
       description: description.trim(),
       status,
+      dependsOnTaskIds,
       priority,
       priorityChangeRequest: task.priorityChangeRequest,
       committee,
@@ -225,8 +252,7 @@ export function TaskDetailModal({
       assignedMemberUID: selectedMember?.id ?? task.assignedMemberUID ?? null
     };
 
-    onUpdateTask(updated);
-    onClose();
+    await saveTask(updated);
   }
 
   return (
@@ -251,6 +277,7 @@ export function TaskDetailModal({
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
+          {archived ? <p className="rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">This subtask is archived. Restore it to make changes.</p> : null}
           <section aria-label="Task details" className="space-y-4">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Task details</h4>
           {/* TASK TITLE */}
@@ -285,6 +312,8 @@ export function TaskDetailModal({
           </div>
 
           </section>
+          <TaskDependencySelector taskId={task.id} tasks={tasks} value={dependsOnTaskIds} onChange={setDependsOnTaskIds} readOnly={!isLeader || !canEdit} />
+          {submitError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{submitError}</p> : null}
           <section aria-label="Task status and assignment" className="space-y-4 border-t border-slate-100 pt-5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status &amp; assignment</h4>
           {!isLeader ? <TaskAssignee task={task} /> : null}
@@ -363,7 +392,7 @@ export function TaskDetailModal({
               />
             </div>
           </div>
-          {(dateError || getDateRangeError(startDate, dueDate, "Task")) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{getDateRangeError(startDate, dueDate, "Task") || dateError}</p>}
+          {(scheduleError || dateError) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{scheduleError || dateError}</p>}
           </section> : <section aria-label="Task schedule" className="space-y-3 border-t border-slate-100 pt-5">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Schedule</h4>
             <dl className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2">
@@ -402,7 +431,7 @@ export function TaskDetailModal({
               {task.performanceReview.feedback ? <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-600">{task.performanceReview.feedback}</p> : null}
             </section>
           ) : null}
-          {(typeof task.matchPercentage === "number" || (task.blockedBy && task.blockedBy > 0) || task.isAiGenerated) && (
+          {(typeof task.matchPercentage === "number" || task.isAiGenerated) && (
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
               {task.isAiGenerated && (
                 <span className="inline-flex items-center gap-1 rounded-xl bg-purple-50 px-2.5 py-1 text-xs font-bold text-purple-700 border border-purple-200">
@@ -416,12 +445,6 @@ export function TaskDetailModal({
                   Skill Match: {task.matchPercentage}%
                 </span>
               )}
-              {task.blockedBy && task.blockedBy > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-xl bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 border border-rose-200">
-                  <AlertTriangle size={11} className="text-rose-500" />
-                  Blocked by {task.blockedBy} task(s)
-                </span>
-              ) : null}
             </div>
           )}
 
@@ -437,7 +460,7 @@ export function TaskDetailModal({
           <TaskAttachments eventId={eventId} task={task} canAdd={canEdit} onTaskUpdated={onAttachmentsUpdated} />
           </div>
           <div className="flex shrink-0 items-center gap-2 border-t border-slate-200 bg-white p-3 sm:flex-wrap sm:justify-between sm:gap-3 sm:px-6 sm:py-4">
-            {canDeleteTask || canSendNudge ? (
+            {canArchiveTask || canSendNudge ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button type="button" aria-label="More task actions" className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:hidden">
@@ -451,24 +474,25 @@ export function TaskDetailModal({
                       {sendingNudge ? "Sending nudge..." : "Send nudge email"}
                     </DropdownMenuItem>
                   ) : null}
-                  {canDeleteTask ? (
-                    <DropdownMenuItem onSelect={() => setConfirmDelete(true)} className="min-h-11 cursor-pointer rounded-lg px-3 text-xs text-rose-600 focus:bg-rose-50 focus:text-rose-700">
-                      <Trash2 size={14} className="text-rose-600" />
-                      Delete task
+                  {canArchiveTask ? (
+                    <DropdownMenuItem disabled={saving} onSelect={() => archived ? void restoreTask() : setConfirmArchive(true)} className="min-h-11 cursor-pointer rounded-lg px-3 text-xs text-slate-600 focus:bg-slate-100 focus:text-slate-800">
+                      <Archive size={14} className="text-slate-500" />
+                      {archived ? "Restore task" : "Archive task"}
                     </DropdownMenuItem>
                   ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
-            {canDeleteTask || canSendNudge ? <div className="hidden min-w-0 flex-wrap items-center gap-2 sm:flex">
-              {canDeleteTask ? (
+            {canArchiveTask || canSendNudge ? <div className="hidden min-w-0 flex-wrap items-center gap-2 sm:flex">
+              {canArchiveTask ? (
                 <button
                   type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-rose-50 px-2 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 sm:min-h-9 sm:bg-transparent sm:px-3 sm:hover:bg-rose-50"
+                  disabled={saving}
+                  onClick={() => archived ? void restoreTask() : setConfirmArchive(true)}
+                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 sm:min-h-9 sm:bg-transparent sm:px-3 sm:hover:bg-slate-50"
                 >
-                  <Trash2 size={14} className="shrink-0" />
-                  Delete task
+                  <Archive size={14} className="shrink-0" />
+                  {archived ? "Restore task" : "Archive task"}
                 </button>
               ) : null}
               {canSendNudge && (
@@ -495,23 +519,25 @@ export function TaskDetailModal({
               {canEdit ? (
                 <button
                   type="submit"
-                  className="min-h-11 rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700 sm:min-h-9 sm:px-4"
+                  disabled={saving || (isLeader && Boolean(scheduleError))}
+                  className="min-h-11 rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700 disabled:opacity-50 sm:min-h-9 sm:px-4"
                 >
-                  {isLeader ? "Save changes" : "Update status"}
+                  {saving ? "Saving…" : isLeader ? "Save changes" : "Update status"}
                 </button>
               ) : null}
             </div>
           </div>
         </form>
       </div>
-      {confirmDelete && onDeleteTask && (
-        <ConfirmDeleteModal
+      {confirmArchive && onArchiveTask && (
+        <ConfirmArchiveModal
           itemType="subtask"
           itemName={task.title || task.description || "Untitled subtask"}
-          onCancel={() => setConfirmDelete(false)}
-          onConfirm={() => {
-            onDeleteTask(task.id);
-            setConfirmDelete(false);
+          onCancel={() => setConfirmArchive(false)}
+          onConfirm={async () => {
+            const archived = await onArchiveTask(task.id);
+            if (archived === false) return false;
+            setConfirmArchive(false);
             onClose();
           }}
         />

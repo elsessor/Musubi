@@ -79,7 +79,8 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
     { id: "done", label: `${metrics.counts.done} done`, tone: "text-emerald-600", selected: "bg-emerald-600 text-white" },
     { id: "active", label: `${metrics.counts.active} active`, tone: "text-blue-600", selected: "bg-blue-600 text-white" },
     { id: "pending", label: `${metrics.counts.pending} pending`, tone: "text-amber-600", selected: "bg-amber-600 text-white" },
-    ...(metrics.counts.cancelled ? [{ id: "cancelled" as const, label: `${metrics.counts.cancelled} cancelled`, tone: "text-slate-500", selected: "bg-slate-600 text-white" }] : [])
+    ...(metrics.counts.cancelled ? [{ id: "cancelled" as const, label: `${metrics.counts.cancelled} cancelled`, tone: "text-slate-500", selected: "bg-slate-600 text-white" }] : []),
+    ...(metrics.counts.archived ? [{ id: "archived" as const, label: `${metrics.counts.archived} archived`, tone: "text-slate-500", selected: "bg-slate-600 text-white" }] : [])
   ];
 
   return (
@@ -197,7 +198,8 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
               : visibleTasks.length === 0 ? <p className="py-12 text-center text-xs text-slate-400">{tasks.length ? "No sub-tasks match this filter." : "No sub-tasks assigned yet."}</p>
                 : <div className="mt-1 divide-y divide-slate-100">
                   {visibleTasks.map((task) => {
-                    const tone = getStatusTheme(task.status || "Pending", task.customStatuses).badge;
+                    const taskLabel = task.archivedAt ? "Archived" : task.status || "Pending";
+                    const tone = getStatusTheme(taskLabel, task.customStatuses).badge;
                     const match = task.matchPercentage;
                     return <div key={`${task.eventId}:${task.id}`} className="flex items-center justify-between gap-3 py-4">
                       <div className="min-w-0">
@@ -208,7 +210,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
                           {showPerformance && task.performanceReview && <span className="font-medium text-amber-600">Leader rating: {task.performanceReview.rating}/5</span>}
                         </div>
                       </div>
-                      <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] ${tone}`}>{task.status || "Pending"}</span>
+                      <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] ${tone}`}>{taskLabel}</span>
                     </div>;
                   })}
                 </div>}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, CheckCircle2, ShieldAlert, Sparkles, AlertTriangle, ChevronDown, Check } from "lucide-react";
+import { Calendar, CheckCircle2, ShieldAlert, Sparkles, ChevronDown, Check } from "lucide-react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { OverdueBadge } from "./overdue";
 import { useState } from "react";
@@ -9,10 +9,13 @@ import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUti
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
+import { TaskDependencyBadge } from "./TaskDependencies";
+import { isBlockedTaskStatus } from "@/utils/taskDependencies";
 
 
 
 type TaskGridViewProps = {
+  readOnly?: boolean;
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
   onUpdatePriority?: (taskId: string, newPriority: TaskPriority) => void;
@@ -21,12 +24,12 @@ type TaskGridViewProps = {
   statusOrder?: string[];
 };
 
-export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses, statusOrder }: TaskGridViewProps) {
+export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdatePriority, onSelectTask, customStatuses, statusOrder }: TaskGridViewProps) {
   const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
   const role = useAuthStore((state) => state.profile?.role);
-  function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
-  function canEditPriority(task: Task) { return canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority), role); }
+  function canEditStatus(task: Task) { return !readOnly && canUpdateTaskStatus(task, uid, fullName, role); }
+  function canEditPriority(task: Task) { return !readOnly && canUseTaskPriorityControl(task, uid, fullName, Boolean(onUpdatePriority), role); }
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [openPriorityDropdownId, setOpenPriorityDropdownId] = useState<string | null>(null);
 
@@ -159,12 +162,13 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                           <button
                             key={st}
                             type="button"
+                            disabled={isBlockedTaskStatus(task, st)}
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (canEditStatus(task)) onUpdateStatus(task.id, st);
+                              if (canEditStatus(task) && !isBlockedTaskStatus(task, st)) onUpdateStatus(task.id, st);
                               setOpenDropdownId(null);
                             }}
-                            className={`flex min-w-0 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-left transition-colors ${
+                            className={`flex min-w-0 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                               task.status === st ? `${stTheme.badge} font-semibold ring-1 ring-inset` : "text-slate-700 hover:bg-slate-50"
                             }`}
                           >
@@ -202,13 +206,8 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                     {task.matchPercentage}% Match
                   </span>
                 )}
-                {task.blockedBy && task.blockedBy > 0 ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 ring-1 ring-rose-200">
-                    <AlertTriangle size={11} className="text-rose-500" />
-                    Blocked by {task.blockedBy}
-                  </span>
-                ) : null}
               </div>
+              {(task.dependsOnTaskIds?.length || task.blockedBy) ? <div className="mt-1.5 flex min-w-0 sm:mt-2"><TaskDependencyBadge task={task} /></div> : null}
             </div>
 
             {/* Card Footer */}
@@ -230,10 +229,11 @@ export function TaskGridView({ tasks, onUpdateStatus, onUpdatePriority, onSelect
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (canEditStatus(task)) onUpdateStatus(task.id, "Completed");
+                      if (canEditStatus(task) && !isBlockedTaskStatus(task, "Completed")) onUpdateStatus(task.id, "Completed");
                     }}
-                    title="Mark Completed"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                    disabled={isBlockedTaskStatus(task, "Completed")}
+                    title={task.blockedBy ? "Complete prerequisites first" : "Mark Completed"}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <CheckCircle2 size={13} />
                   </button>

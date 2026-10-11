@@ -43,6 +43,10 @@ export type Task = {
   isLeaderOnly?: boolean;
   isAiGenerated?: boolean;
   blockedBy?: number;
+  blockedByTaskTitles?: string[];
+  dependsOnTaskIds?: string[];
+  archivedAt?: string | null;
+  archivedByUID?: string | null;
 
   // Embedded subtask fields matching goal schema
   subtaskUID?: string;
@@ -71,6 +75,9 @@ export type Task = {
 };
 
 export type Event = {
+  archivedAt?: string | null;
+  archivedByUID?: string | null;
+  statusBeforeArchive?: EventStatus;
   id: string;
   title: string;
   description: string;
@@ -102,7 +109,11 @@ export type GeneratedTask = {
 // ── Subtask review & goal draft models (MSB-FE-013) ───────────────────────────
 
 export type Subtask = {
+  archivedAt?: string | null;
   id: string;
+  dependsOnTaskIds?: string[];
+  blockedBy?: number;
+  blockedByTaskTitles?: string[];
   confirmed?: boolean;
   title: string;
   description: string;

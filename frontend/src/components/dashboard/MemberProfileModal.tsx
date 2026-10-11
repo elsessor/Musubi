@@ -24,6 +24,7 @@ export type MemberProfile = {
     dueDate?: string;
     deadline?: string;
     completedAt?: string | null;
+    archivedAt?: string | null;
     title: string;
     eventTitle?: string;
     customStatuses?: CustomStatusConfig[];
@@ -156,7 +157,7 @@ export function MemberProfileModal({
                           getStatusTheme(task.status, task.customStatuses).badge
                         }`}
                       >
-                        {task.status}
+                        {task.archivedAt ? "Archived" : task.status}
                       </span>
                     </div>
                   </div>

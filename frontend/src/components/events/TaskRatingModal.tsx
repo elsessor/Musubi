@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useContext, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Sparkles, Star, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Sparkles, Star, X } from "lucide-react";
 import type { Task } from "./types";
 import { TaskAttachments } from "./TaskAttachments";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
+import { TaskAssigneeMembersContext } from "./TaskAssignee";
+import { TaskDependencyBadge } from "./TaskDependencies";
+import { PRIORITY_CONFIG } from "./priorityUtils";
 
 export type TaskRatingModalProps = {
   eventId: string;
@@ -28,6 +32,7 @@ const RATING_DESCRIPTIONS: Record<number, { text: string; color: string }> = {
 
 export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId, mode = "review", onRate }: TaskRatingModalProps) {
   const modalId = useId();
+  const members = useContext(TaskAssigneeMembersContext);
   const [selectedTaskId, setSelectedTaskId] = useState(initialTaskId || tasks[0]?.id || "");
   const [drafts, setDrafts] = useState<Record<string, { rating: number; feedback: string }>>({});
   const [hoverRating, setHoverRating] = useState<number>(0);
@@ -60,6 +65,13 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
   }, [isOpen]);
 
   const task = tasks.find((submission) => submission.id === selectedTaskId) || tasks[0];
+  function memberForTask(submission: Task) {
+    const name = submission.assignee?.name || submission.assignedMemberName || "";
+    const matches = submission.assignedMemberUID
+      ? members.filter((member) => member.id === submission.assignedMemberUID)
+      : members.filter((member) => member.name.trim().toLowerCase() === name.trim().toLowerCase());
+    return matches.length === 1 ? matches[0] : undefined;
+  }
   if (!isOpen || !task || !portalTarget) return null;
 
   const selectedIndex = tasks.findIndex((submission) => submission.id === task.id);
@@ -69,6 +81,8 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
   const hasRating = Number.isInteger(rating) && rating >= 1 && rating <= 5;
   const assigneeName = task.assignee?.name || task.assignedMemberName || "Organization Member";
   const assigneeInitials = task.assignee?.initials || assigneeName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  const assignedMember = memberForTask(task);
+  const priority = PRIORITY_CONFIG[task.priority || "Medium"];
 
   function selectTask(taskId: string) {
     if (isSubmitting) return;
@@ -158,6 +172,7 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
                   label: name,
                   description: `${submission.title} · ${count} attachment${count === 1 ? "" : "s"}`,
                   initials: submission.assignee?.initials || name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+                  profilePicture: memberForTask(submission)?.profilePicture || null,
                   color: "bg-[#213f68]"
                 };
               })}
@@ -177,24 +192,26 @@ export function TaskRatingModal({ eventId, isOpen, onClose, tasks, initialTaskId
           </section> : null}
 
           {/* Member & Task Context Card */}
-          <div className="flex flex-wrap items-start justify-between gap-2 rounded-xl bg-slate-50 border border-slate-200/80 p-3 sm:items-center">
-            <div className="flex min-w-0 flex-1 basis-40 items-start gap-2 sm:items-center sm:gap-3">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#213f68] text-xs font-bold text-white">
-                {assigneeInitials}
+          <section aria-label="Submission details" className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="flex min-w-0 items-start gap-2.5 border-b border-slate-100 bg-slate-50/80 px-3 py-2.5 sm:items-center">
+              <MemberAvatar member={{ name: assigneeName, initials: assigneeInitials, profilePicture: assignedMember?.profilePicture }} className="size-8 shrink-0" fallbackClassName="bg-[#213f68] text-[11px]" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-medium leading-4 text-slate-500">Submitted by</p>
+                <p className="break-words text-xs font-semibold leading-5 text-slate-900 [overflow-wrap:anywhere]">{assigneeName}</p>
+              </div>
+              <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 sm:mt-0">
+                <CheckCircle2 size={11} className="shrink-0" /> Completed
               </span>
-              <div className="min-w-0">
-                <p className="break-words text-xs font-bold text-slate-900 [overflow-wrap:anywhere]">{assigneeName}</p>
-                <p className="mt-0.5 break-words text-[11px] font-medium leading-5 text-slate-500 [overflow-wrap:anywhere]">
-                  {task.title}
-                </p>
+            </div>
+            <div className="min-w-0 p-3">
+              <h3 className="break-words text-[13px] font-semibold leading-5 text-slate-900 [overflow-wrap:anywhere]">{task.title || "Untitled task"}</h3>
+              {task.description && task.description.trim() !== task.title?.trim() ? <p className="mt-1.5 whitespace-pre-wrap break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">{task.description}</p> : null}
+              <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${priority.classes}`}><span className="size-1.5 shrink-0 rounded-full bg-current" />{priority.label} priority</span>
+                <TaskDependencyBadge task={task} />
               </div>
             </div>
-            <span className="shrink-0 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-              Completed
-            </span>
-          </div>
-
-          {task.description ? <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere] sm:text-xs sm:leading-relaxed">{task.description}</p> : null}
+          </section>
           <TaskAttachments key={task.id} eventId={eventId} task={task} canAdd={false} />
 
           {/* Star Rating Selector */}

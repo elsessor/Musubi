@@ -7,8 +7,10 @@ import { applyTaskStatusUpdate, assertCanContributeTask, assertEventAccess, isTa
 import { MAX_TASK_ATTACHMENTS, normalizeAttachmentContentType, splitAttachmentFile, validateAttachmentLink, validateAttachmentName, type TaskAttachment } from "../utils/taskAttachments.js";
 import { recordTaskPerformance } from "../utils/taskPerformance.js";
 import { appCache } from "../utils/cache.js";
+import { withTaskDependencyState } from "../utils/taskDependencies.js";
 
-function getTask(event: TaskRecord, taskId: string): TaskRecord {
+function getTask(event: TaskRecord, taskId: string, editing = false): TaskRecord {
+  if (editing && event.status === "Archived") throw new AppError("Restore this archived event before changing its subtasks.", 409);
   const task = Array.isArray(event.tasks) ? event.tasks.find((item: TaskRecord) => item.id === taskId) : null;
   if (!task) throw new AppError("Subtask not found.", 404);
   return task;
@@ -31,13 +33,14 @@ export async function updateTaskStatusForUser(uid: string, eventId: string, task
     const snapshot = await transaction.get(eventRef);
     if (!snapshot.exists) throw new AppError("Event not found.", 404);
     const event = snapshot.data() || {};
-    const original = getTask(event, taskId);
+    const original = getTask(event, taskId, true);
     assertCanContributeTask(user, event.orgId, original);
     const updated = recordTaskPerformance([applyTaskStatusUpdate(original, input, event)], [original], { uid, fullName: user.fullName, isLeader: isTaskLeader(user) })[0];
-    const tasks = event.tasks.map((task: TaskRecord) => task.id === taskId ? updated : task);
-    const completedCount = tasks.filter((task: TaskRecord) => ["completed", "done"].includes(String(task.status).trim().toLowerCase())).length;
-    transaction.update(eventRef, { tasks, progress: tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
-    return { event, task: updated };
+    const tasks = withTaskDependencyState(event.tasks.map((task: TaskRecord) => task.id === taskId ? updated : task));
+    const activeTasks = tasks.filter((task: TaskRecord) => !task.archivedAt);
+    const completedCount = activeTasks.filter((task: TaskRecord) => ["completed", "done"].includes(String(task.status).trim().toLowerCase())).length;
+    transaction.update(eventRef, { tasks, progress: activeTasks.length ? Math.round((completedCount / activeTasks.length) * 100) : 0, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+    return { event, task: tasks.find((task) => task.id === taskId)! };
   });
   appCache.deletePrefix("events_raw:");
   appCache.deletePrefix("members:");
@@ -53,7 +56,7 @@ async function saveAttachment(uid: string, eventId: string, taskId: string, atta
     const snapshot = await transaction.get(eventRef);
     if (!snapshot.exists) throw new AppError("Event not found.", 404);
     const event = snapshot.data() || {};
-    const original = getTask(event, taskId);
+    const original = getTask(event, taskId, true);
     assertCanContributeTask(user, event.orgId, original);
     const attachments: TaskAttachment[] = Array.isArray(original.attachments) ? original.attachments : [];
     if (attachments.length >= MAX_TASK_ATTACHMENTS) throw new AppError(`A subtask can have up to ${MAX_TASK_ATTACHMENTS} attachments.`, 400);
@@ -122,8 +125,9 @@ export async function rateTaskForUser(uid: string, eventId: string, taskId: stri
     const snapshot = await transaction.get(eventRef);
     if (!snapshot.exists) throw new AppError("Event not found.", 404);
     const event = snapshot.data() || {};
-    const original = getTask(event, taskId);
+    const original = getTask(event, taskId, true);
     assertEventAccess(user, event.orgId);
+    if (original.archivedAt) throw new AppError("Restore this archived subtask before rating it.", 409);
     if (!["completed", "done"].includes(String(original.status || "").trim().toLowerCase())) {
       throw new AppError("Only completed tasks can be rated.", 400);
     }

@@ -17,7 +17,7 @@ import {
   Table,
   Users
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Event, EventStatus, Task, TaskPriority, TaskStatus } from "./types";
 import type { OrganizationMember } from "@/services/auth.service";
 import { AddTaskModal, mapOrgMemberToItem, type OrgMemberItem } from "./AddTaskModal";
@@ -31,10 +31,12 @@ import { TaskTableView } from "./TaskTableView";
 import { TaskExpandedView } from "./TaskExpandedView";
 import { TaskCalendarView } from "./TaskCalendarView";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
+import { ConfirmArchiveModal } from "./ConfirmArchiveModal";
 
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { getEventMemberCount } from "@/utils/eventMembers";
+import { getTaskDependencyError, isTaskArchived, withTaskDependencyState } from "@/utils/taskDependencies";
+import { TaskDependencyTasksContext } from "./TaskDependencies";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { updateEventFirestore, updateTaskStatus, rateTaskInEvent } from "@/services/events.service";
@@ -58,7 +60,7 @@ type KanbanBoardProps = {
   members?: OrganizationMember[];
   onBack: () => void;
   onUpdateEvent?: (updatedEvent: Event) => void;
-  onDeleteEvent?: () => void | Promise<void>;
+  onArchiveEvent?: () => void | Promise<void>;
   committees?: { id: string; name: string }[];
   isLeader?: boolean;
 };
@@ -67,7 +69,7 @@ export function KanbanBoard({
   event,
   onBack,
   onUpdateEvent,
-  onDeleteEvent,
+  onArchiveEvent,
   committees = [],
   members = [],
   isLeader = true
@@ -76,7 +78,9 @@ export function KanbanBoard({
   const profile = useAuthStore((state) => state.profile);
   const showToast = useToastStore((state) => state.showToast);
   const [currentEvent, setCurrentEvent] = useState<Event>(event);
-  const [tasks, setTasks] = useState<Task[]>(event.tasks || []);
+  const [storedTasks, setTasks] = useState<Task[]>(event.tasks || []);
+  const tasks = useMemo(() => withTaskDependencyState(storedTasks), [storedTasks]);
+  const activeTasks = tasks.filter((task) => !isTaskArchived(task));
   const memberCount = getEventMemberCount(tasks);
 
   const realRoster = Array.isArray(members) && members.length > 0 ? members.map(mapOrgMemberToItem) : undefined;
@@ -116,8 +120,8 @@ export function KanbanBoard({
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
   const [ratingTaskTarget, setRatingTaskTarget] = useState<Task | null>(null);
-  const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false);
-  const [isDeletingEvent, setIsDeletingEvent] = useState(false);
+  const [confirmArchiveEvent, setConfirmArchiveEvent] = useState(false);
+  const [isArchivingEvent, setIsArchivingEvent] = useState(false);
   const [editEventModalOpen, setEditEventModalOpen] = useState(false);
 
   // Custom task statuses state & localStorage (scoped per event)
@@ -129,7 +133,7 @@ export function KanbanBoard({
   const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_STATUSES);
 
   function canEditTask(task: Task) {
-    return canUpdateTaskStatus(task, firebaseUser?.uid ?? profile?.uid, profile?.fullName || firebaseUser?.displayName || "", profile?.role);
+    return currentEvent.status !== "Archived" && canUpdateTaskStatus(task, firebaseUser?.uid ?? profile?.uid, profile?.fullName || firebaseUser?.displayName || "", profile?.role);
   }
 
   // Sync state if event prop changes
@@ -262,12 +266,16 @@ export function KanbanBoard({
     setDragOverStatusPill(null);
   }
 
-  function syncEvent(updatedTasks: Task[], statusOverride?: EventStatus, progressOverride?: number, successMessage?: { title: string; description: string }) {
-    if (!isLeader) return;
-    const completedTasks = updatedTasks.filter((t) => t.status === "Completed").length;
-    const computedProgress = updatedTasks.length > 0
-      ? Math.round((completedTasks / updatedTasks.length) * 100)
-      : currentEvent.progress;
+  async function syncEvent(updatedTasks: Task[], statusOverride?: EventStatus, progressOverride?: number, successMessage?: { title: string; description: string }): Promise<boolean> {
+    if (!isLeader) return false;
+    const dependencyError = getTaskDependencyError(updatedTasks, tasks);
+    if (dependencyError) {
+      showToast({ title: "Task dependency", description: dependencyError, tone: "error" });
+      return false;
+    }
+    const active = updatedTasks.filter((task) => !isTaskArchived(task));
+    const completedTasks = active.filter((t) => t.status === "Completed" || t.status === "Done").length;
+    const computedProgress = active.length > 0 ? Math.round((completedTasks / active.length) * 100) : 0;
 
     const finalStatus = statusOverride || currentEvent.status;
     const finalProgress = typeof progressOverride === "number" ? progressOverride : computedProgress;
@@ -287,22 +295,28 @@ export function KanbanBoard({
     const update = isLeader
       ? { status: finalStatus, progress: finalProgress, tasks: updatedTasks }
       : { tasks: updatedTasks };
-    void updateEventFirestore(firebaseUser, event.id, update).then(() => {
+    try {
+      await updateEventFirestore(firebaseUser, event.id, update);
       showToast({ ...(successMessage || { title: "Changes saved", description: "Your changes have been saved successfully." }), tone: "success" });
-    }).catch((error) => {
+      return true;
+    } catch (error) {
       console.error("Failed to update event:", error);
       setCurrentEvent(currentEvent);
       setTasks(tasks);
       onUpdateEvent?.(currentEvent);
       showToast({ title: "Changes not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
-    });
+      return false;
+    }
   }
 
   async function handleAddTask(newTask: Task) {
     if (!isLeader) return;
     const updatedTasks = [newTask, ...tasks];
-    const completedTasks = updatedTasks.filter((task) => task.status === "Completed").length;
-    const updatedProgress = updatedTasks.length ? Math.round((completedTasks / updatedTasks.length) * 100) : currentEvent.progress;
+    const dependencyError = getTaskDependencyError(updatedTasks, tasks);
+    if (dependencyError) throw new Error(dependencyError);
+    const active = updatedTasks.filter((task) => !isTaskArchived(task));
+    const completedTasks = active.filter((task) => task.status === "Completed" || task.status === "Done").length;
+    const updatedProgress = active.length ? Math.round((completedTasks / active.length) * 100) : 0;
     const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: updatedProgress };
     try {
       await updateEventFirestore(firebaseUser, event.id, { tasks: updatedTasks, progress: updatedProgress });
@@ -338,31 +352,40 @@ export function KanbanBoard({
     setReassignTaskTarget(null);
   }
 
-  function handleUpdateTaskStatus(taskId: string, targetStatus: TaskStatus) {
+  async function handleUpdateTaskStatus(taskId: string, targetStatus: TaskStatus): Promise<boolean> {
     const target = tasks.find((task) => task.id === taskId);
-    if (!target || !canEditTask(target)) return;
+    if (!target || !canEditTask(target)) return false;
     const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: targetStatus } : t));
+    const dependencyError = getTaskDependencyError(updatedTasks, tasks);
+    if (dependencyError) {
+      showToast({ title: "Task dependency", description: dependencyError, tone: "error" });
+      return false;
+    }
     if (isLeader) {
-      syncEvent(updatedTasks);
+      if (!await syncEvent(updatedTasks)) return false;
       if (targetStatus === "Completed" || targetStatus === "Done") {
         setRatingTaskTarget({ ...target, status: targetStatus });
       }
-      return;
+      return true;
     }
-    const completed = updatedTasks.filter((task) => task.status === "Completed" || task.status === "Done").length;
-    const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: updatedTasks.length ? Math.round(completed / updatedTasks.length * 100) : 0 };
+    const active = updatedTasks.filter((task) => !isTaskArchived(task));
+    const completed = active.filter((task) => task.status === "Completed" || task.status === "Done").length;
+    const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: active.length ? Math.round(completed / active.length * 100) : 0 };
     setTasks(updatedTasks);
     setCurrentEvent(updatedEvent);
     onUpdateEvent?.(updatedEvent);
-    void updateTaskStatus(firebaseUser, event.id, taskId, targetStatus).then((savedTask) => {
+    try {
+      const savedTask = await updateTaskStatus(firebaseUser, event.id, taskId, targetStatus);
       handleSavedTask(savedTask);
       showToast({ title: "Status updated", description: "Your task status has been saved successfully.", tone: "success" });
-    }).catch((error) => {
+      return true;
+    } catch (error) {
       setTasks(tasks);
       setCurrentEvent(currentEvent);
       onUpdateEvent?.(currentEvent);
       showToast({ title: "Status not saved", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
-    });
+      return false;
+    }
   }
 
   async function handleRateTask(taskId: string, rating: number, feedback: string) {
@@ -378,8 +401,9 @@ export function KanbanBoard({
 
   function handleSavedTask(updatedTask: Task) {
     const updatedTasks = tasks.map((task) => task.id === updatedTask.id ? updatedTask : task);
-    const completed = updatedTasks.filter((task) => task.status === "Completed" || task.status === "Done").length;
-    const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: updatedTasks.length ? Math.round(completed / updatedTasks.length * 100) : 0 };
+    const active = updatedTasks.filter((task) => !isTaskArchived(task));
+    const completed = active.filter((task) => task.status === "Completed" || task.status === "Done").length;
+    const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: active.length ? Math.round(completed / active.length * 100) : 0 };
     setTasks(updatedTasks);
     setCurrentEvent(updatedEvent);
     setSelectedDetailTask((selected) => selected?.id === updatedTask.id ? updatedTask : selected);
@@ -396,29 +420,33 @@ export function KanbanBoard({
     syncEvent(updatedTasks);
   }
 
-  function handleUpdateTask(updatedTask: Task) {
+  async function handleUpdateTask(updatedTask: Task): Promise<boolean> {
     const original = tasks.find((task) => task.id === updatedTask.id);
-    if (!original || !canEditTask(original)) return;
+    if (!original || !canEditTask(original)) return false;
     if (!isLeader) {
-      handleUpdateTaskStatus(updatedTask.id, updatedTask.status);
+      if (!await handleUpdateTaskStatus(updatedTask.id, updatedTask.status)) return false;
       setSelectedDetailTask(null);
-      return;
+      return true;
     }
     const updatedTasks = tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
-    syncEvent(updatedTasks);
+    if (!await syncEvent(updatedTasks)) return false;
     setSelectedDetailTask(null);
+    return true;
   }
 
-  function handleDeleteTask(taskId: string) {
-    if (!isLeader) return;
-    const deletedTask = tasks.find((task) => task.id === taskId);
-    if (!deletedTask) return;
-    const updatedTasks = tasks.filter((task) => task.id !== taskId);
-    const updatedProgress = updatedTasks.length
-      ? Math.round((updatedTasks.filter((task) => task.status === "Completed").length / updatedTasks.length) * 100)
-      : 0;
-    syncEvent(updatedTasks, undefined, updatedProgress, { title: "Subtask deleted", description: `${deletedTask.title || "The subtask"} has been deleted successfully.` });
+  async function handleArchiveTask(taskId: string): Promise<boolean> {
+    if (!isLeader) return false;
+    const target = tasks.find((task) => task.id === taskId);
+    if (!target || currentEvent.status === "Archived") return false;
+    const restoring = isTaskArchived(target);
+    const updatedTasks = tasks.map((task) => task.id === taskId ? { ...task,
+      status: restoring && task.status.trim().toLowerCase() === "archived" ? "To Do" : task.status,
+      archivedAt: restoring ? null : new Date().toISOString(), archivedByUID: restoring ? null : firebaseUser?.uid || profile?.uid || null } : task);
+    const dependencyError = getTaskDependencyError(updatedTasks, tasks);
+    if (dependencyError) { showToast({ title: "Cannot archive prerequisite", description: dependencyError, tone: "error" }); return false; }
+    if (!await syncEvent(updatedTasks, undefined, undefined, { title: restoring ? "Subtask restored" : "Subtask archived", description: `${target.title || "The subtask"} has been ${restoring ? "restored" : "archived"}.` })) return false;
     setSelectedDetailTask(null);
+    return true;
   }
 
   function handleDrop(targetStatus: TaskStatus) {
@@ -440,15 +468,19 @@ export function KanbanBoard({
     new Set([...fetchedNames, ...taskNames, ...(currentEvent.committee ? [currentEvent.committee] : [])])
   );
 
-  const allStatuses: TaskStatus[] = statusOrder as TaskStatus[];
+  const allStatuses: TaskStatus[] = statusFilter === "Archived" ? ["Archived"] : statusOrder as TaskStatus[];
 
   const allTaskFilters: { label: string; key: TaskStatus | "All" }[] = [
     { label: "All Tasks", key: "All" },
-    ...statusOrder.map((st) => ({ label: st, key: st as TaskStatus }))
+    ...statusOrder.filter((st) => st !== "Archived").map((st) => ({ label: st, key: st as TaskStatus })),
+    { label: "Archived", key: "Archived" }
   ];
+  function taskFilterCount(key: string) {
+    return key === "Archived" ? tasks.filter(isTaskArchived).length : key === "All" ? activeTasks.length : activeTasks.filter((task) => task.status === key).length;
+  }
 
   const visibleTasks = tasks.filter((t) => {
-    const matchesStatus = statusFilter === "All" || t.status === statusFilter;
+    const matchesStatus = statusFilter === "Archived" ? isTaskArchived(t) : !isTaskArchived(t) && (statusFilter === "All" || t.status === statusFilter);
     const matchesSearch =
       (t.title || "").toLowerCase().includes(search.toLowerCase()) ||
       (t.description || "").toLowerCase().includes(search.toLowerCase());
@@ -459,12 +491,13 @@ export function KanbanBoard({
   });
 
   function getColumnTasks(status: TaskStatus) {
-    return visibleTasks.filter((t) => t.status === status);
+    return status === "Archived" ? visibleTasks : visibleTasks.filter((t) => t.status === status);
   }
 
-  const completedCount = tasks.filter((t) => t.status === "Completed").length;
+  const completedCount = activeTasks.filter((t) => t.status === "Completed" || t.status === "Done").length;
 
   return (
+    <TaskDependencyTasksContext.Provider value={tasks}>
     <div className="flex min-h-full min-w-0 flex-col animate-in fade-in duration-200">
       {/* Breadcrumb Navigation */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -485,8 +518,8 @@ export function KanbanBoard({
       </div>
 
       {/* Leader Unrated Tasks Review Banner */}
-      {isLeader && (() => {
-        const unrated = tasks.filter((t) => (t.status === "Completed" || t.status === "Done") && !t.performanceReview?.rating);
+      {isLeader && currentEvent.status !== "Archived" && (() => {
+        const unrated = activeTasks.filter((t) => (t.status === "Completed" || t.status === "Done") && !t.performanceReview?.rating);
         if (unrated.length === 0) return null;
         return (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 border border-amber-200/90 p-3 text-xs text-amber-900 shadow-2xs">
@@ -540,7 +573,7 @@ export function KanbanBoard({
                 {memberCount} {memberCount === 1 ? "member" : "members"}
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="font-extrabold text-slate-800">{tasks.length}</span> total tasks
+                <span className="font-extrabold text-slate-800">{activeTasks.length}</span> total tasks
               </span>
             </div>
           </div>
@@ -607,10 +640,10 @@ export function KanbanBoard({
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">
             {allTaskFilters.map(({ label, key }) => {
-              const count = key === "All" ? tasks.length : tasks.filter((t) => t.status === key).length;
+              const count = taskFilterCount(key);
               const isActive = statusFilter === key;
               const theme = getStatusTheme(key, customStatuses);
-              const isPillDraggable = isLeader && key !== "All";
+              const isPillDraggable = isLeader && key !== "All" && key !== "Archived";
               const isDraggingThis = draggedStatusPill === key;
               const isDragOverThis = dragOverStatusPill === key;
 
@@ -712,7 +745,7 @@ export function KanbanBoard({
             ))}
           </div>
 
-          {isLeader ? <button
+          {isLeader && currentEvent.status !== "Archived" ? <button
             type="button"
             onClick={() => setShowAddTaskModal(true)}
             className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
@@ -727,6 +760,7 @@ export function KanbanBoard({
       <div className="min-w-0">
         {viewMode === "grid" && (
           <TaskGridView
+            readOnly={currentEvent.status === "Archived"}
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
             onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
@@ -738,6 +772,7 @@ export function KanbanBoard({
 
         {viewMode === "table" && (
           <TaskTableView
+            readOnly={currentEvent.status === "Archived"}
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
             onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
@@ -749,6 +784,7 @@ export function KanbanBoard({
 
         {viewMode === "expanded" && (
           <TaskExpandedView
+            readOnly={currentEvent.status === "Archived"}
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
             onSelectTask={(task) => setSelectedDetailTask(task)}
@@ -761,6 +797,7 @@ export function KanbanBoard({
           <div className="flex min-w-0 snap-x snap-proximity items-start gap-3 overflow-x-auto overscroll-x-contain pb-4 pt-1 sm:gap-4">
             {allStatuses.map((status) => (
               <KanbanColumn
+                readOnly={currentEvent.status === "Archived" || status === "Archived"}
                 key={status}
                 status={status}
                 tasks={getColumnTasks(status)}
@@ -811,6 +848,7 @@ export function KanbanBoard({
 
         {viewMode === "calendar" && (
           <TaskCalendarView
+            readOnly={currentEvent.status === "Archived"}
             tasks={visibleTasks}
             onUpdateStatus={handleUpdateTaskStatus}
             onUpdatePriority={isLeader ? handleUpdateTaskPriority : undefined}
@@ -822,15 +860,25 @@ export function KanbanBoard({
 
       {/* Completion summary footer */}
       <p className="mt-2 text-center text-xs font-semibold text-slate-500">
-        {completedCount} of {tasks.length} tasks completed ({currentEvent.progress}% overall)
+        {completedCount} of {activeTasks.length} tasks completed ({currentEvent.progress}% overall)
       </p>
 
       {/* Task Detail Modal */}
       {editEventModalOpen && isLeader && (
-        <EditEventModal event={currentEvent} committees={committees} onDelete={onDeleteEvent ? () => { setEditEventModalOpen(false); setConfirmDeleteEvent(true); } : undefined} onClose={() => setEditEventModalOpen(false)} onSave={async (details) => {
+        <EditEventModal event={currentEvent} committees={committees} onArchive={onArchiveEvent ? () => {
+          setEditEventModalOpen(false);
+          if (currentEvent.status === "Archived") {
+            void (async () => {
+              try { await onArchiveEvent(); showToast({ title: "Event restored", description: "The event is back in the active views.", tone: "success" }); }
+              catch (error) { showToast({ title: "Event not restored", description: error instanceof Error ? error.message : "Please try again.", tone: "error" }); }
+            })();
+          } else setConfirmArchiveEvent(true);
+        } : undefined} onClose={() => setEditEventModalOpen(false)} onSave={async (details) => {
           if (!isLeader) throw new Error("Only a student leader can edit event details.");
           const completing = details.status === "Completed" && currentEvent.status !== "Completed";
-          const updatedTasks = completing ? tasks.map((task) => ({ ...task, status: "Completed" as TaskStatus })) : tasks;
+          const updatedTasks = completing ? tasks.map((task) => isTaskArchived(task) ? task : { ...task, status: "Completed" as TaskStatus }) : tasks;
+          const dependencyError = getTaskDependencyError(updatedTasks, tasks);
+          if (dependencyError) throw new Error(dependencyError);
           const update = { ...details, ...(completing ? { tasks: updatedTasks, progress: 100 } : {}) };
           await updateEventFirestore(firebaseUser, currentEvent.id, update);
           setCurrentEvent((current) => ({ ...current, ...update }));
@@ -850,7 +898,7 @@ export function KanbanBoard({
               <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white" dropdownClassName="[&_button]:min-h-11" />
             </div>
             <div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Status</p>
-              <CustomSelect value={statusFilter} onChange={setStatusFilter} options={allTaskFilters.map(({ key, label }) => ({ value: key, label: `${label} (${key === "All" ? tasks.length : tasks.filter((task) => task.status === key).length})`, indicatorClass: key === "All" ? undefined : getStatusTheme(key, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white" dropdownClassName="[&_button]:min-h-11" />
+              <CustomSelect value={statusFilter} onChange={setStatusFilter} options={allTaskFilters.map(({ key, label }) => ({ value: key, label: `${label} (${taskFilterCount(key)})`, indicatorClass: key === "All" ? undefined : getStatusTheme(key, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white" dropdownClassName="[&_button]:min-h-11" />
             </div>
             <div className="flex flex-wrap justify-between gap-2">
               <button type="button" onClick={() => { setSelectedCommittee("All"); setStatusFilter("All"); setSearch(""); }} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
@@ -862,12 +910,13 @@ export function KanbanBoard({
       {selectedDetailTask && (
         <TaskDetailModal
           eventId={currentEvent.id}
-          task={selectedDetailTask}
+          task={tasks.find((task) => task.id === selectedDetailTask.id) || selectedDetailTask}
+          tasks={tasks}
           onClose={() => setSelectedDetailTask(null)}
           onUpdateTask={handleUpdateTask}
           onAttachmentsUpdated={handleSavedTask}
           onEditRating={setRatingTaskTarget}
-          onDeleteTask={handleDeleteTask}
+          onArchiveTask={currentEvent.status === "Archived" ? undefined : handleArchiveTask}
           customStatuses={customStatuses}
           statusOrder={statusOrder}
           committees={committees}
@@ -881,6 +930,7 @@ export function KanbanBoard({
       {isLeader && showAddTaskModal && (
         <AddTaskModal
           eventName={currentEvent.title}
+          tasks={tasks}
           members={members}
           onClose={() => setShowAddTaskModal(false)}
           onAddTask={handleAddTask}
@@ -926,34 +976,34 @@ export function KanbanBoard({
           mode={ratingTaskTarget.performanceReview?.rating ? "edit" : "review"}
           tasks={ratingTaskTarget.performanceReview?.rating
             ? tasks.filter((task) => task.id === ratingTaskTarget.id)
-            : tasks.filter((task) => (task.status === "Completed" || task.status === "Done") && !task.performanceReview?.rating)}
+            : activeTasks.filter((task) => (task.status === "Completed" || task.status === "Done") && !task.performanceReview?.rating)}
           initialTaskId={ratingTaskTarget.id}
           onRate={handleRateTask}
         />
       )}
 
-      {isLeader && confirmDeleteEvent && onDeleteEvent && (
-        <ConfirmDeleteModal
+      {isLeader && confirmArchiveEvent && onArchiveEvent && (
+        <ConfirmArchiveModal
           key={currentEvent.title}
           itemType="event"
           itemName={currentEvent.title}
-          requireNameConfirmation
-          isDeleting={isDeletingEvent}
-          onCancel={() => setConfirmDeleteEvent(false)}
+          isArchiving={isArchivingEvent}
+          onCancel={() => setConfirmArchiveEvent(false)}
           onConfirm={async () => {
-            setIsDeletingEvent(true);
+            setIsArchivingEvent(true);
             try {
-              await onDeleteEvent();
-              showToast({ title: "Event deleted", description: "The event has been deleted successfully.", tone: "success" });
-              setConfirmDeleteEvent(false);
+              await onArchiveEvent();
+              showToast({ title: "Event archived", description: "The event has been archived successfully.", tone: "success" });
+              setConfirmArchiveEvent(false);
             } catch (error) {
-              showToast({ title: "Event not deleted", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
+              showToast({ title: "Event not archived", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
             } finally {
-              setIsDeletingEvent(false);
+              setIsArchivingEvent(false);
             }
           }}
         />
       )}
     </div>
+    </TaskDependencyTasksContext.Provider>
   );
 }

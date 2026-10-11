@@ -9,6 +9,7 @@ import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
 export type CustomSelectOption = {
   value: string;
   label: string;
+  disabled?: boolean;
   description?: string;
   sublabel?: string;
   initials?: string;
@@ -28,6 +29,7 @@ export type CustomSelectProps = {
   containerClassName?: string;
   buttonClassName?: string;
   dropdownClassName?: string;
+  multiline?: boolean;
   disabled?: boolean;
   direction?: "up" | "down" | "auto";
   portal?: boolean;
@@ -42,6 +44,7 @@ export function CustomSelect({
   containerClassName = "",
   buttonClassName = "",
   dropdownClassName = "",
+  multiline = false,
   disabled = false,
   direction = "auto",
   portal = false
@@ -121,14 +124,14 @@ export function CustomSelect({
           ) : options.map((opt) => {
             const isSelected = opt.value === value;
             return (
-              <button key={opt.value} type="button" onClick={() => { onChange(opt.value); setIsOpen(false); }} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-left transition select-none cursor-pointer", isSelected ? opt.selectedClass || "bg-blue-50 text-blue-700 font-bold" : "text-slate-700 hover:bg-slate-100/80 hover:text-slate-900")}>
-                <div className="flex min-w-0 items-center gap-2 truncate">
+              <button key={opt.value} type="button" disabled={opt.disabled} onClick={() => { if (opt.disabled) return; onChange(opt.value); setIsOpen(false); }} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold text-left transition select-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-40", isSelected ? opt.selectedClass || "bg-blue-50 text-blue-700 font-bold" : "text-slate-700 hover:bg-slate-100/80 hover:text-slate-900")}>
+                <div className={cn("flex min-w-0 items-center gap-2", multiline ? "flex-1" : "truncate")}>
                   {opt.initials || opt.profilePicture !== undefined ? <MemberAvatar member={{ name: opt.label, initials: opt.initials, profilePicture: opt.profilePicture }} className="size-5 shrink-0" fallbackClassName={opt.color || "bg-blue-600"} /> : null}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate">
+                    <div className={multiline ? "whitespace-normal break-words" : "truncate"}>
                     {opt.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", opt.indicatorClass)} />}
                     <span className={cn(opt.labelClass)}>{opt.label}</span>
-                    {opt.sublabel && <span className="text-slate-400 font-normal ml-1"> — {opt.sublabel}</span>}
+                    {opt.sublabel && <span className={cn("text-slate-400 font-normal", multiline ? "mt-0.5 block text-[11px] leading-relaxed" : "ml-1")}>{multiline ? opt.sublabel : ` — ${opt.sublabel}`}</span>}
                     </div>
                     {opt.description ? <p className="mt-0.5 whitespace-normal break-words text-[11px] font-normal leading-relaxed text-slate-500">{opt.description}</p> : null}
                   </div>
@@ -154,18 +157,18 @@ export function CustomSelect({
           disabled && "cursor-not-allowed opacity-60"
         )}
       >
-        <div className="flex items-center gap-2 truncate text-left">
+        <div className={cn("flex items-center gap-2 text-left", multiline ? "min-w-0 flex-1" : "truncate")}>
           {icon}
           {selectedOption && (selectedOption.initials || selectedOption.profilePicture !== undefined) ? (
             <MemberAvatar member={{ name: selectedOption.label, initials: selectedOption.initials, profilePicture: selectedOption.profilePicture }} className="size-5 shrink-0" fallbackClassName={selectedOption.color || "bg-blue-600"} />
           ) : null}
-          <span className="truncate">
+          <span className={multiline ? "min-w-0 flex-1 whitespace-normal break-words" : "truncate"}>
           {selectedOption ? (
               <span className={cn(selectedOption.labelClass)}>
                 {selectedOption.indicatorClass && <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", selectedOption.indicatorClass)} />}
                 {selectedOption.label}
                 {selectedOption.sublabel ? (
-                  <span className="text-slate-400 font-normal"> — {selectedOption.sublabel}</span>
+                  <span className={cn("text-slate-400 font-normal", multiline && "mt-0.5 block text-[11px] leading-relaxed")}>{multiline ? selectedOption.sublabel : ` — ${selectedOption.sublabel}`}</span>
                 ) : null}
               </span>
             ) : (

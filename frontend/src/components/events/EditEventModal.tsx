@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Trash2, X } from "lucide-react";
+import { BookOpen, Archive, X } from "lucide-react";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { EventStatusModal } from "./EventStatusModal";
@@ -15,11 +15,11 @@ type EditEventModalProps = {
   event: Event;
   committees: { id: string; name: string }[];
   onClose: () => void;
-  onDelete?: () => void;
+  onArchive?: () => void;
   onSave: (details: EventDetailsUpdate) => Promise<void>;
 };
 
-export function EditEventModal({ event: initialEvent, committees, onClose, onSave, onDelete }: EditEventModalProps) {
+export function EditEventModal({ event: initialEvent, committees, onClose, onSave, onArchive }: EditEventModalProps) {
   const [title, setTitle] = useState(initialEvent.title);
   const [description, setDescription] = useState(initialEvent.description);
   const [committee, setCommittee] = useState(initialEvent.committee || "");
@@ -122,7 +122,7 @@ export function EditEventModal({ event: initialEvent, committees, onClose, onSav
           </fieldset>
           {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
-            {onDelete && <button type="button" onClick={onDelete} disabled={saving} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg text-xs font-medium text-rose-600 hover:text-rose-700 disabled:opacity-50"><Trash2 className="size-3.5 shrink-0" /> Delete event</button>}
+            {onArchive && <button type="button" onClick={onArchive} disabled={saving} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-800 disabled:opacity-50"><Archive className="size-3.5 shrink-0" />{initialEvent.status === "Archived" ? "Restore event" : "Archive event"}</button>}
             <div className="ml-auto flex items-center gap-2">
               <button type="button" onClick={onClose} disabled={saving} className="min-h-11 rounded-xl border border-slate-200 bg-white px-4 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
               <button type="submit" disabled={saving || !title.trim()} className="min-h-11 rounded-xl bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{saving ? "Saving..." : "Save changes"}</button>

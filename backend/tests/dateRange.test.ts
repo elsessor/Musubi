@@ -5,7 +5,7 @@ import { getDateRangeError as frontendError } from "../../frontend/src/utils/dat
 
 test("events and tasks reject a target date before their start", () => {
   assert.match(getDateRangeError("2026-10-12", "2026-10-11")!, /target date must be on or after/);
-  assert.match(getDateRangeError("Oct 12, 2026", "Oct 11, 2026", "Task")!, /deadline must be on or after/);
+  assert.match(getDateRangeError("Oct 12, 2026", "Oct 11, 2026", "Task")!, /deadline must be later than/);
 });
 
 test("calendar time strings reject reversed times on the same day", () => {
@@ -34,7 +34,24 @@ test("date-only deadlines include the whole day and legacy unset dates remain su
 });
 
 test("the form and server date validation agree", () => {
-  for (const [start, end] of [["2026-10-12", "2026-10-11"], ["Oct 8, 2026 at 02:30 PM", "Oct 8, 2026 at 09:00 AM"], ["2026-02-30", "2026-03-01"], ["", ""], ["2026-10-08", "2026-10-08"]]) {
+  for (const [start, end] of [["2026-10-12", "2026-10-11"], ["Oct 8, 2026 at 02:30 PM", "Oct 8, 2026 at 09:00 AM"], ["2026-02-30", "2026-03-01"], ["", ""], ["2026-10-08", "2026-10-08"], ["Oct 8, 2026 at 09:00 AM", "2026-10-08 at 09:00 AM"], ["Oct 8, 2026 at 09:00 AM", "Oct 8, 2026 at 09:01 AM"]]) {
     assert.equal(frontendError(start, end, "Task"), getDateRangeError(start, end, "Task"));
   }
+});
+
+test("task deadlines must be strictly later, including equivalent timestamp formats", () => {
+  for (const [start, end] of [
+    ["Oct 8, 2026 at 09:00 AM", "Oct 8, 2026 at 09:00 AM"],
+    ["Oct 8, 2026 at 09:00 AM", "2026-10-08 at 09:00 AM"],
+    ["Oct 8, 2026 at 12:00 AM", "Oct 8, 2026 at 12:00 AM"],
+    ["Oct 8, 2026 at 12:00 PM", "Oct 8, 2026 at 12:00 PM"],
+    ["2026-10-08T09:00:00Z", "2026-10-08T17:00:00+08:00"]
+  ]) {
+    assert.match(getDateRangeError(start, end, "Task")!, /deadline must be later than/);
+    assert.equal(frontendError(start, end, "Task"), getDateRangeError(start, end, "Task"));
+  }
+  assert.equal(getDateRangeError("Oct 8, 2026 at 09:00 AM", "Oct 8, 2026 at 09:01 AM", "Task"), null);
+  assert.equal(getDateRangeError("Oct 8, 2026 at 11:59 AM", "Oct 8, 2026 at 12:00 PM", "Task"), null);
+  assert.equal(getDateRangeError("Dec 31, 2026 at 11:59 PM", "Jan 1, 2027 at 12:00 AM", "Task"), null);
+  assert.equal(getDateRangeError("2026-10-08", "2026-10-08", "Task"), null);
 });

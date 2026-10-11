@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Event, EventStatus } from "./types";
 import { isEventScheduledOnDay } from "@/utils/calendarSchedule";
 import { getEventMemberCount } from "@/utils/eventMembers";
+import { isTaskArchived } from "@/utils/taskDependencies";
 import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
@@ -357,7 +358,7 @@ export function EventsDashboard({
   ];
 
   const visible = events.filter((e) => {
-    const matchesStatus = filter === "All" || e.status === filter;
+    const matchesStatus = filter === "All" ? e.status !== "Archived" : e.status === filter;
     const matchesCommittee =
       selectedCommittee === "All" ||
       (e.committee || "").toLowerCase() === selectedCommittee.toLowerCase();
@@ -442,7 +443,7 @@ export function EventsDashboard({
           {/* Status filter pills */}
           <div className="flex flex-wrap items-center gap-1">
             {allStatusFilters.map(({ label, key }) => {
-              const count = key === "All" ? events.length : events.filter((e) => e.status === key).length;
+              const count = key === "All" ? events.filter((e) => e.status !== "Archived").length : events.filter((e) => e.status === key).length;
               const isActive = filter === key;
               const theme = getStatusTheme(key, customStatuses);
               const isPillDraggable = isLeader && settingsReady && key !== "All";
@@ -677,12 +678,12 @@ export function EventsDashboard({
       {viewMode === "kanban" && compactMobile && (
         <div className="space-y-2 text-sm font-semibold text-slate-600">
           <p>Column</p>
-          <CustomSelect value={statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]} onChange={setKanbanStatus} options={statusOrder.map((status) => ({ value: status, label: `${status} (${visible.filter((event) => event.status === status).length})`, indicatorClass: getStatusTheme(status, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
+          <CustomSelect value={filter !== "All" ? filter : statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]} onChange={(status) => { setKanbanStatus(status); setFilter(status); }} options={statusOrder.map((status) => ({ value: status, label: `${status} (${events.filter((event) => event.status === status).length})`, indicatorClass: getStatusTheme(status, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
         </div>
       )}
       {viewMode === "kanban" && (
         <div className={compactMobile ? "grid grid-cols-1 gap-4" : "flex gap-4 overflow-x-auto pb-6 pt-1 items-start min-h-[580px] scrollbar-thin"}>
-          {(compactMobile ? [statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]].filter(Boolean) : statusOrder).map((status) => {
+          {(compactMobile ? [filter !== "All" ? filter : statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]].filter(Boolean) : statusOrder).map((status) => {
             const statusEvents = visible.filter((e) => e.status === status);
             const theme = getStatusTheme(status, customStatuses);
             const isColDraggable = isLeader && settingsReady;
@@ -774,8 +775,9 @@ export function EventsDashboard({
                     const isTargetCard = dragOverCardTarget?.cardId === event.id;
                     const showBeforePlaceholder = isTargetCard && dragOverCardTarget?.position === "before" && !isDraggingThisCard;
                     const showAfterPlaceholder = isTargetCard && dragOverCardTarget?.position === "after" && !isDraggingThisCard;
-                    const completedTasks = event.tasks.filter((t) => t.status === "Completed").length;
-                    const hasTasks = event.tasks.length > 0;
+                    const activeTasks = event.tasks.filter((task) => !isTaskArchived(task));
+                    const completedTasks = activeTasks.filter((t) => t.status === "Completed" || t.status === "Done").length;
+                    const hasTasks = activeTasks.length > 0;
 
                     return (
                       <div key={event.id} className="flex flex-col gap-2.5">
@@ -838,7 +840,7 @@ export function EventsDashboard({
                               {hasTasks && (
                                 <span className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold">
                                   <CheckSquare size={11} className="text-slate-400" />
-                                  {completedTasks}/{event.tasks.length}
+                                  {completedTasks}/{activeTasks.length}
                                 </span>
                               )}
                             </div>

@@ -17,7 +17,7 @@ import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 import { getEventMemberCount } from "@/utils/eventMembers";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
-import { createEventFirestore, deleteEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
+import { createEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
 import { getOrganizationCommittees, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 
 type Tab = "events" | "atomizer";
@@ -116,10 +116,13 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
     setSelectedEvent(null);
   }
 
-  async function handleDeleteSelectedEvent() {
+  async function handleArchiveSelectedEvent() {
     if (!selectedEvent) return;
-    await deleteEventFirestore(firebaseUser, selectedEvent.id);
-    setEvents((current) => current.filter((event) => event.id !== selectedEvent.id));
+    const status = selectedEvent.status === "Archived" ? selectedEvent.statusBeforeArchive || "Active" : "Archived";
+    await updateEventFirestore(firebaseUser, selectedEvent.id, { status });
+    const updated = { ...selectedEvent, status, archivedAt: status === "Archived" ? new Date().toISOString() : null,
+      statusBeforeArchive: selectedEvent.status === "Archived" ? selectedEvent.statusBeforeArchive : selectedEvent.status };
+    setEvents((current) => current.map((event) => event.id === selectedEvent.id ? updated : event));
     setSelectedEvent(null);
   }
 
@@ -161,26 +164,27 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
         });
       } catch (err) {
         console.error("Failed to create new event from description:", err);
+        throw err;
       }
       setActiveTab("events");
       return;
     }
 
     const targetEvent = events.find((event) => event.id === targetEventId);
-    if (!targetEvent) return;
+    if (!targetEvent) throw new Error("The selected event is no longer available. Choose another event.");
 
     const tasks = [...publishedTasks, ...targetEvent.tasks];
-    const progress = tasks.length
-      ? Math.round((tasks.filter((task) => task.status === "Completed").length / tasks.length) * 100)
+    const activeTasks = tasks.filter((task) => !task.archivedAt);
+    const progress = activeTasks.length
+      ? Math.round((activeTasks.filter((task) => task.status === "Completed" || task.status === "Done").length / activeTasks.length) * 100)
       : 0;
     const customStatuses = Array.from(new Map([...(targetEvent.customStatuses || []), ...(workflow?.customStatuses || [])].map((status) => [status.name.trim().toLowerCase(), status])).values());
     const statusOrder = Array.from(new Set([...(workflow?.statusOrder || targetEvent.statusOrder || []), ...customStatuses.map((status) => status.name)]));
     const updatedEvent = { ...targetEvent, tasks, progress, customStatuses, statusOrder };
 
+    await updateEventFirestore(firebaseUser, targetEvent.id, { tasks, progress, customStatuses, statusOrder });
     handleUpdateEvent(updatedEvent);
-    void updateEventFirestore(firebaseUser, targetEvent.id, { tasks, progress, customStatuses, statusOrder })
-      .then(() => showToast({ title: "Tasks added", description: `Your ${publishedTasks.length === 1 ? "task is" : "tasks are"} ready to manage in ${targetEvent.title}.`, tone: "success" }))
-      .catch((error) => console.error("Failed to publish atomized tasks:", error));
+    showToast({ title: "Tasks added", description: `Your ${publishedTasks.length === 1 ? "task is" : "tasks are"} ready to manage in ${targetEvent.title}.`, tone: "success" });
     setActiveTab("events");
   }
 
@@ -265,7 +269,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
             event={selectedEvent}
             onBack={handleBack}
             onUpdateEvent={handleUpdateEvent}
-            onDeleteEvent={handleDeleteSelectedEvent}
+            onArchiveEvent={handleArchiveSelectedEvent}
             members={members}
             committees={committees}
             isLeader={isLeader}
@@ -286,7 +290,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
       {/* Create Event Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
+          <div className="w-full min-w-0 max-w-lg rounded-3xl bg-white p-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150 sm:p-6">
             {/* Header with Icon, Title, Subtitle, and Close Button */}
             <div className="flex items-start justify-between mb-5">
               <div className="flex items-center gap-3">
@@ -337,9 +341,9 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">COORDINATING COMMITTEE <span className="font-medium normal-case tracking-normal">(optional)</span></label>
-                <CustomSelect value={committee} onChange={setCommittee} options={[{ value: "", label: "No lead committee (cross-committee)" }, ...committees.map((item) => ({ value: item.name, label: item.name }))]} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
+                <CustomSelect value={committee} onChange={setCommittee} options={[{ value: "", label: "No lead committee (cross-committee)" }, ...committees.map((item) => ({ value: item.name, label: item.name }))]} multiline buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
               </div>
 
               {/* START DATE & END DATE WITH TIME */}

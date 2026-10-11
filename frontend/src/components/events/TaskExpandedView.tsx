@@ -10,8 +10,11 @@ import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { TaskDependencyBadge } from "./TaskDependencies";
+import { isBlockedTaskStatus } from "@/utils/taskDependencies";
 
 type TaskExpandedViewProps = {
+  readOnly?: boolean;
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
   onSelectTask?: (task: Task) => void;
@@ -19,13 +22,13 @@ type TaskExpandedViewProps = {
   statusOrder?: string[];
 };
 
-export function TaskExpandedView({ tasks, onUpdateStatus, onSelectTask, customStatuses, statusOrder }: TaskExpandedViewProps) {
+export function TaskExpandedView({ readOnly = false, tasks, onUpdateStatus, onSelectTask, customStatuses, statusOrder }: TaskExpandedViewProps) {
   const panelId = useId();
   const uid = useAuthStore((state) => state.firebaseUser?.uid ?? state.profile?.uid);
   const fullName = useAuthStore((state) => state.profile?.fullName || state.firebaseUser?.displayName || "");
   const role = useAuthStore((state) => state.profile?.role);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<string, boolean>>({});
-  function canEditStatus(task: Task) { return canUpdateTaskStatus(task, uid, fullName, role); }
+  function canEditStatus(task: Task) { return !readOnly && canUpdateTaskStatus(task, uid, fullName, role); }
 
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, tasks.map((task) => task.status));
   const statusOptions = allStatuses.map((value) => {
@@ -77,6 +80,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onSelectTask, customSt
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${pCfg.classes}`}><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />{pCfg.label}</span>
                     {task.committee ? <span title={task.committee} className="inline-flex min-w-0 max-w-full items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-inset ring-violet-200"><span className="truncate">{task.committee}</span></span> : null}
                     <OverdueBadge task={task} />
+                    <TaskDependencyBadge task={task} />
                   </div>
                 </div>
               </div>
@@ -94,7 +98,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onSelectTask, customSt
                   {canEditStatus(task) ? (
                     <CustomSelect
                       value={task.status}
-                      options={statusOptions}
+                      options={statusOptions.map((option) => ({ ...option, disabled: isBlockedTaskStatus(task, option.value) }))}
                       onChange={(value) => { if (canEditStatus(task)) onUpdateStatus(task.id, value as TaskStatus); }}
                       buttonClassName="min-h-9 rounded-xl px-2.5 py-1.5"
                       dropdownClassName="rounded-xl [&_button]:min-h-11"
@@ -105,7 +109,7 @@ export function TaskExpandedView({ tasks, onUpdateStatus, onSelectTask, customSt
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {onSelectTask ? <button type="button" onClick={() => onSelectTask(task)} className="min-h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 sm:flex-none">View Details</button> : null}
                   {canEditStatus(task) && task.status !== "Completed" && task.status !== "Done" ? (
-                    <button type="button" onClick={() => { if (canEditStatus(task)) onUpdateStatus(task.id, "Completed"); }} className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-emerald-700 sm:flex-none">
+                    <button type="button" disabled={isBlockedTaskStatus(task, "Completed")} title={task.blockedBy ? "Complete prerequisites first" : "Complete task"} onClick={() => { if (canEditStatus(task) && !isBlockedTaskStatus(task, "Completed")) onUpdateStatus(task.id, "Completed"); }} className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none">
                       <CheckCircle size={14} className="shrink-0" /> Complete
                     </button>
                   ) : null}
