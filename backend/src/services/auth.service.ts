@@ -19,8 +19,11 @@ import { getEventMemberCount } from "../utils/eventMembers.js";
 import {
   syncEventToGoogleCalendar,
   updateGoogleCalendarEvent,
-  deleteGoogleCalendarEvent
+  deleteGoogleCalendarEvent,
+  syncEventAndTasksToGoogleCalendar
 } from "./calendar.service.js";
+import { sendEventPublishedNotificationEmail } from "./email.service.js";
+import { runDueNudgesCheck } from "../controllers/email.controller.js";
 
 export function invalidateUserCache(uid: string) {
   appCache.delete("user_profile:" + uid);
@@ -1476,19 +1479,43 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   });
 
+  let finalTasks = input.tasks || [];
   try {
-    const googleEventId = await syncEventToGoogleCalendar(uid, {
+    const syncRes = await syncEventAndTasksToGoogleCalendar(uid, {
       id: eventRef.id,
       title: input.title.trim(),
       description: input.description,
       startDate,
-      endDate
+      endDate,
+      tasks: finalTasks
     });
-    if (googleEventId) {
-      await eventRef.update({ googleCalendarEventId: googleEventId });
+    if (syncRes.googleEventId || syncRes.tasks) {
+      finalTasks = syncRes.tasks;
+      await eventRef.update({
+        ...(syncRes.googleEventId ? { googleCalendarEventId: syncRes.googleEventId } : {}),
+        tasks: finalTasks
+      });
     }
   } catch (calErr) {
-    console.warn("[Calendar Sync] Non-blocking calendar event creation warning:", calErr);
+    console.warn("[Calendar Sync] Non-blocking calendar event and tasks creation warning:", calErr);
+  }
+
+  // Trigger contextual email notifications via Brevo
+  try {
+    const creatorEmail = user.email || env.gmailUser || "larryagad1@gmail.com";
+    await sendEventPublishedNotificationEmail({
+      creatorEmail,
+      creatorName: user.fullName || "Student Leader",
+      eventTitle: input.title.trim(),
+      startDate,
+      endDate,
+      tasks: finalTasks
+    });
+
+    // Run due nudges check immediately to dispatch any 3-day or 1-day nudges right away
+    runDueNudgesCheck().catch((nudgeErr) => console.warn("[Auto-Nudge] Post-event due check warning:", nudgeErr));
+  } catch (emailErr) {
+    console.warn("[Email Notification] Non-blocking event publication email warning:", emailErr);
   }
 
   writeAuditLog({
@@ -1601,18 +1628,25 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
     orgId: user.organizationId ?? (typeof beforeData.orgId === "string" ? beforeData.orgId : null)
   });
 
-  if (beforeData.googleCalendarEventId) {
-    try {
-      await updateGoogleCalendarEvent(uid, beforeData.googleCalendarEventId, {
-        title: input.title !== undefined ? input.title : beforeData.title,
-        description: input.description !== undefined ? input.description : beforeData.description,
-        startDate: input.startDate || beforeData.startDate,
-        endDate: input.endDate || beforeData.endDate,
-        location: input.location || beforeData.location
+  try {
+    const updatedSnap = await docRef.get();
+    const updatedData = updatedSnap.data() || {};
+    const syncRes = await syncEventAndTasksToGoogleCalendar(uid, {
+      id: eventId,
+      title: updatedData.title || beforeData.title,
+      description: updatedData.description,
+      startDate: updatedData.startDate,
+      endDate: updatedData.endDate,
+      tasks: updatedData.tasks || []
+    });
+    if (syncRes.googleEventId || syncRes.tasks) {
+      await docRef.update({
+        ...(syncRes.googleEventId ? { googleCalendarEventId: syncRes.googleEventId } : {}),
+        tasks: syncRes.tasks
       });
-    } catch (calErr) {
-      console.warn("[Calendar Sync] Non-blocking calendar update warning:", calErr);
     }
+  } catch (calErr) {
+    console.warn("[Calendar Sync] Non-blocking calendar update warning:", calErr);
   }
 
   appCache.deletePrefix("events_raw:");

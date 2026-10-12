@@ -275,6 +275,120 @@ export async function syncEventToGoogleCalendar(
 }
 
 /**
+ * Formats a task summary for Google Calendar.
+ */
+function getTaskSummary(taskTitle: string, eventTitle: string, status?: string): string {
+  const isDone = (status || "").toLowerCase().includes("completed") || (status || "").toLowerCase().includes("done");
+  return isDone ? `✅ [Done] Task: ${taskTitle} [${eventTitle}]` : `🎯 Task: ${taskTitle} [${eventTitle}]`;
+}
+
+/**
+ * Formats task description for Google Calendar.
+ */
+function getTaskDescription(task: any, eventTitle: string): string {
+  return [
+    `Campus Event: ${eventTitle}`,
+    `Task: ${task.title || "Subtask"}`,
+    task.description ? `Description:\n${task.description}\n` : "",
+    `Priority: ${task.priority || "Medium"}`,
+    `Status: ${task.status || "To Do"}`,
+    `Assignee: ${task.assignedMemberName || task.assignee?.name || "Unassigned"}`,
+    "",
+    "View on Musubi Workflow: https://musubi-1bf94.web.app/dashboard/events"
+  ].filter(Boolean).join("\n");
+}
+
+/**
+ * Inserts a subtask into the user's primary Google Calendar as an event on its deadline.
+ */
+export async function syncTaskToGoogleCalendar(
+  uid: string,
+  task: {
+    title: string;
+    description?: string;
+    dueDate?: string;
+    deadline?: string;
+    startDate?: string;
+    priority?: string;
+    status?: string;
+    assignedMemberName?: string;
+  },
+  eventTitle: string,
+  fallbackDate?: string
+): Promise<string | null> {
+  const calendar = await getCalendarClientForUser(uid);
+  if (!calendar) return null;
+
+  const targetDate = task.dueDate || task.deadline || task.startDate || fallbackDate || new Date().toISOString();
+  const startDate = task.startDate && task.startDate !== targetDate ? task.startDate : targetDate;
+  const { start, end } = normalizeDateRangeForCalendar(startDate, targetDate);
+
+  const summary = getTaskSummary(task.title || "Subtask", eventTitle, task.status);
+  const description = getTaskDescription(task, eventTitle);
+
+  const response = await calendar.events.insert({
+    calendarId: "primary",
+    requestBody: {
+      summary,
+      description,
+      location: "Campus",
+      start,
+      end,
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: "popup", minutes: 1440 }, // 1 day before
+          { method: "popup", minutes: 120 } // 2 hours before
+        ]
+      }
+    }
+  });
+
+  return response.data.id || null;
+}
+
+/**
+ * Updates an existing subtask on Google Calendar.
+ */
+export async function updateGoogleCalendarTask(
+  uid: string,
+  googleEventId: string,
+  task: {
+    title: string;
+    description?: string;
+    dueDate?: string;
+    deadline?: string;
+    startDate?: string;
+    priority?: string;
+    status?: string;
+    assignedMemberName?: string;
+  },
+  eventTitle: string,
+  fallbackDate?: string
+): Promise<void> {
+  const calendar = await getCalendarClientForUser(uid);
+  if (!calendar || !googleEventId) return;
+
+  const targetDate = task.dueDate || task.deadline || task.startDate || fallbackDate || new Date().toISOString();
+  const startDate = task.startDate && task.startDate !== targetDate ? task.startDate : targetDate;
+  const { start, end } = normalizeDateRangeForCalendar(startDate, targetDate);
+
+  const summary = getTaskSummary(task.title || "Subtask", eventTitle, task.status);
+  const description = getTaskDescription(task, eventTitle);
+
+  await calendar.events.patch({
+    calendarId: "primary",
+    eventId: googleEventId,
+    requestBody: {
+      summary,
+      description,
+      start,
+      end
+    }
+  });
+}
+
+/**
  * Updates an existing Google Calendar event.
  */
 export async function updateGoogleCalendarEvent(
@@ -309,6 +423,60 @@ export async function updateGoogleCalendarEvent(
 }
 
 /**
+ * Synchronizes an event and all its individual subtasks to the creator's Google Calendar.
+ * Also syncs assigned tasks to assigned members' calendars if they connected.
+ */
+export async function syncEventAndTasksToGoogleCalendar(
+  uid: string,
+  event: {
+    id: string;
+    title: string;
+    description?: string;
+    startDate: string;
+    endDate?: string;
+    tasks?: any[];
+  }
+): Promise<{ googleEventId: string | null; tasks: any[] }> {
+  // 1. Sync parent event
+  let googleEventId: string | null = null;
+  try {
+    googleEventId = await syncEventToGoogleCalendar(uid, {
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      startDate: event.startDate,
+      endDate: event.endDate
+    });
+  } catch (err) {
+    console.warn(`[Calendar] Failed syncing parent event ${event.id}:`, err);
+  }
+
+  // 2. Sync each subtask to Google Calendar
+  const tasks = Array.isArray(event.tasks) ? [...event.tasks] : [];
+  for (let i = 0; i < tasks.length; i++) {
+    const task = tasks[i];
+    if (task.archivedAt) continue;
+
+    try {
+      if (task.googleCalendarEventId) {
+        // Update existing task event
+        await updateGoogleCalendarTask(uid, task.googleCalendarEventId, task, event.title, event.endDate);
+      } else {
+        // Create new task event
+        const taskId = await syncTaskToGoogleCalendar(uid, task, event.title, event.endDate);
+        if (taskId) {
+          tasks[i] = { ...task, googleCalendarEventId: taskId };
+        }
+      }
+    } catch (taskErr) {
+      console.warn(`[Calendar] Failed syncing task "${task.title}":`, taskErr);
+    }
+  }
+
+  return { googleEventId, tasks };
+}
+
+/**
  * Deletes an event from Google Calendar.
  */
 export async function deleteGoogleCalendarEvent(uid: string, googleEventId: string): Promise<void> {
@@ -328,7 +496,7 @@ export async function deleteGoogleCalendarEvent(uid: string, googleEventId: stri
 }
 
 /**
- * Syncs all active events for the user's organization to their personal Google Calendar.
+ * Syncs all active events and their atomized subtasks to the user's personal Google Calendar.
  */
 export async function syncAllUserEventsToCalendar(uid: string): Promise<{ syncedCount: number }> {
   const calendar = await getCalendarClientForUser(uid);
@@ -353,10 +521,13 @@ export async function syncAllUserEventsToCalendar(uid: string): Promise<{ synced
     const data = doc.data();
     if (data.status === "Archived") continue;
 
+    let docUpdated = false;
+    let eventGId = data.googleCalendarEventId;
+
     try {
-      if (data.googleCalendarEventId) {
-        // Update existing
-        await updateGoogleCalendarEvent(uid, data.googleCalendarEventId, {
+      // 1. Sync parent event
+      if (eventGId) {
+        await updateGoogleCalendarEvent(uid, eventGId, {
           title: data.title || "Campus Event",
           description: data.description,
           startDate: data.startDate,
@@ -364,8 +535,7 @@ export async function syncAllUserEventsToCalendar(uid: string): Promise<{ synced
           location: data.location
         });
       } else {
-        // Insert new
-        const gEventId = await syncEventToGoogleCalendar(uid, {
+        eventGId = await syncEventToGoogleCalendar(uid, {
           id: doc.id,
           title: data.title || "Campus Event",
           description: data.description,
@@ -373,11 +543,40 @@ export async function syncAllUserEventsToCalendar(uid: string): Promise<{ synced
           endDate: data.endDate,
           location: data.location
         });
-        if (gEventId) {
-          await doc.ref.update({ googleCalendarEventId: gEventId });
+        if (eventGId) {
+          docUpdated = true;
         }
       }
       count++;
+
+      // 2. Sync all subtasks for this event
+      const tasks = Array.isArray(data.tasks) ? [...data.tasks] : [];
+      for (let i = 0; i < tasks.length; i++) {
+        const task = tasks[i];
+        if (task.archivedAt) continue;
+
+        try {
+          if (task.googleCalendarEventId) {
+            await updateGoogleCalendarTask(uid, task.googleCalendarEventId, task, data.title || "Campus Event", data.endDate);
+          } else {
+            const taskGId = await syncTaskToGoogleCalendar(uid, task, data.title || "Campus Event", data.endDate);
+            if (taskGId) {
+              tasks[i] = { ...task, googleCalendarEventId: taskGId };
+              docUpdated = true;
+            }
+          }
+          count++;
+        } catch (tErr) {
+          console.warn(`[Sync All] Failed syncing task ${task.id}:`, tErr);
+        }
+      }
+
+      if (docUpdated) {
+        await doc.ref.update({
+          googleCalendarEventId: eventGId || null,
+          tasks
+        });
+      }
     } catch (err) {
       console.warn(`[Sync All] Failed syncing event ${doc.id}:`, err);
     }
@@ -385,3 +584,4 @@ export async function syncAllUserEventsToCalendar(uid: string): Promise<{ synced
 
   return { syncedCount: count };
 }
+
