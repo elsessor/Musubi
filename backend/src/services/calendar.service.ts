@@ -28,6 +28,10 @@ function getOAuth2Client(customRedirectUri?: string) {
  * Generates the Google OAuth 2.0 authorization URL for calendar access.
  */
 export function generateGoogleCalendarAuthUrl(uid: string, returnOrigin?: string): string {
+  if (!uid || typeof uid !== "string") {
+    throw new AppError("Cannot generate calendar auth link: user UID is required.", 400);
+  }
+
   const oauth2 = getOAuth2Client();
 
   // Encode state as base64url so we safely restore user context upon redirect

@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import type { AuthenticatedRequest } from "../types/auth.types.js";
 import {
   generateGoogleCalendarAuthUrl,
   handleGoogleCalendarCallback,
@@ -7,10 +8,20 @@ import {
   syncAllUserEventsToCalendar
 } from "../services/calendar.service.js";
 import { env } from "../config/env.js";
+import { AppError } from "../utils/AppError.js";
+
+function getRequestUserId(req: Request): string {
+  const authReq = req as AuthenticatedRequest;
+  const uid = authReq.authUser?.uid || (req as any).user?.uid || (req.query?.uid as string) || "";
+  if (!uid) {
+    throw new AppError("Authentication required: user ID not found.", 401);
+  }
+  return uid;
+}
 
 export async function getConnectUrlController(req: Request, res: Response, next: NextFunction) {
   try {
-    const uid = (req as any).user?.uid;
+    const uid = getRequestUserId(req);
     const returnOrigin = (req.query.returnOrigin as string) || req.headers.origin || env.frontendUrl;
     const url = generateGoogleCalendarAuthUrl(uid, returnOrigin);
     return res.json({ url });
@@ -55,7 +66,7 @@ export async function calendarCallbackController(req: Request, res: Response) {
 
 export async function calendarStatusController(req: Request, res: Response, next: NextFunction) {
   try {
-    const uid = (req as any).user?.uid;
+    const uid = getRequestUserId(req);
     const status = await getCalendarConnectionStatus(uid);
     return res.json(status);
   } catch (error) {
@@ -65,7 +76,7 @@ export async function calendarStatusController(req: Request, res: Response, next
 
 export async function disconnectCalendarController(req: Request, res: Response, next: NextFunction) {
   try {
-    const uid = (req as any).user?.uid;
+    const uid = getRequestUserId(req);
     await disconnectGoogleCalendar(uid);
     return res.json({ success: true });
   } catch (error) {
@@ -75,7 +86,7 @@ export async function disconnectCalendarController(req: Request, res: Response, 
 
 export async function syncAllEventsController(req: Request, res: Response, next: NextFunction) {
   try {
-    const uid = (req as any).user?.uid;
+    const uid = getRequestUserId(req);
     const result = await syncAllUserEventsToCalendar(uid);
     return res.json({ success: true, ...result });
   } catch (error) {

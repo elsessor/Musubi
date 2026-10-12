@@ -29,7 +29,11 @@ export async function getCalendarConnectUrl(
   if (!token) throw new Error("Sign in again to connect Google Calendar.");
 
   const origin = returnOrigin || (typeof window !== "undefined" ? window.location.origin : "");
-  const query = origin ? `?returnOrigin=${encodeURIComponent(origin)}` : "";
+  const uid = user?.uid || useAuthStore.getState().firebaseUser?.uid || useAuthStore.getState().profile?.uid || "";
+  const queryParams = new URLSearchParams();
+  if (origin) queryParams.set("returnOrigin", origin);
+  if (uid) queryParams.set("uid", uid);
+  const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
   const response = await fetch(`${API_BASE_URL}/auth/calendar/google/connect-url${query}`, {
     method: "GET",
@@ -49,9 +53,11 @@ export async function getCalendarConnectUrl(
 export async function getCalendarStatus(user: User | null): Promise<CalendarStatusResponse> {
   const token = await getValidToken(user);
   if (!token) return { connected: false };
+  const uid = user?.uid || useAuthStore.getState().firebaseUser?.uid || useAuthStore.getState().profile?.uid || "";
+  const query = uid ? `?uid=${encodeURIComponent(uid)}` : "";
 
   try {
-    const response = await fetch(`${API_BASE_URL}/auth/calendar/google/status`, {
+    const response = await fetch(`${API_BASE_URL}/auth/calendar/google/status${query}`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`
@@ -72,8 +78,10 @@ export async function getCalendarStatus(user: User | null): Promise<CalendarStat
 export async function disconnectCalendar(user: User | null): Promise<void> {
   const token = await getValidToken(user);
   if (!token) throw new Error("Sign in again to disconnect Google Calendar.");
+  const uid = user?.uid || useAuthStore.getState().firebaseUser?.uid || useAuthStore.getState().profile?.uid || "";
+  const query = uid ? `?uid=${encodeURIComponent(uid)}` : "";
 
-  const response = await fetch(`${API_BASE_URL}/auth/calendar/google/disconnect`, {
+  const response = await fetch(`${API_BASE_URL}/auth/calendar/google/disconnect${query}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`
@@ -91,8 +99,10 @@ export async function syncAllEventsToGoogle(
 ): Promise<{ syncedCount: number }> {
   const token = await getValidToken(user);
   if (!token) throw new Error("Sign in again to sync events.");
+  const uid = user?.uid || useAuthStore.getState().firebaseUser?.uid || useAuthStore.getState().profile?.uid || "";
+  const query = uid ? `?uid=${encodeURIComponent(uid)}` : "";
 
-  const response = await fetch(`${API_BASE_URL}/auth/calendar/google/sync-all`, {
+  const response = await fetch(`${API_BASE_URL}/auth/calendar/google/sync-all${query}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`
@@ -106,3 +116,4 @@ export async function syncAllEventsToGoogle(
 
   return { syncedCount: data.syncedCount || 0 };
 }
+
