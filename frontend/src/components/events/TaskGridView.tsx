@@ -131,6 +131,7 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
                       {task.committee}
                     </span>
                   )}
+                  <OverdueBadge task={task} />
                 </div>
 
                 {/* Status Dropdown */}
@@ -215,9 +216,9 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
               <TaskAssignee task={task} compactMobile className="h-6 w-full sm:h-auto sm:w-auto sm:max-w-[180px]" />
 
               <div className="flex h-6 min-w-0 items-center justify-between gap-1 text-[10px] text-slate-500 sm:h-auto sm:flex-wrap sm:justify-start sm:gap-2 sm:text-xs">
-                <span title={task.dueDate || "No deadline"} className="flex min-w-0 items-center gap-1">
+                <span title={task.dueDate || task.deadline || "No deadline"} className="flex min-w-0 items-center gap-1">
                   <Calendar size={12} className="shrink-0" />
-                  <span className="truncate sm:whitespace-normal sm:break-words">{task.dueDate || "No deadline"}</span>
+                  <span className="truncate sm:whitespace-normal sm:break-words">{task.dueDate || task.deadline || "No deadline"}</span>
                 </span>
                 {task.status === "Completed" && (
                   <span role="img" aria-label="Completed" title="Completed" className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 sm:hidden">

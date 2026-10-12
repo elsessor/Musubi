@@ -26,5 +26,6 @@ export function canUseTaskPriorityControl(task: TaskAssignment, uid: string | nu
 export function canUpdateTaskStatus(task: TaskAssignment, uid: string | null | undefined, fullName: string, role: string | null | undefined): boolean {
   if (!uid || task.archivedAt || task.status?.toLowerCase() === "archived") return false;
   if (role === "Student Leader" || role === "Admin") return true;
+  if (["cancelled", "canceled"].includes((task.status || "").trim().toLowerCase())) return false;
   return role === "Organization Member" && isTaskAssignedToUser(task, uid, fullName);
 }

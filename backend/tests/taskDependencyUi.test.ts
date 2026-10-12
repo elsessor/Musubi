@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as dependencies from "../../frontend/src/utils/taskDependencies.js";
 import * as assignment from "../../frontend/src/utils/taskAssignment.js";
 import * as dates from "../../frontend/src/utils/dateRange.js";
+import * as timing from "../../frontend/src/utils/taskTiming.js";
 import * as eventMembers from "../../frontend/src/utils/eventMembers.js";
 import * as claims from "../../frontend/src/utils/taskClaims.js";
 import * as calendarViews from "../../frontend/src/utils/calendarViews.js";
@@ -37,7 +38,7 @@ function ui(file: string, role = "Student Leader", extraMocks: Record<string, an
     react, "react/jsx-runtime": { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }), Fragment: "Fragment" },
     "react-dom": { createPortal: (node: any) => node }, "lucide-react": components,
     "@/utils/taskDependencies": dependencies, "@/utils/taskAssignment": assignment, "@/utils/dateRange": dates,
-    "@/utils/eventMembers": eventMembers,
+    "@/utils/eventMembers": eventMembers, "@/utils/taskTiming": timing,
     "@/utils/taskClaims": claims,
     "@/store/authStore": { useAuthStore }, "@/store/toastStore": { useToastStore },
     "./priorityUtils": { ALL_PRIORITIES: ["Low", "Medium", "High", "Critical"], PRIORITY_CONFIG: new Proxy({}, { get: (_target, name) => ({ label: name, classes: "", dot: "" }) }) },
@@ -55,6 +56,47 @@ const allTasks = () => dependencies.withTaskDependencyState([
   { id: "b", title: "Purchase materials", status: "To Do", assignee: { initials: "M", color: "bg-blue-600" }, priority: "Medium", dueDate: "", assignedMemberUID: "member", dependsOnTaskIds: ["a"] }
 ]);
 const find = (tree: Node, predicate: (node: Node) => boolean) => children(tree).find(predicate)!;
+
+test("task views include deadline indicators and task details offer archive with confirmation", async () => {
+  const task = { ...allTasks()[0], dueDate: "2020-01-01" };
+  for (const [file, name] of [["TaskCard.tsx", "TaskCard"], ["TaskGridView.tsx", "TaskGridView"], ["TaskTableView.tsx", "TaskTableView"], ["TaskExpandedView.tsx", "TaskExpandedView"]]) {
+    const tree = ui(file).render(name, { task, tasks: [task], onUpdateStatus: () => {} });
+    assert.equal(find(tree, node => node.type === "OverdueBadge").props.task.id, task.id);
+  }
+  let archived = "", closed = 0;
+  const props = { task, tasks: [task], eventId: "event", isLeader: true, canEdit: true, onAttachmentsUpdated: () => {}, onClose: () => { closed++; },
+    onUpdateTask: () => { throw new Error("Archive must not change task status."); }, onArchiveTask: (id: string) => { archived = id; } };
+  const render = ui("TaskDetailModal.tsx");
+  let tree = render.render("TaskDetailModal", props);
+  assert.equal(children(tree).some(node => node.props.children === "Cancel task"), false);
+  const archiveButton = find(tree, node => node.type === "button" && Array.isArray(node.props.children) && node.props.children.includes("Archive task"));
+  archiveButton.props.onClick();
+  assert.equal(archived, "");
+  tree = render.render("TaskDetailModal", props);
+  let confirm = find(tree, node => node.type === "ConfirmArchiveModal");
+  confirm.props.onCancel();
+  assert.equal(archived, "");
+  archiveButton.props.onClick();
+  tree = render.render("TaskDetailModal", props);
+  confirm = find(tree, node => node.type === "ConfirmArchiveModal");
+  await confirm.props.onConfirm();
+  assert.equal(archived, task.id); assert.equal(task.status, "To Do"); assert.equal(closed, 1);
+  const memberTree = ui("TaskDetailModal.tsx", "Organization Member").render("TaskDetailModal", { ...props, isLeader: false });
+  assert.equal(children(memberTree).some(node => node.props.children === "Cancel task"), false);
+});
+
+test("overdue badge names blockers and review and completed-late indicators do not replace status", () => {
+  const render = ui("overdue.tsx");
+  const task = { ...allTasks()[1], dueDate: "2020-01-01" };
+  let badge = render.render("OverdueBadge", { task });
+  assert.match(badge.props["aria-label"], /Overdue.*Blocked/);
+  assert.match(badge.props.title, /Approve budget/);
+  badge = render.render("OverdueBadge", { task: { ...task, status: "In Review" } });
+  assert.match(badge.props["aria-label"], /Awaiting review/);
+  badge = render.render("OverdueBadge", { task: { ...task, status: "Completed", completedAt: "2020-01-02T00:00:00Z" } });
+  assert.match(badge.props["aria-label"], /Completed late/);
+  assert.equal(render.render("OverdueBadge", { task: { ...task, status: "Cancelled" } }), null);
+});
 
 test("member assignee dropdown offers only self, requests confirmation and blocks forged selections", () => {
   let requested = "";
@@ -285,8 +327,8 @@ test("task cards in every view retain dependency indicators when prerequisites a
   const view = find(tree, (node) => node.type === "CalendarView");
   assert.equal(find(view.props.renderDetails(ready), (node) => node.type === "TaskDependencyBadge").props.task.id, ready.id);
   const compact = view.props.renderCompactIndicator(ready);
-  assert.equal(compact.type, "TaskDependencyBadge");
-  assert.equal(compact.props.compact, true);
+  assert.equal(find(compact, node => node.type === "TaskDependencyBadge").props.compact, true);
+  assert.equal(find(compact, node => node.type === "OverdueBadge").props.compact, true);
 });
 
 test("new tasks keep unset dates empty and create reminder dates only for an explicit deadline", async () => {
@@ -347,6 +389,7 @@ test("task forms report equal or reversed times, block saves, and recover after 
     }
     pickers[1].props.onChange("Oct 8, 2070 at 09:01 AM");
     tree = render.render(component, props);
+    assert.equal(children(tree).some(node => String(node.props.id || "").endsWith("deadline-reason")), false);
     assert.equal(children(tree).some((node) => node.props.role === "alert"), false);
     assert.equal(find(tree, (node) => node.props.type === "submit").props.disabled, false);
     await find(tree, (node) => node.type === "form").props.onSubmit({ preventDefault: () => {} });

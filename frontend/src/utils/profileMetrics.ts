@@ -1,5 +1,6 @@
 import type { Event, Task } from "@/components/events/types";
 import { isTaskAssignedToUser } from "./taskAssignment";
+import { getTaskDeliveryTime, getTaskPerformanceDeadline } from "./taskTiming";
 
 export const PROFILE_TASK_CAPACITY = 5;
 export type ProfileTaskFilter = "all" | "done" | "active" | "pending" | "cancelled" | "archived";
@@ -60,13 +61,10 @@ export function getProfileMetrics(tasks: ProfileTask[], now = new Date()) {
     if (completed.getFullYear() === now.getFullYear() && completed.getMonth() === now.getMonth()) {
       weeks[Math.floor((completed.getDate() - 1) / 7)].count += 1;
     }
-    const deadlineValue = validDate(task.dueDate) ? task.dueDate : task.deadline;
-    const deadline = validDate(deadlineValue);
+    const deadline = getTaskPerformanceDeadline(task);
     if (deadline) {
-      // Date-only deadlines include the entire due day; timed deadlines keep their time.
-      if (!/[T]|\d{1,2}:\d{2}/.test(deadlineValue || "")) deadline.setHours(23, 59, 59, 999);
       datedCompletions += 1;
-      if (completed.getTime() <= deadline.getTime()) onTimeCompletions += 1;
+      if ((getTaskDeliveryTime(task) || completed).getTime() <= deadline.getTime()) onTimeCompletions += 1;
     }
   }
 

@@ -70,7 +70,7 @@ export async function updateTaskStatusForUser(uid: string, eventId: string, task
     const event = snapshot.data() || {};
     const original = getTask(event, taskId, true);
     assertCanContributeTask(user, event.orgId, original);
-    const updated = recordTaskPerformance([applyTaskStatusUpdate(original, input, event)], [original], { uid, fullName: user.fullName, isLeader: isTaskLeader(user) })[0];
+    const updated = recordTaskPerformance([applyTaskStatusUpdate(original, input, event, user)], [original], { uid, fullName: user.fullName, isLeader: isTaskLeader(user) })[0];
     const tasks = withTaskDependencyState(event.tasks.map((task: TaskRecord) => task.id === taskId ? updated : task));
     const activeTasks = tasks.filter((task: TaskRecord) => !task.archivedAt);
     const completedCount = activeTasks.filter((task: TaskRecord) => ["completed", "done"].includes(String(task.status).trim().toLowerCase())).length;

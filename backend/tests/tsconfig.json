@@ -7,5 +7,5 @@
       "@/*": ["../../frontend/src/*"]
     }
   },
-  "include": ["taskSelfAssignment.test.ts", "taskDependencyUi.test.ts", "announcementSubscription.test.ts"]
+  "include": ["taskSelfAssignment.test.ts", "taskDependencyUi.test.ts", "announcementSubscription.test.ts", "taskOverdue.test.ts", "taskReminderDispatch.test.ts", "deadlineNotifications.test.ts", "nudgeEmailContent.test.ts"]
 }

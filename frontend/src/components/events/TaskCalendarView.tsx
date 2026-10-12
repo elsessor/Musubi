@@ -9,6 +9,7 @@ import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
 import { TaskSelfAssignmentSelect } from "./TaskSelfAssignmentSelect";
+import { OverdueBadge } from "./overdue";
 import { isTaskScheduledOnDay } from "@/utils/calendarSchedule";
 import { CalendarView } from "./CalendarView";
 import { TaskDependencyBadge } from "./TaskDependencies";
@@ -42,8 +43,8 @@ export function TaskCalendarView({ readOnly = false, tasks, onUpdateStatus, onUp
         getDescription={(task) => task.description}
         isScheduled={isTaskScheduledOnDay}
         onSelect={(task) => onSelectTask ? onSelectTask(task) : setSelectedTask(task)}
-        renderDetails={(task) => <><TaskAssignee task={task} /><TaskDependencyBadge task={task} /></>}
-        renderCompactIndicator={(task) => <TaskDependencyBadge task={task} compact />}
+        renderDetails={(task) => <><TaskAssignee task={task} /><TaskDependencyBadge task={task} /><OverdueBadge task={task} /></>}
+        renderCompactIndicator={(task) => <><TaskDependencyBadge task={task} compact /><OverdueBadge task={task} compact /></>}
         customStatuses={customStatuses}
       />
 
@@ -70,6 +71,7 @@ export function TaskCalendarView({ readOnly = false, tasks, onUpdateStatus, onUp
                 <TaskSelfAssignmentSelect task={selectedTask} readOnly={readOnly} />
               </div>
               <TaskDependencyBadge task={selectedTask} />
+              <OverdueBadge task={selectedTask} />
               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${getStatusTheme(selectedTask.status, customStatuses).badge}`}>{selectedTask.status}</span>
 
               <div className="flex items-center justify-between text-xs pt-2">
