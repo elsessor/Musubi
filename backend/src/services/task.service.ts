@@ -8,6 +8,8 @@ import { MAX_TASK_ATTACHMENTS, normalizeAttachmentContentType, splitAttachmentFi
 import { recordTaskPerformance } from "../utils/taskPerformance.js";
 import { appCache } from "../utils/cache.js";
 import { withTaskDependencyState } from "../utils/taskDependencies.js";
+import { getTaskClaimError } from "../utils/taskClaims.js";
+import { getEventMemberCount } from "../utils/eventMembers.js";
 
 function getTask(event: TaskRecord, taskId: string, editing = false): TaskRecord {
   if (editing && event.status === "Archived") throw new AppError("Restore this archived event before changing its subtasks.", 409);
@@ -24,6 +26,39 @@ function eventReference(eventId: string) {
 function logTaskAction(user: TaskActor, event: TaskRecord, task: TaskRecord, action: string) {
   writeAuditLog({ actorUID: user.uid, actorName: user.fullName, actorRole: user.role, action,
     actionCategory: "Events & Tasks", targetType: "Subtask", targetName: task.title || "Subtask", orgId: event.orgId || null });
+}
+
+export async function claimTaskForUser(uid: string, eventId: string, taskId: string) {
+  const eventRef = eventReference(eventId);
+  const memberRef = firestore.collection("users").doc(uid);
+  const result = await firestore.runTransaction(async (transaction) => {
+    // Both task eligibility and membership are checked against current records.
+    const [snapshot, memberSnapshot] = await Promise.all([transaction.get(eventRef), transaction.get(memberRef)]);
+    if (!snapshot.exists) throw new AppError("Event not found.", 404);
+    if (!memberSnapshot.exists) throw new AppError("User profile was not found.", 404);
+    const event = snapshot.data() || {};
+    const member = memberSnapshot.data() || {};
+    const user: TaskActor = { uid, fullName: typeof member.fullName === "string" ? member.fullName.trim() : "",
+      role: member.role, organizationId: member.organizationId || null };
+    if (user.role !== "Organization Member" || !user.organizationId || user.organizationId !== event.orgId) {
+      throw new AppError("Only members of this organization can claim its tasks.", 403);
+    }
+    const original = getTask(event, taskId, true);
+    const error = getTaskClaimError(original, user, event);
+    if (error) throw new AppError(error, original.isLeaderOnly || String(original.priority).trim().toLowerCase() === "critical" ? 403 : 409);
+    if (!user.fullName) throw new AppError("Complete your profile name before claiming a task.", 400);
+    const initials = user.fullName.split(/\s+/).slice(0, 2).map(name => name[0]).join("").toUpperCase();
+    const task = { ...original, assignedMemberUID: uid, assignedMemberName: user.fullName,
+      assignee: { ...original.assignee, name: user.fullName, initials, color: "bg-blue-600" } };
+    const tasks = withTaskDependencyState(event.tasks.map((item: TaskRecord) => item.id === taskId ? task : item));
+    const memberCount = getEventMemberCount(tasks);
+    transaction.update(eventRef, { tasks, memberCount, updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+    return { user, event, memberCount, task: tasks.find(item => item.id === taskId)! };
+  });
+  appCache.deletePrefix("events_raw:");
+  appCache.deletePrefix("members:");
+  logTaskAction(result.user, result.event, result.task, "Claimed unassigned subtask");
+  return { task: result.task, memberCount: result.memberCount };
 }
 
 export async function updateTaskStatusForUser(uid: string, eventId: string, taskId: string, input: unknown) {

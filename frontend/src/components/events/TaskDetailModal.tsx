@@ -29,7 +29,7 @@ import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSel
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ConfirmArchiveModal } from "./ConfirmArchiveModal";
 import { TaskAttachments } from "./TaskAttachments";
-import { TaskAssignee } from "./TaskAssignee";
+import { TaskSelfAssignmentSelect } from "./TaskSelfAssignmentSelect";
 import { isTaskAssignedToUser } from "@/utils/taskAssignment";
 import { TaskDependencySelector } from "./TaskDependencies";
 import { getTaskDependencyError, isTaskArchived } from "@/utils/taskDependencies";
@@ -46,7 +46,6 @@ type TaskDetailModalProps = {
   onArchiveTask?: (taskId: string) => void | boolean | Promise<void | boolean>;
   customStatuses?: CustomStatusConfig[];
   statusOrder?: string[];
-  committees?: { id: string; name: string }[];
   roster?: OrgMemberItem[];
   isLeader?: boolean;
   canEdit?: boolean;
@@ -63,7 +62,6 @@ export function TaskDetailModal({
   onArchiveTask,
   customStatuses = [],
   statusOrder,
-  committees = [],
   roster = [],
   isLeader = true,
   canEdit = true
@@ -83,7 +81,6 @@ export function TaskDetailModal({
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(task.dependsOnTaskIds || []);
   const [priority, setPriority] = useState<TaskPriority>(task.priority || "Medium");
-  const [committee, setCommittee] = useState<string>(task.committee || committees[0]?.name || "");
   const [startDate, setStartDate] = useState<string>(task.startDate || "");
   const [dueDate, setDueDate] = useState<string>(task.dueDate || task.deadline || "");
   const [dateError, setDateError] = useState("");
@@ -175,9 +172,6 @@ export function TaskDetailModal({
 
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, [task.status]);
 
-  const committeeOptions = Array.from(
-    new Set([...committees.map((c) => c.name), ...(task.committee ? [task.committee] : [])])
-  );
   const assigneeOptions: CustomSelectOption[] = activeRoster.map((member) => ({
     value: member.id,
     label: member.name,
@@ -234,7 +228,6 @@ export function TaskDetailModal({
       dependsOnTaskIds,
       priority,
       priorityChangeRequest: task.priorityChangeRequest,
-      committee,
       startDate: startDate.trim(),
       dueDate: nextDueDate,
       originalStartDate: task.originalStartDate ?? task.startDate,
@@ -316,7 +309,6 @@ export function TaskDetailModal({
           {submitError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{submitError}</p> : null}
           <section aria-label="Task status and assignment" className="space-y-4 border-t border-slate-100 pt-5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status &amp; assignment</h4>
-          {!isLeader ? <TaskAssignee task={task} /> : null}
           {/* STATUS & PRIORITY */}
           <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4">
             <div>
@@ -342,24 +334,21 @@ export function TaskDetailModal({
             </div>
           </div>
 
-          {/* ASSIGNEE & COMMITTEE */}
-          {isLeader ? <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
+          {/* ASSIGNEE */}
+          <div className="min-w-0">
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">Assignee</label>
-              <CustomSelect
+              {isLeader ? <CustomSelect
                 value={selectedMemberId}
                 onChange={setSelectedMemberId}
                 options={assigneeOptions}
-                placeholder="Select a member"
-                buttonClassName="py-2 text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">Committee</label>
-              <CustomSelect value={committee} onChange={setCommittee} disabled={committeeOptions.length === 0} placeholder="No committees available" options={committeeOptions.map((name) => ({ value: name, label: name.endsWith("Committee") ? name : `${name} Committee` }))} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
-            </div>
-          </div> : null}
+                placeholder="No assignee"
+                disabled={!canEdit}
+                multiline
+                portal
+                buttonClassName="min-h-11 rounded-xl text-xs"
+                dropdownClassName="[&_button]:min-h-11"
+              /> : <TaskSelfAssignmentSelect task={task} readOnly={archived} />}
+          </div>
 
           </section>
           {/* START DATE & DUE/END DATE WITH TIME */}

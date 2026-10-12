@@ -75,6 +75,7 @@ export type Task = {
 };
 
 export type Event = {
+  orgId?: string | null;
   archivedAt?: string | null;
   archivedByUID?: string | null;
   statusBeforeArchive?: EventStatus;

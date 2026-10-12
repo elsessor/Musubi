@@ -228,7 +228,7 @@ export function TaskTableView({ readOnly = false, tasks, onUpdateStatus, onUpdat
                   <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
                       <Calendar size={12} className="text-slate-400" />
-                      {task.dueDate}
+                      {task.dueDate || task.deadline || "No deadline"}
                       <OverdueBadge task={task} />
                     </div>
                   </td>

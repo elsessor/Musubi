@@ -16,6 +16,7 @@ type CalendarViewProps<T> = {
   isScheduled: (item: T, date: Date) => boolean;
   onSelect: (item: T) => void;
   renderDetails?: (item: T) => ReactNode;
+  renderActions?: (item: T) => ReactNode;
   renderCompactIndicator?: (item: T) => ReactNode;
   customStatuses?: CustomStatusConfig[];
 };
@@ -23,7 +24,7 @@ type CalendarViewProps<T> = {
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const dateKey = (date: Date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 
-export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, getDescription, isScheduled, onSelect, renderDetails, renderCompactIndicator, customStatuses }: CalendarViewProps<T>) {
+export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, getDescription, isScheduled, onSelect, renderDetails, renderActions, renderCompactIndicator, customStatuses }: CalendarViewProps<T>) {
   const [date, setDate] = useState(() => new Date());
   const [period, setPeriod] = useState<CalendarPeriod>("month");
   const [options, setOptions] = useState<CalendarDisplayOptions>({ showWeekends: true, showCancelled: true, showCompleted: true });
@@ -67,14 +68,17 @@ export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, 
         {renderCompactIndicator?.(item)}{getTitle(item)}
       </button>
     ) : (
-      <button key={getId(item)} type="button" onClick={() => onSelect(item)} className="flex min-h-11 w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:bg-slate-50">
-        <span className="break-words text-sm font-semibold text-slate-900">{getTitle(item)}</span>
-        {getDescription?.(item) ? <span className="line-clamp-2 break-words text-xs leading-5 text-slate-500">{getDescription(item)}</span> : null}
-        <span className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${theme.badge}`}>{status}</span>
-          {renderDetails?.(item)}
-        </span>
-      </button>
+      <div key={getId(item)} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <button type="button" onClick={() => onSelect(item)} className="flex min-h-11 w-full min-w-0 flex-col gap-2 p-3 text-left transition hover:bg-slate-50">
+          <span className="break-words text-sm font-semibold text-slate-900">{getTitle(item)}</span>
+          {getDescription?.(item) ? <span className="line-clamp-2 break-words text-xs leading-5 text-slate-500">{getDescription(item)}</span> : null}
+          <span className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${theme.badge}`}>{status}</span>
+            {renderDetails?.(item)}
+          </span>
+        </button>
+        {renderActions ? <div className="px-3 pb-3 empty:hidden">{renderActions(item)}</div> : null}
+      </div>
     );
   }
 

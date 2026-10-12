@@ -39,7 +39,10 @@ import { getTaskDependencyError, isTaskArchived, withTaskDependencyState } from 
 import { TaskDependencyTasksContext } from "./TaskDependencies";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
-import { updateEventFirestore, updateTaskStatus, rateTaskInEvent } from "@/services/events.service";
+import { updateEventFirestore, updateTaskStatus, rateTaskInEvent, claimTaskInEvent, fetchEvents, invalidateEventsCache } from "@/services/events.service";
+import { TaskSelfAssignmentContext } from "./TaskSelfAssignmentSelect";
+import { ConfirmTaskAssignmentModal } from "./ConfirmTaskAssignmentModal";
+import { getTaskClaimError } from "@/utils/taskClaims";
 import { TaskRatingModal } from "./TaskRatingModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
@@ -117,6 +120,16 @@ export function KanbanBoard({
 
   // Modals state
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [claimingTask, setClaimingTask] = useState(false);
+  const claimInFlight = useRef(false);
+  const [claimTaskTarget, setClaimTaskTarget] = useState<Task | null>(null);
+  const [claimError, setClaimError] = useState("");
+  const pendingClaimTask = tasks.find(task => task.id === claimTaskTarget?.id) || claimTaskTarget;
+  const claimEligibilityError = claimTaskTarget
+    ? tasks.some(task => task.id === claimTaskTarget.id)
+      ? getTaskClaimError(pendingClaimTask!, { uid: firebaseUser?.uid ?? profile?.uid, role: profile?.role, organizationId: profile?.organizationId }, currentEvent)
+      : "This task is no longer available."
+    : null;
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
   const [ratingTaskTarget, setRatingTaskTarget] = useState<Task | null>(null);
@@ -131,6 +144,11 @@ export function KanbanBoard({
   const [dragOverStatusPill, setDragOverStatusPill] = useState<string | null>(null);
 
   const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_STATUSES);
+
+  function openAddTaskModal() {
+    if (!isLeader || currentEvent.status === "Archived") return;
+    setShowAddTaskModal(true);
+  }
 
   function canEditTask(task: Task) {
     return currentEvent.status !== "Archived" && canUpdateTaskStatus(task, firebaseUser?.uid ?? profile?.uid, profile?.fullName || firebaseUser?.displayName || "", profile?.role);
@@ -403,11 +421,56 @@ export function KanbanBoard({
     const updatedTasks = tasks.map((task) => task.id === updatedTask.id ? updatedTask : task);
     const active = updatedTasks.filter((task) => !isTaskArchived(task));
     const completed = active.filter((task) => task.status === "Completed" || task.status === "Done").length;
-    const updatedEvent = { ...currentEvent, tasks: updatedTasks, progress: active.length ? Math.round(completed / active.length * 100) : 0 };
+    const updatedEvent = { ...currentEvent, tasks: updatedTasks, memberCount: getEventMemberCount(updatedTasks), progress: active.length ? Math.round(completed / active.length * 100) : 0 };
     setTasks(updatedTasks);
     setCurrentEvent(updatedEvent);
     setSelectedDetailTask((selected) => selected?.id === updatedTask.id ? updatedTask : selected);
     onUpdateEvent?.(updatedEvent);
+  }
+
+  function requestTaskClaim(taskId: string) {
+    if (claimInFlight.current) return;
+    const task = tasks.find(item => item.id === taskId);
+    if (!task || getTaskClaimError(task, { uid: firebaseUser?.uid ?? profile?.uid, role: profile?.role, organizationId: profile?.organizationId }, currentEvent)) return;
+    setClaimError("");
+    setClaimTaskTarget(task);
+  }
+
+  function cancelTaskClaim() {
+    if (claimInFlight.current) return;
+    setClaimTaskTarget(null);
+    setClaimError("");
+  }
+
+  async function handleClaimTask() {
+    if (claimInFlight.current || !claimTaskTarget) return;
+    if (claimEligibilityError) { setClaimError(claimEligibilityError); return; }
+    const taskId = claimTaskTarget.id;
+    claimInFlight.current = true;
+    setClaimingTask(true);
+    setClaimError("");
+    try {
+      const saved = await claimTaskInEvent(firebaseUser, currentEvent.id, taskId);
+      handleSavedTask(saved);
+      setClaimTaskTarget(null);
+      showToast({ title: "Task assigned", description: `${saved.title} is now assigned to you.`, tone: "success" });
+    } catch (error) {
+      setClaimError(error instanceof Error ? error.message : "Unable to assign this task. Please try again.");
+      // Refresh stale cards when someone else assigned or claimed the task first.
+      invalidateEventsCache(currentEvent.orgId || undefined);
+      try {
+        const refreshed = (await fetchEvents(firebaseUser, currentEvent.orgId, true)).find(item => item.id === currentEvent.id);
+        if (refreshed) {
+          setTasks(refreshed.tasks);
+          setCurrentEvent(refreshed);
+          onUpdateEvent?.(refreshed);
+          setSelectedDetailTask(selected => refreshed.tasks.find(item => item.id === selected?.id) || null);
+        }
+      } catch { /* Keep the original claim error and allow retry after a connection failure. */ }
+    } finally {
+      claimInFlight.current = false;
+      setClaimingTask(false);
+    }
   }
 
   function handleUpdateTaskPriority(taskId: string, newPriority: TaskPriority) {
@@ -498,6 +561,7 @@ export function KanbanBoard({
 
   return (
     <TaskDependencyTasksContext.Provider value={tasks}>
+    <TaskSelfAssignmentContext.Provider value={{ event: currentEvent, assigning: claimingTask, onRequestAssignment: requestTaskClaim }}>
     <div className="flex min-h-full min-w-0 flex-col animate-in fade-in duration-200">
       {/* Breadcrumb Navigation */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -610,7 +674,7 @@ export function KanbanBoard({
           <div className="min-w-0 flex-1">
             <CustomSelect value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[{ value: "grid", label: "Grid" }, { value: "table", label: "Table" }, { value: "expanded", label: "Expandable list" }, { value: "kanban", label: "Kanban" }, { value: "calendar", label: "Calendar" }]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11" portal />
           </div>
-          {isLeader && <button type="button" onClick={() => setShowAddTaskModal(true)} className="flex min-h-11 items-center gap-1 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white"><Plus size={16} /> Task</button>}
+          {isLeader && currentEvent.status !== "Archived" && <button type="button" onClick={() => openAddTaskModal()} className="flex min-h-11 items-center gap-1 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white"><Plus size={16} /> Task</button>}
         </div>
         <div className="relative">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -747,7 +811,7 @@ export function KanbanBoard({
 
           {isLeader && currentEvent.status !== "Archived" ? <button
             type="button"
-            onClick={() => setShowAddTaskModal(true)}
+            onClick={() => openAddTaskModal()}
             className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
           >
             <Plus size={14} />
@@ -801,7 +865,7 @@ export function KanbanBoard({
                 key={status}
                 status={status}
                 tasks={getColumnTasks(status)}
-                onAddTask={isLeader ? () => setShowAddTaskModal(true) : undefined}
+                onAddTask={isLeader ? () => openAddTaskModal() : undefined}
                 onDragStart={(id) => setDraggedId(id)}
                 onDragEnd={() => {
                   setDraggedId(null);
@@ -919,10 +983,20 @@ export function KanbanBoard({
           onArchiveTask={currentEvent.status === "Archived" ? undefined : handleArchiveTask}
           customStatuses={customStatuses}
           statusOrder={statusOrder}
-          committees={committees}
           roster={realRoster}
           isLeader={isLeader}
           canEdit={canEditTask(selectedDetailTask)}
+        />
+      )}
+
+      {pendingClaimTask && (
+        <ConfirmTaskAssignmentModal
+          task={pendingClaimTask}
+          pending={claimingTask}
+          error={claimEligibilityError || claimError}
+          disabled={Boolean(claimEligibilityError)}
+          onCancel={cancelTaskClaim}
+          onConfirm={handleClaimTask}
         />
       )}
 
@@ -930,11 +1004,11 @@ export function KanbanBoard({
       {isLeader && showAddTaskModal && (
         <AddTaskModal
           eventName={currentEvent.title}
+          eventCommittee={currentEvent.committee}
           tasks={tasks}
           members={members}
           onClose={() => setShowAddTaskModal(false)}
           onAddTask={handleAddTask}
-          committees={committees}
           customStatuses={customStatuses}
           statusOrder={statusOrder}
           roster={realRoster}
@@ -1004,6 +1078,7 @@ export function KanbanBoard({
         />
       )}
     </div>
+    </TaskSelfAssignmentContext.Provider>
     </TaskDependencyTasksContext.Provider>
   );
 }

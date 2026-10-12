@@ -8,6 +8,7 @@ import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
 import { TaskAssignee } from "./TaskAssignee";
+import { TaskSelfAssignmentSelect } from "./TaskSelfAssignmentSelect";
 import { isTaskScheduledOnDay } from "@/utils/calendarSchedule";
 import { CalendarView } from "./CalendarView";
 import { TaskDependencyBadge } from "./TaskDependencies";
@@ -64,12 +65,15 @@ export function TaskCalendarView({ readOnly = false, tasks, onUpdateStatus, onUp
             <div className="mt-3 space-y-2">
               <h3 className="text-base font-bold text-slate-900">{selectedTask.title || selectedTask.description}</h3>
               <p className="text-xs text-slate-500">{selectedTask.description}</p>
-              <TaskAssignee task={selectedTask} />
+              <div className="min-w-0">
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Assignee</label>
+                <TaskSelfAssignmentSelect task={selectedTask} readOnly={readOnly} />
+              </div>
               <TaskDependencyBadge task={selectedTask} />
               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${getStatusTheme(selectedTask.status, customStatuses).badge}`}>{selectedTask.status}</span>
 
               <div className="flex items-center justify-between text-xs pt-2">
-                <span className="text-slate-400">Due: <strong className="text-slate-700">{selectedTask.dueDate}</strong></span>
+                <span className="text-slate-400">Due: <strong className="text-slate-700">{selectedTask.dueDate || selectedTask.deadline || "No deadline"}</strong></span>
                 <div className="flex min-w-0 items-center gap-2"><span className="text-slate-400">Priority:</span>
                   {!readOnly && canUseTaskPriorityControl(selectedTask, uid, fullName, Boolean(onUpdatePriority), role) ? (
                     <div className="w-36 max-w-full">
