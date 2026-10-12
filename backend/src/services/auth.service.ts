@@ -16,6 +16,11 @@ import { assertTaskDependencies, withTaskDependencyState } from "../utils/taskDe
 import { getAdminAccountStatus, type AdminAccountStatus } from "../utils/adminAccountStatus.js";
 import { appCache } from "../utils/cache.js";
 import { getEventMemberCount } from "../utils/eventMembers.js";
+import {
+  syncEventToGoogleCalendar,
+  updateGoogleCalendarEvent,
+  deleteGoogleCalendarEvent
+} from "./calendar.service.js";
 
 export function invalidateUserCache(uid: string) {
   appCache.delete("user_profile:" + uid);
@@ -1471,6 +1476,21 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   });
 
+  try {
+    const googleEventId = await syncEventToGoogleCalendar(uid, {
+      id: eventRef.id,
+      title: input.title.trim(),
+      description: input.description,
+      startDate,
+      endDate
+    });
+    if (googleEventId) {
+      await eventRef.update({ googleCalendarEventId: googleEventId });
+    }
+  } catch (calErr) {
+    console.warn("[Calendar Sync] Non-blocking calendar event creation warning:", calErr);
+  }
+
   writeAuditLog({
     actorUID: uid,
     actorName: user.fullName,
@@ -1581,6 +1601,20 @@ export async function updateEventForUser(uid: string, eventId: string, input: Re
     orgId: user.organizationId ?? (typeof beforeData.orgId === "string" ? beforeData.orgId : null)
   });
 
+  if (beforeData.googleCalendarEventId) {
+    try {
+      await updateGoogleCalendarEvent(uid, beforeData.googleCalendarEventId, {
+        title: input.title !== undefined ? input.title : beforeData.title,
+        description: input.description !== undefined ? input.description : beforeData.description,
+        startDate: input.startDate || beforeData.startDate,
+        endDate: input.endDate || beforeData.endDate,
+        location: input.location || beforeData.location
+      });
+    } catch (calErr) {
+      console.warn("[Calendar Sync] Non-blocking calendar update warning:", calErr);
+    }
+  }
+
   appCache.deletePrefix("events_raw:");
   appCache.deletePrefix("members:");
   return { success: true };
@@ -1604,6 +1638,14 @@ export async function deleteEventForUser(uid: string, eventId: string) {
   await docRef.delete();
   appCache.deletePrefix("events_raw:");
   appCache.deletePrefix("members:");
+
+  if (data.googleCalendarEventId) {
+    try {
+      await deleteGoogleCalendarEvent(uid, data.googleCalendarEventId);
+    } catch (calErr) {
+      console.warn("[Calendar Sync] Non-blocking calendar delete warning:", calErr);
+    }
+  }
 
   writeAuditLog({
     actorUID: uid,
