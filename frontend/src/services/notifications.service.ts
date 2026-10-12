@@ -26,6 +26,13 @@ export type NotificationRecord = {
 };
 
 const READ_NOTIFS_STORAGE_KEY = "musubi_read_notifications";
+const NOTIFS_READ_EVENT = "musubi_notifications_read";
+
+export function notifyNotificationsRead(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(NOTIFS_READ_EVENT));
+  }
+}
 
 function getReadNotifIdsFromStorage(): string[] {
   if (typeof window === "undefined") return [];
@@ -375,7 +382,20 @@ export function subscribeNotificationsFirestore(
     }
   );
 
+  const handleUpdate = () => {
+    emitMerged();
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener(NOTIFS_READ_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+  }
+
   return () => {
+    if (typeof window !== "undefined") {
+      window.removeEventListener(NOTIFS_READ_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    }
     unsubAnnouncements();
     unsubEvents();
     unsubNotifs();
@@ -385,6 +405,7 @@ export function subscribeNotificationsFirestore(
 
 export async function markNotificationAsRead(user: User | null, notificationId: string): Promise<void> {
   addReadNotifIdToStorage(notificationId);
+  notifyNotificationsRead();
   if (!user || !notificationId || notificationId.startsWith("audit_") || notificationId.startsWith("event_") || notificationId.startsWith("announcement_")) return;
 
   try {
@@ -401,6 +422,7 @@ export async function markNotificationAsRead(user: User | null, notificationId: 
 
 export async function markAllNotificationsAsRead(user: User | null, notificationIds: string[]): Promise<void> {
   addMultipleReadNotifIdsToStorage(notificationIds);
+  notifyNotificationsRead();
   const directIds = notificationIds.filter((id) => !id.startsWith("audit_") && !id.startsWith("event_") && !id.startsWith("announcement_"));
   if (user && directIds.length > 0) {
     await Promise.all(directIds.map((id) => markNotificationAsRead(user, id)));

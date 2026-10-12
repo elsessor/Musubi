@@ -64,12 +64,14 @@ export function TopHeader({
 
   function readNotification(id: string) {
     setNotifications((items) => items.map((item) => item.id === id ? { ...item, unread: false } : item));
+    setLiveUnreadCount((prev) => Math.max(0, (prev ?? 1) - 1));
     void markNotificationAsRead(firebaseUser, id);
   }
 
   function readAllNotifications() {
     const ids = notifications.filter((item) => item.unread).map((item) => item.id);
     setNotifications((items) => items.map((item) => ({ ...item, unread: false })));
+    setLiveUnreadCount(0);
     void markAllNotificationsAsRead(firebaseUser, ids);
   }
 
@@ -390,9 +392,11 @@ export function TopHeader({
             type="button"
           >
             <Bell className="size-5" strokeWidth={1.75} />
-            <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
-              {bellCount}
-            </span>
+            {bellCount > 0 ? (
+              <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
+                {bellCount}
+              </span>
+            ) : null}
           </button>
           {notificationsOpen && (
             <NotificationPanel notifications={notifications} onClose={closeNotifications} onRead={readNotification} onReadAll={readAllNotifications} />

@@ -149,9 +149,10 @@ export default function NotificationsPage() {
           <button
             type="button"
             onClick={handleMarkAllAsRead}
-            className="shrink-0 text-[11px] font-bold text-[#2563eb] transition hover:text-blue-700 sm:text-xs"
+            disabled={unreadCount === 0}
+            className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline disabled:cursor-default disabled:text-slate-400 disabled:no-underline"
           >
-            Mark all as read
+            <CheckCheck className="size-4" /> Mark all as read
           </button>
         </div>
 
