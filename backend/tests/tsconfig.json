@@ -3,10 +3,9 @@
   "compilerOptions": {
     "rootDir": "../..",
     "noEmit": true,
-    "baseUrl": "../../frontend",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["../../frontend/src/*"]
     }
   },
-  "include": ["taskSelfAssignment.test.ts", "taskDependencyUi.test.ts"]
+  "include": ["taskSelfAssignment.test.ts", "taskDependencyUi.test.ts", "announcementSubscription.test.ts"]
 }

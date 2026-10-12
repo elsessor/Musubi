@@ -109,14 +109,14 @@ export function RegisterForm() {
   return (
     <>
     <AuthCard>
-      <div className="mb-8">
-        <h2 className="text-3xl font-extrabold text-slate-950">Create an account</h2>
-        <p className="mt-3 text-base font-medium text-slate-500">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-2xl font-extrabold text-slate-950 sm:text-3xl">Create an account</h2>
+        <p className="mt-2 text-sm font-medium text-slate-500 sm:mt-3 sm:text-base">
           Just your name and email to get started
         </p>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <GoogleButton
           isLoading={googleLoading}
           label="Sign up with Google"
@@ -125,9 +125,10 @@ export function RegisterForm() {
         <Divider />
       </div>
 
-      <form className="mt-8 space-y-5" noValidate onSubmit={handleSubmit(onSubmit)}>
+      <form className="mt-5 space-y-4 sm:mt-8 sm:space-y-5" noValidate onSubmit={handleSubmit(onSubmit)}>
         <Input
           autoComplete="name"
+          className="text-base sm:text-[15px]"
           error={errors.fullName?.message}
           id="fullName"
           label="Full Name"
@@ -139,6 +140,7 @@ export function RegisterForm() {
 
         <Input
           autoComplete="email"
+          className="text-base sm:text-[15px]"
           error={errors.email?.message}
           id="email"
           label="University Email"
@@ -150,6 +152,7 @@ export function RegisterForm() {
 
         <PasswordField
           autoComplete="new-password"
+          className="text-base sm:text-[15px]"
           error={errors.password?.message}
           id="password"
           label="Password"
@@ -162,6 +165,7 @@ export function RegisterForm() {
           autoComplete="new-password"
           error={errors.confirmPassword?.message}
           id="confirmPassword"
+          className="text-base sm:text-[15px]"
           label="Confirm Password"
           placeholder="Repeat password"
           required
@@ -171,7 +175,7 @@ export function RegisterForm() {
         <div>
           <label className="flex cursor-pointer items-start gap-3 text-sm font-medium text-slate-500">
             <input
-              className="mt-0.5 size-4 rounded border-slate-300 text-brand focus:ring-accent"
+              className="mt-0.5 size-5 shrink-0 rounded border-slate-300 text-brand focus:ring-accent sm:size-4 sm:shrink"
               type="checkbox"
               {...register("terms")}
             />
@@ -198,9 +202,9 @@ export function RegisterForm() {
         </Button>
       </form>
 
-      <p className="mt-9 text-center text-base font-medium text-slate-400">
+      <p className="mt-6 text-center text-sm font-medium text-slate-500 sm:mt-9 sm:text-base sm:text-slate-400">
         Already have an account?{" "}
-        <Link className="auth-link text-lg" href="/sign-in">
+        <Link className="auth-link inline-flex min-h-11 items-center text-base sm:inline sm:min-h-0 sm:text-lg" href="/sign-in">
           Sign in
         </Link>
       </p>

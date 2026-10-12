@@ -19,6 +19,10 @@ export type Announcement = {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 
+class AnnouncementRequestError extends Error {
+  constructor(message: string, public readonly status: number) { super(message); }
+}
+
 async function announcementRequest(user: User | null | undefined, path: string, init?: RequestInit) {
   const firebaseUser = user || useAuthStore.getState().firebaseUser;
   if (!firebaseUser) throw new Error("Sign in again to access announcements.");
@@ -28,20 +32,44 @@ async function announcementRequest(user: User | null | undefined, path: string, 
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     cache: "no-store"
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || "Unable to save or load announcements.");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new AnnouncementRequestError(data.message || "Unable to save or load announcements.", response.status);
   return data;
 }
 
 const announcementsCache = new Map<string, { data: Announcement[]; timestamp: number }>();
 const inFlightAnnouncements = new Map<string, Promise<Announcement[]>>();
+let cacheGeneration = 0;
+let cacheAuthKey: string | null = null;
+
+function announcementAuthKey(state: ReturnType<typeof useAuthStore.getState>): string | null {
+  if (state.loading || !state.firebaseUser || !state.profile || state.firebaseUser.uid !== state.profile.uid) return null;
+  return JSON.stringify([state.firebaseUser.uid, state.profile.organizationId?.trim() || null, state.profile.role, state.profile.committeeId || null]);
+}
+
+function announcementReadSession(user?: User | null, orgId?: string | null) {
+  const state = useAuthStore.getState();
+  const authKey = announcementAuthKey(state);
+  if (cacheAuthKey !== authKey) {
+    cacheAuthKey = authKey;
+    invalidateAnnouncementsCache();
+  }
+  if (!authKey || !state.firebaseUser || !state.profile || (user && user.uid !== state.firebaseUser.uid)) return null;
+  const targetOrgId = (orgId ?? state.profile.organizationId)?.trim();
+  if (!targetOrgId || (state.profile.role !== "Admin" && targetOrgId !== state.profile.organizationId?.trim())) return null;
+  return { user: state.firebaseUser, orgId: targetOrgId, cacheKey: JSON.stringify([authKey, targetOrgId]) };
+}
 
 export function invalidateAnnouncementsCache() {
+  cacheGeneration += 1;
   announcementsCache.clear();
+  inFlightAnnouncements.clear();
 }
 
 export async function fetchAnnouncements(user?: User | null, orgId?: string | null): Promise<Announcement[]> {
-  const cacheKey = orgId && orgId.trim() ? orgId.trim() : "default";
+  const session = announcementReadSession(user, orgId);
+  if (!session) return [];
+  const { cacheKey } = session;
   const now = Date.now();
   const cached = announcementsCache.get(cacheKey);
   if (cached && now - cached.timestamp < 20000) {
@@ -51,44 +79,51 @@ export async function fetchAnnouncements(user?: User | null, orgId?: string | nu
     return inFlightAnnouncements.get(cacheKey)!;
   }
 
+  const requestGeneration = cacheGeneration;
   const promise = (async () => {
-    try {
-      const params = new URLSearchParams(orgId ? { orgId } : {});
-      const data = await announcementRequest(user, `?${params}`);
-      const list = Array.isArray(data.announcements) ? data.announcements : [];
-      announcementsCache.set(cacheKey, { data: list, timestamp: Date.now() });
-      return list;
-    } finally {
-      inFlightAnnouncements.delete(cacheKey);
-    }
+    const params = new URLSearchParams({ orgId: session.orgId });
+    const data = await announcementRequest(session.user, `?${params}`);
+    // An old account's response cannot refill the cache or reach the next account.
+    if (requestGeneration !== cacheGeneration || announcementReadSession(user, orgId)?.cacheKey !== cacheKey) return [];
+    const list = Array.isArray(data.announcements) ? data.announcements : [];
+    announcementsCache.set(cacheKey, { data: list, timestamp: Date.now() });
+    return list;
   })();
 
   inFlightAnnouncements.set(cacheKey, promise);
-  return promise;
+  try { return await promise; }
+  finally { if (inFlightAnnouncements.get(cacheKey) === promise) inFlightAnnouncements.delete(cacheKey); }
 }
 
 // All reads use the server's current organization, role and committee checks.
 export function subscribeAnnouncementsFirestore(orgId: string | null | undefined, _userRole: string | undefined, onData: (announcements: Announcement[]) => void): () => void {
   let active = true;
   let generation = 0;
-  let loading = false;
+  let loadingGeneration: number | null = null;
+  let blockedSessionKey: string | null = null;
+  const targetOrgId = orgId?.trim();
   onData([]);
+  if (!targetOrgId) return () => {};
   // Remove the old shared cache so restricted announcements cannot reappear on another account.
   try {
     if (typeof window !== "undefined") localStorage.removeItem("musubi_announcements_cache");
   } catch { /* Storage may be disabled; announcements still load from the API. */ }
   async function load() {
-    if (!active || loading) return;
+    if (!active) return;
+    const session = announcementReadSession(null, targetOrgId);
+    if (!session || loadingGeneration === generation || blockedSessionKey === session.cacheKey) return;
     const currentGeneration = generation;
-    loading = true;
+    loadingGeneration = currentGeneration;
     try {
-      const announcements = await fetchAnnouncements(null, orgId);
-      if (active && currentGeneration === generation) onData(announcements);
-    } catch {
-      if (active && currentGeneration === generation) onData([]);
+      const announcements = await fetchAnnouncements(session.user, targetOrgId);
+      if (active && currentGeneration === generation && announcementReadSession(null, targetOrgId)?.cacheKey === session.cacheKey) onData(announcements);
+    } catch (error) {
+      if (active && currentGeneration === generation) {
+        if (error instanceof AnnouncementRequestError && error.status === 403) blockedSessionKey = session.cacheKey;
+        onData([]);
+      }
     } finally {
-      loading = false;
-      if (active && currentGeneration !== generation) void load();
+      if (loadingGeneration === currentGeneration) loadingGeneration = null;
     }
   }
   void load();
@@ -96,13 +131,15 @@ export function subscribeAnnouncementsFirestore(orgId: string | null | undefined
     if (typeof document === "undefined" || !document.hidden) void load();
   }, 60000);
   const unsubscribeAuth = useAuthStore.subscribe((state, previous) => {
-    if (state.firebaseUser?.uid !== previous.firebaseUser?.uid || state.profile !== previous.profile) {
+    if (announcementAuthKey(state) !== announcementAuthKey(previous)) {
       generation += 1;
+      blockedSessionKey = null;
+      announcementReadSession(null, targetOrgId);
       onData([]);
       void load();
     }
   });
-  return () => { active = false; clearInterval(interval); unsubscribeAuth(); };
+  return () => { active = false; generation += 1; clearInterval(interval); unsubscribeAuth(); onData([]); };
 }
 
 export async function createAnnouncementFirestore(orgId: string, announcementData: {
