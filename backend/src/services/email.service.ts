@@ -126,7 +126,38 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
     </html>
     `;
 
-    // 1. Resend HTTPS REST API (Recommended for Render, operates over HTTPS port 443)
+    const verifiedSenderEmail = env.gmailUser || "larryagad1@gmail.com";
+
+    // 1. Brevo HTTPS REST API (Primary engine, operates over HTTPS port 443)
+    if (env.brevoApiKey) {
+      try {
+        const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            "api-key": env.brevoApiKey,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            sender: { name: "Musubi Workflow", email: verifiedSenderEmail },
+            to: [{ email: to, name: recipientName }],
+            subject,
+            htmlContent
+          })
+        });
+
+        const brevoData: any = await brevoRes.json();
+        if (brevoRes.ok && (brevoData?.messageId || brevoData?.messageIds)) {
+          console.log(`✉️ Email sent via Brevo API to ${to}. Message ID: ${brevoData.messageId}`);
+          return { success: true, messageId: brevoData.messageId };
+        } else {
+          console.warn("⚠️ Brevo API error:", brevoData?.message || brevoData);
+        }
+      } catch (brevoErr: any) {
+        console.warn("⚠️ Brevo request error:", brevoErr?.message);
+      }
+    }
+
+    // 2. Resend HTTPS REST API (Secondary fallback)
     if (env.resendApiKey) {
       try {
         const resendRes = await fetch("https://api.resend.com/emails", {
@@ -145,49 +176,14 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
 
         const resendData: any = await resendRes.json();
         if (resendRes.ok && resendData?.id) {
-          console.log(`✉️ Email Nudge sent via Resend API to ${to}. Message ID: ${resendData.id}`);
+          console.log(`✉️ Email sent via Resend API to ${to}. Message ID: ${resendData.id}`);
           return { success: true, messageId: resendData.id };
         } else {
           const errMsg = resendData?.message || resendData?.error || "Resend API failure";
           console.warn("⚠️ Resend API error:", errMsg);
-          if (!env.gmailAppPassword) {
-            return { success: false, error: errMsg };
-          }
         }
       } catch (resendErr: any) {
         console.warn("⚠️ Resend request error:", resendErr?.message);
-        if (!env.gmailAppPassword) {
-          return { success: false, error: resendErr?.message || "Resend connection error" };
-        }
-      }
-    }
-
-    // 2. Brevo HTTPS REST API (Operates over HTTPS port 443)
-    if (env.brevoApiKey) {
-      try {
-        const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
-          method: "POST",
-          headers: {
-            "api-key": env.brevoApiKey,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            sender: { name: "Musubi Workflow", email: env.gmailUser || "noreply.musubi@gmail.com" },
-            to: [{ email: to, name: recipientName }],
-            subject,
-            htmlContent
-          })
-        });
-
-        const brevoData: any = await brevoRes.json();
-        if (brevoRes.ok && (brevoData?.messageId || brevoData?.messageIds)) {
-          console.log(`✉️ Email Nudge sent via Brevo API to ${to}. Message ID: ${brevoData.messageId}`);
-          return { success: true, messageId: brevoData.messageId };
-        } else {
-          console.warn("⚠️ Brevo API error:", brevoData?.message || brevoData);
-        }
-      } catch (brevoErr: any) {
-        console.warn("⚠️ Brevo request error:", brevoErr?.message);
       }
     }
 
@@ -196,21 +192,112 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
     if (!transport) {
       return {
         success: false,
-        error: "No email provider configured. Please set RESEND_API_KEY (recommended for Render) or GMAIL_APP_PASSWORD in environment variables."
+        error: "No email provider succeeded. Please check BREVO_API_KEY and verified sender settings."
       };
     }
 
     const info = await transport.sendMail({
-      from: `"Musubi Workflow" <${env.gmailUser}>`,
+      from: `"Musubi Workflow" <${verifiedSenderEmail}>`,
       to,
       subject,
       html: htmlContent
     });
 
-    console.log(`✉️ Email Nudge sent successfully via SMTP to ${to}. Message ID: ${info.messageId}`);
+    console.log(`✉️ Email sent successfully via SMTP to ${to}. Message ID: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (err: any) {
     console.error("❌ Failed to send Nudge Email:", err);
     return { success: false, error: err.message || "Email send failure" };
   }
 }
+
+/**
+ * Dispatches notification emails when an event is published with atomized tasks.
+ * Sends confirmation to creator and assignment alerts to members.
+ */
+export async function sendEventPublishedNotificationEmail(params: {
+  creatorEmail: string;
+  creatorName: string;
+  eventTitle: string;
+  startDate: string;
+  endDate: string;
+  tasks: Array<{
+    title: string;
+    dueDate?: string;
+    deadline?: string;
+    priority?: string;
+    assignedMemberName?: string;
+    assignedMemberEmail?: string;
+  }>;
+}) {
+  const tasksListHtml = params.tasks
+    .map(
+      (t) =>
+        `<li style="margin-bottom: 8px;"><strong>${t.title}</strong> — Due: ${
+          t.dueDate || t.deadline || "Upcoming"
+        } | Assignee: ${t.assignedMemberName || "Unassigned"} (${t.priority || "Medium"})</li>`
+    )
+    .join("");
+
+  const creatorHtml = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
+        .card { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 28px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .badge { display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; border-radius: 6px; background-color: #eff6ff; color: #2563eb; }
+        h1 { font-size: 20px; font-weight: 800; margin: 12px 0 16px; color: #0f172a; }
+        .meta { background-color: #f1f5f9; padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 20px; }
+        ul { padding-left: 20px; font-size: 13px; line-height: 1.6; color: #334155; }
+        .button { display: inline-block; background-color: #2563eb; color: #ffffff !important; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px; margin-top: 16px; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <span class="badge">Event Published</span>
+        <h1>🎉 "${params.eventTitle}" is now Live!</h1>
+        <div class="meta">
+          <strong>Duration:</strong> ${params.startDate} to ${params.endDate}<br>
+          <strong>Total Subtasks:</strong> ${params.tasks.length} actionable items
+        </div>
+        <p style="font-size: 14px; color: #475569;">The tasks breakdown for your event has been published to your campus workflow:</p>
+        <ul>${tasksListHtml}</ul>
+        <a href="https://musubi-1bf94.web.app/dashboard/events" class="button">View Event in Musubi</a>
+      </div>
+    </body>
+  </html>
+  `;
+
+  // 1. Send confirmation email to creator
+  if (params.creatorEmail) {
+    await sendNudgeNotificationEmail({
+      to: params.creatorEmail,
+      recipientName: params.creatorName,
+      taskTitle: params.eventTitle,
+      eventName: params.eventTitle,
+      deadline: params.endDate,
+      message: `Event Published: "${params.eventTitle}" with ${params.tasks.length} subtasks.`,
+      isUrgent: false,
+      nudgeType: "event_published"
+    }).catch((err) => console.warn("[Email Publish] Creator notification warning:", err));
+  }
+
+  // 2. Send assignment notification to each assigned member
+  for (const task of params.tasks) {
+    if (task.assignedMemberEmail && task.assignedMemberEmail !== params.creatorEmail) {
+      await sendNudgeNotificationEmail({
+        to: task.assignedMemberEmail,
+        recipientName: task.assignedMemberName || "Team Member",
+        taskTitle: task.title,
+        eventName: params.eventTitle,
+        deadline: task.dueDate || task.deadline || params.endDate,
+        message: `You have been assigned to "${task.title}" for the event "${params.eventTitle}". Please check your Musubi dashboard for details.`,
+        isUrgent: task.priority === "High" || task.priority === "Critical",
+        nudgeType: "task_assigned"
+      }).catch((err) => console.warn(`[Email Publish] Task assign notice failed for ${task.assignedMemberEmail}:`, err));
+    }
+  }
+}
+

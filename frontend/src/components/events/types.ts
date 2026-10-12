@@ -104,6 +104,9 @@ export type Event = {
   customStatuses?: import("./statusUtils").CustomStatusConfig[];
   eventCustomStatuses?: import("./statusUtils").CustomStatusConfig[];
   statusOrder?: string[];
+  isGoogleCalendar?: boolean;
+  htmlLink?: string;
+  location?: string;
 };
 
 // ── Generated task from atomizer ──────────────────────────────────────────────

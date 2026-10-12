@@ -4,15 +4,33 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
-import { X, Check, ChevronDown } from "lucide-react";
+import {
+  X,
+  Check,
+  ChevronDown,
+  Calendar,
+  RefreshCw,
+  CheckCircle2,
+  ExternalLink,
+  Unlink,
+  Loader2
+} from "lucide-react";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { getFirebaseDb } from "@/firebase/config";
 import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 import { getDashboardNavItems } from "@/utils/routes";
 import { subscribeNotificationsFirestore } from "@/services/notifications.service";
 import { getOrganization, updateOrganizationDetails, updateUserProfile } from "@/services/auth.service";
+import {
+  getCalendarConnectUrl,
+  getCalendarStatus,
+  disconnectCalendar,
+  syncAllEventsToGoogle,
+  type CalendarStatusResponse
+} from "@/services/calendar.service";
 
 function greetingDate() {
   return new Intl.DateTimeFormat("en-US", {
@@ -123,10 +141,55 @@ export default function DashboardSettingsPage() {
     weeklySummaryReport: true
   });
 
+  // Google Calendar Integration State
+  const showToast = useToastStore((state) => state.showToast);
+  const [calendarStatus, setCalendarStatus] = useState<CalendarStatusResponse>({ connected: false });
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [syncingEvents, setSyncingEvents] = useState(false);
+
   // Edit Modal State
   const [editingField, setEditingField] = useState<EditableField | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Check URL query parameters for Google Calendar OAuth callback status
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const calParam = params.get("calendar");
+    if (calParam === "connected") {
+      showToast({
+        title: "Google Calendar Connected",
+        description: "Your Google Calendar is connected! Campus events and deadlines will reflect automatically.",
+        tone: "success"
+      });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (calParam === "error") {
+      const msg = params.get("message") || "Authorization failed.";
+      showToast({
+        title: "Connection Failed",
+        description: msg,
+        tone: "error"
+      });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (calParam === "access_denied") {
+      showToast({
+        title: "Authorization Cancelled",
+        description: "Google Calendar permissions were not granted.",
+        tone: "info"
+      });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [showToast]);
+
+  // Initial fetch of Google Calendar connection status
+  useEffect(() => {
+    const user = firebaseUser || useAuthStore.getState().firebaseUser;
+    if (!user) return;
+    getCalendarStatus(user).then((res) => {
+      setCalendarStatus(res);
+    });
+  }, [firebaseUser]);
 
   useEffect(() => {
     if (!authLoading && !profile) {
@@ -187,6 +250,14 @@ export default function DashboardSettingsPage() {
             ...prev,
             ...data.preferences
           }));
+        }
+
+        if (data.googleCalendar && typeof data.googleCalendar === "object") {
+          setCalendarStatus({
+            connected: Boolean(data.googleCalendar.connected && data.googleCalendar.refreshToken),
+            email: data.googleCalendar.email || undefined,
+            connectedAt: data.googleCalendar.connectedAt || undefined
+          });
         }
       },
       () => {
@@ -357,6 +428,75 @@ export default function DashboardSettingsPage() {
       } catch (err) {
         console.warn("[Settings] Save preferences error:", err);
       }
+    }
+  };
+
+  const handleConnectCalendar = async () => {
+    const user = firebaseUser || useAuthStore.getState().firebaseUser;
+    if (!user) {
+      showToast({
+        title: "Sign in required",
+        description: "Please sign in to connect your Google Calendar.",
+        tone: "error"
+      });
+      return;
+    }
+    setCalendarLoading(true);
+    try {
+      const url = await getCalendarConnectUrl(user, window.location.origin);
+      window.location.href = url;
+    } catch (err: any) {
+      showToast({
+        title: "Connection Failed",
+        description: err.message || "Failed to initiate Google Calendar link.",
+        tone: "error"
+      });
+      setCalendarLoading(false);
+    }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    const user = firebaseUser || useAuthStore.getState().firebaseUser;
+    if (!user) return;
+    setCalendarLoading(true);
+    try {
+      await disconnectCalendar(user);
+      setCalendarStatus({ connected: false });
+      showToast({
+        title: "Calendar Disconnected",
+        description: "Your Google Calendar integration has been unlinked.",
+        tone: "success"
+      });
+    } catch (err: any) {
+      showToast({
+        title: "Disconnection Failed",
+        description: err.message || "Could not disconnect Google Calendar.",
+        tone: "error"
+      });
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  const handleSyncAllEvents = async () => {
+    const user = firebaseUser || useAuthStore.getState().firebaseUser;
+    if (!user) return;
+    setSyncingEvents(true);
+    try {
+      const res = await syncAllEventsToGoogle(user);
+      showToast({
+        title: "Sync Completed",
+        description: `Successfully synchronized ${res.syncedCount} campus event(s) to your Google Calendar.`,
+        tone: "success"
+      });
+    } catch (err: any) {
+      showToast({
+        title: "Sync Failed",
+        description: err.message || "Failed to sync events to Google Calendar.",
+        tone: "error"
+      });
+    } finally {
+      setSyncingEvents(false);
     }
   };
 
@@ -556,6 +696,101 @@ export default function DashboardSettingsPage() {
               </button>
             </div>}
           </div>
+        </div>
+
+        {/* Card 3: Google Calendar Integration */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+                  INTEGRATIONS
+                </span>
+                {calendarStatus.connected && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-600/20">
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Connected
+                  </span>
+                )}
+              </div>
+              <h2 className="text-[17px] font-bold text-slate-900 flex items-center gap-2 pt-0.5">
+                <Calendar className="size-5 text-[#2563eb]" />
+                Google Calendar Sync
+              </h2>
+              <p className="text-[13px] font-medium text-slate-500 max-w-xl leading-relaxed">
+                Connect your personal Google Calendar to automatically synchronize campus event schedules and deadlines directly to your calendar app on web and mobile.
+              </p>
+            </div>
+
+            {/* Action buttons */}
+            <div className="shrink-0 flex items-center gap-2 pt-1 sm:pt-0">
+              {calendarStatus.connected ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={syncingEvents}
+                    onClick={handleSyncAllEvents}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[13px] font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:text-slate-900 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <RefreshCw className={`size-3.5 ${syncingEvents ? "animate-spin text-[#2563eb]" : "text-slate-400"}`} />
+                    {syncingEvents ? "Syncing..." : "Sync All Events"}
+                  </button>
+
+                  <a
+                    href="https://calendar.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[13px] font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer"
+                  >
+                    <ExternalLink className="size-3.5 text-slate-400" />
+                    Open Calendar
+                  </a>
+
+                  <button
+                    type="button"
+                    disabled={calendarLoading}
+                    onClick={handleDisconnectCalendar}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/50 px-3.5 py-2 text-[13px] font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Unlink className="size-3.5" />
+                    Disconnect
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={calendarLoading}
+                  onClick={handleConnectCalendar}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#2563eb] px-4 py-2.5 text-[13px] font-bold text-white shadow-xs hover:bg-blue-700 transition disabled:opacity-50 cursor-pointer"
+                >
+                  {calendarLoading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Calendar className="size-4" />
+                  )}
+                  {calendarLoading ? "Connecting..." : "Connect Google Calendar"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Details Bar when connected */}
+          {calendarStatus.connected && (
+            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                <span>
+                  Synchronizing with Google account:{" "}
+                  <strong className="text-slate-900 font-semibold">{calendarStatus.email || effectiveEmail}</strong>
+                </span>
+              </div>
+              {calendarStatus.connectedAt && (
+                <span className="text-slate-400">
+                  Linked on {new Date(calendarStatus.connectedAt).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

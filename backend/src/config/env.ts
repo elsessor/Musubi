@@ -47,5 +47,8 @@ export const env = {
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD?.trim() || "",
   resendApiKey: process.env.RESEND_API_KEY?.trim() || "",
   resendFromEmail: process.env.RESEND_FROM_EMAIL?.trim() || "Musubi Workflow <onboarding@resend.dev>",
-  brevoApiKey: process.env.BREVO_API_KEY?.trim() || ""
+  brevoApiKey: process.env.BREVO_API_KEY?.trim() || "",
+  googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || "",
+  googleCalendarRedirectUri: process.env.GOOGLE_CALENDAR_REDIRECT_URI?.trim() || ""
 };

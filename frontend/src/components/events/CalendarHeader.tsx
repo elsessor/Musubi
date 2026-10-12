@@ -30,6 +30,7 @@ export function CalendarHeader({ date, onPrevious, onNext, onToday, period, onPe
   const ActiveViewIcon = VIEW_ICONS[period];
   const displayOptions: { key: keyof CalendarDisplayOptions; label: string }[] = [
     { key: "showWeekends", label: "Show weekends" },
+    ...(itemLabel === "events" ? [{ key: "showGoogleCalendar" as const, label: "Show Google Calendar" }] : []),
     { key: "showCancelled", label: `Show cancelled ${itemLabel}` },
     { key: "showCompleted", label: `Show completed ${itemLabel}` }
   ];
@@ -77,11 +78,20 @@ export function CalendarHeader({ date, onPrevious, onNext, onToday, period, onPe
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator className="mx-2 my-2 bg-slate-100" />
             <DropdownMenuLabel className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Display options</DropdownMenuLabel>
-            {displayOptions.map((option) => (
-              <DropdownMenuCheckboxItem key={option.key} checked={options[option.key]} onCheckedChange={(checked) => onOptionsChange({ ...options, [option.key]: checked === true })} onSelect={(event) => event.preventDefault()} className={`min-h-11 cursor-pointer rounded-lg py-2 pl-9 pr-3 text-xs font-medium text-slate-600 transition-colors focus:bg-slate-50 focus:text-slate-900 [&>span:first-child]:grid [&>span:first-child]:size-4 [&>span:first-child]:place-items-center [&>span:first-child]:rounded [&>span:first-child]:border [&>span:first-child_svg]:size-3 sm:min-h-9 ${options[option.key] ? "[&>span:first-child]:border-blue-200 [&>span:first-child]:bg-blue-50 [&>span:first-child]:text-blue-600" : "[&>span:first-child]:border-slate-300 [&>span:first-child]:bg-white"}`}>
-                {option.label}
-              </DropdownMenuCheckboxItem>
-            ))}
+            {displayOptions.map((option) => {
+              const isChecked = options[option.key] ?? true;
+              return (
+                <DropdownMenuCheckboxItem
+                  key={option.key}
+                  checked={isChecked}
+                  onCheckedChange={(checked) => onOptionsChange({ ...options, [option.key]: checked === true })}
+                  onSelect={(event) => event.preventDefault()}
+                  className={`min-h-11 cursor-pointer rounded-lg py-2 pl-9 pr-3 text-xs font-medium text-slate-600 transition-colors focus:bg-slate-50 focus:text-slate-900 [&>span:first-child]:grid [&>span:first-child]:size-4 [&>span:first-child]:place-items-center [&>span:first-child]:rounded [&>span:first-child]:border [&>span:first-child_svg]:size-3 sm:min-h-9 ${isChecked ? "[&>span:first-child]:border-blue-200 [&>span:first-child]:bg-blue-50 [&>span:first-child]:text-blue-600" : "[&>span:first-child]:border-slate-300 [&>span:first-child]:bg-white"}`}
+                >
+                  {option.label}
+                </DropdownMenuCheckboxItem>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

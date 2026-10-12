@@ -1,0 +1,108 @@
+import type { Request, Response, NextFunction } from "express";
+import type { AuthenticatedRequest } from "../types/auth.types.js";
+import {
+  generateGoogleCalendarAuthUrl,
+  handleGoogleCalendarCallback,
+  getCalendarConnectionStatus,
+  disconnectGoogleCalendar,
+  syncAllUserEventsToCalendar,
+  getGoogleCalendarEventsForUser
+} from "../services/calendar.service.js";
+import { env } from "../config/env.js";
+import { AppError } from "../utils/AppError.js";
+
+function getRequestUserId(req: Request): string {
+  const authReq = req as AuthenticatedRequest;
+  const uid = authReq.authUser?.uid || (req as any).user?.uid || (req.query?.uid as string) || "";
+  if (!uid) {
+    throw new AppError("Authentication required: user ID not found.", 401);
+  }
+  return uid;
+}
+
+export async function getConnectUrlController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = getRequestUserId(req);
+    const returnOrigin = (req.query.returnOrigin as string) || req.headers.origin || env.frontendUrl;
+    const url = generateGoogleCalendarAuthUrl(uid, returnOrigin);
+    return res.json({ url });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function calendarCallbackController(req: Request, res: Response) {
+  const code = req.query.code as string;
+  const state = req.query.state as string;
+  const errorParam = req.query.error as string;
+
+  let fallbackOrigin = env.frontendUrl;
+  try {
+    if (state) {
+      const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"));
+      if (decoded.returnOrigin) fallbackOrigin = decoded.returnOrigin;
+    }
+  } catch {
+    // Keep fallback
+  }
+
+  if (errorParam) {
+    return res.redirect(`${fallbackOrigin}/dashboard/settings?calendar=access_denied`);
+  }
+
+  if (!code || !state) {
+    return res.redirect(`${fallbackOrigin}/dashboard/settings?calendar=missing_code`);
+  }
+
+  try {
+    const { returnOrigin } = await handleGoogleCalendarCallback(code, state);
+    const target = returnOrigin || fallbackOrigin;
+    return res.redirect(`${target}/dashboard/settings?calendar=connected`);
+  } catch (err: any) {
+    console.error("[Calendar Callback Error]", err);
+    const message = encodeURIComponent(err?.message || "Authentication failed");
+    return res.redirect(`${fallbackOrigin}/dashboard/settings?calendar=error&message=${message}`);
+  }
+}
+
+export async function calendarStatusController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = getRequestUserId(req);
+    const status = await getCalendarConnectionStatus(uid);
+    return res.json(status);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function disconnectCalendarController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = getRequestUserId(req);
+    await disconnectGoogleCalendar(uid);
+    return res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function syncAllEventsController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = getRequestUserId(req);
+    const result = await syncAllUserEventsToCalendar(uid);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCalendarEventsController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = getRequestUserId(req);
+    const timeMin = req.query.timeMin as string | undefined;
+    const timeMax = req.query.timeMax as string | undefined;
+    const events = await getGoogleCalendarEventsForUser(uid, timeMin, timeMax);
+    return res.json({ events });
+  } catch (error) {
+    next(error);
+  }
+}
