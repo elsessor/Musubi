@@ -160,6 +160,17 @@ export function getStatusTheme(status: string, customStatuses?: CustomStatusConf
   if (custom && THEME_MAP[custom.color]) return THEME_MAP[custom.color];
 
   // Known default event & task statuses
+  if (normalized === "google calendar") {
+    return {
+      dot: "bg-blue-600",
+      text: "text-blue-700",
+      bg: "bg-blue-50",
+      badge: "bg-blue-50 text-blue-700 ring-blue-200 border-blue-200",
+      active: "bg-blue-600 text-white ring-blue-700 border-blue-700",
+      border: "border-l-blue-600",
+      headerTone: "bg-blue-50 text-blue-800"
+    };
+  }
   if (normalized === "active" || normalized === "in progress") return THEME_MAP.blue;
   if (normalized === "planning" || normalized === "in review" || normalized === "pending") return THEME_MAP.amber;
   if (normalized === "completed" || normalized === "done") return THEME_MAP.emerald;

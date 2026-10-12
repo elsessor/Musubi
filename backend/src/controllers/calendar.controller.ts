@@ -5,7 +5,8 @@ import {
   handleGoogleCalendarCallback,
   getCalendarConnectionStatus,
   disconnectGoogleCalendar,
-  syncAllUserEventsToCalendar
+  syncAllUserEventsToCalendar,
+  getGoogleCalendarEventsForUser
 } from "../services/calendar.service.js";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
@@ -89,6 +90,18 @@ export async function syncAllEventsController(req: Request, res: Response, next:
     const uid = getRequestUserId(req);
     const result = await syncAllUserEventsToCalendar(uid);
     return res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCalendarEventsController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const uid = getRequestUserId(req);
+    const timeMin = req.query.timeMin as string | undefined;
+    const timeMax = req.query.timeMax as string | undefined;
+    const events = await getGoogleCalendarEventsForUser(uid, timeMin, timeMax);
+    return res.json({ events });
   } catch (error) {
     next(error);
   }

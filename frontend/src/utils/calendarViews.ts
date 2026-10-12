@@ -4,6 +4,7 @@ export type CalendarDisplayOptions = {
   showWeekends: boolean;
   showCancelled: boolean;
   showCompleted: boolean;
+  showGoogleCalendar?: boolean;
 };
 
 export const CALENDAR_PERIODS: { value: CalendarPeriod; label: string }[] = [
@@ -62,6 +63,7 @@ export function moveCalendarDate(date: Date, period: CalendarPeriod, direction: 
 
 export function isCalendarItemVisible(status: string, options: CalendarDisplayOptions): boolean {
   const normalized = status.trim().toLowerCase();
+  if (options.showGoogleCalendar === false && normalized === "google calendar") return false;
   if (!options.showCompleted && ["completed", "done"].includes(normalized)) return false;
   if (!options.showCancelled && ["cancelled", "canceled", "declined"].includes(normalized)) return false;
   return true;

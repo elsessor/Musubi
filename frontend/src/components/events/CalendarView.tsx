@@ -26,7 +26,7 @@ const dateKey = (date: Date) => `${date.getFullYear()}-${date.getMonth() + 1}-${
 export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, getDescription, isScheduled, onSelect, renderDetails, renderCompactIndicator, customStatuses }: CalendarViewProps<T>) {
   const [date, setDate] = useState(() => new Date());
   const [period, setPeriod] = useState<CalendarPeriod>("month");
-  const [options, setOptions] = useState<CalendarDisplayOptions>({ showWeekends: true, showCancelled: true, showCompleted: true });
+  const [options, setOptions] = useState<CalendarDisplayOptions>({ showWeekends: true, showCancelled: true, showCompleted: true, showGoogleCalendar: true });
   const today = new Date();
   const visibleItems = items.filter((item) => isCalendarItemVisible(getStatus(item), options));
   const dates = getCalendarDates(date, period, options.showWeekends);

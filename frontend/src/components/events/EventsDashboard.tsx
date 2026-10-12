@@ -4,14 +4,18 @@ import {
   BookOpen,
   Calendar,
   CheckSquare,
+  Clock,
   Columns3,
+  ExternalLink,
   GripVertical,
   LayoutGrid,
+  MapPin,
   Plus,
   Rows,
   SlidersHorizontal,
   Table,
-  Users
+  Users,
+  X
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Event, EventStatus } from "./types";
@@ -27,6 +31,7 @@ import { CalendarView } from "./CalendarView";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { eventStatusSettings, updateEventFirestore, type EventStatusSettings } from "@/services/events.service";
+import { fetchUserGoogleCalendarEvents } from "@/services/calendar.service";
 
 type StatusFilter = EventStatus | "All";
 type ViewMode = "grid" | "table" | "expanded" | "kanban" | "calendar";
@@ -114,6 +119,49 @@ export function EventsDashboard({
   const didDragRef = useRef(false);
 
   const [statusOrder, setStatusOrder] = useState<string[]>(DEFAULT_EVENT_STATUSES);
+
+  const [googleEvents, setGoogleEvents] = useState<Event[]>([]);
+  const [loadingGoogleEvents, setLoadingGoogleEvents] = useState(false);
+  const [selectedGoogleEvent, setSelectedGoogleEvent] = useState<Event | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!firebaseUser) {
+      setGoogleEvents([]);
+      return;
+    }
+
+    setLoadingGoogleEvents(true);
+    fetchUserGoogleCalendarEvents(firebaseUser)
+      .then((items) => {
+        if (cancelled) return;
+        const mapped: Event[] = items.map((item) => ({
+          id: `gcal-${item.id}`,
+          title: item.title,
+          description: item.description || "",
+          status: "Google Calendar",
+          startDate: item.startDate,
+          endDate: item.endDate,
+          memberCount: 0,
+          progress: 0,
+          tasks: [],
+          isGoogleCalendar: true,
+          htmlLink: item.htmlLink,
+          location: item.location
+        }));
+        setGoogleEvents(mapped);
+      })
+      .catch((err) => {
+        console.warn("Could not load Google Calendar events:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingGoogleEvents(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -923,15 +971,26 @@ export function EventsDashboard({
       {/* Calendar view is available to leaders and organization members. */}
       {viewMode === "calendar" && (
         <CalendarView
-          items={visible}
+          items={[...visible, ...googleEvents]}
           itemLabel="events"
           getId={(event) => event.id}
           getTitle={(event) => event.title}
           getStatus={(event) => event.status}
           getDescription={(event) => event.description}
           isScheduled={isEventScheduledOnDay}
-          onSelect={onSelectEvent}
+          onSelect={(event) => {
+            if (event.isGoogleCalendar) {
+              setSelectedGoogleEvent(event);
+            } else {
+              onSelectEvent(event);
+            }
+          }}
           customStatuses={customStatuses}
+          renderCompactIndicator={(event) =>
+            event.isGoogleCalendar ? (
+              <span className="mr-1 inline-block size-1.5 rounded-full bg-blue-600 align-middle" />
+            ) : null
+          }
         />
       )}
 
@@ -981,6 +1040,110 @@ export function EventsDashboard({
         onReorderStatusOrder={handleReorderStatusOrder}
         onDeleteStatus={handleDeleteCustomStatus}
       />
+
+      {/* Google Calendar Event Detail Modal */}
+      {selectedGoogleEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 border border-blue-200">
+                  <Calendar className="size-3.5" />
+                  Google Calendar
+                </span>
+                <h3 className="mt-2 text-base font-bold text-slate-900">
+                  {selectedGoogleEvent.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedGoogleEvent(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                aria-label="Close"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3 text-xs text-slate-600">
+              <div className="flex items-start gap-2.5">
+                <Clock className="size-4 shrink-0 text-slate-400 mt-0.5" />
+                <span>
+                  {(() => {
+                    const start = selectedGoogleEvent.startDate;
+                    const end = selectedGoogleEvent.endDate;
+                    if (!start) return "Date not specified";
+                    const s = new Date(start);
+                    if (isNaN(s.getTime())) return start;
+                    const hasTime = start.includes("T") && start.includes(":");
+                    const dateOpts: Intl.DateTimeFormatOptions = {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric"
+                    };
+                    const timeOpts: Intl.DateTimeFormatOptions = {
+                      hour: "numeric",
+                      minute: "2-digit"
+                    };
+                    if (!hasTime) {
+                      if (end && end !== start) {
+                        const e = new Date(end);
+                        if (!isNaN(e.getTime())) {
+                          return `${s.toLocaleDateString("en-US", dateOpts)} – ${e.toLocaleDateString("en-US", dateOpts)}`;
+                        }
+                      }
+                      return `${s.toLocaleDateString("en-US", dateOpts)} (All day)`;
+                    }
+                    const datePart = s.toLocaleDateString("en-US", dateOpts);
+                    const startTimePart = s.toLocaleTimeString("en-US", timeOpts);
+                    if (end) {
+                      const e = new Date(end);
+                      if (!isNaN(e.getTime())) {
+                        const endTimePart = e.toLocaleTimeString("en-US", timeOpts);
+                        return `${datePart} · ${startTimePart} – ${endTimePart}`;
+                      }
+                    }
+                    return `${datePart} · ${startTimePart}`;
+                  })()}
+                </span>
+              </div>
+              {selectedGoogleEvent.location && (
+                <div className="flex items-start gap-2.5">
+                  <MapPin className="size-4 shrink-0 text-slate-400 mt-0.5" />
+                  <span>{selectedGoogleEvent.location}</span>
+                </div>
+              )}
+              {selectedGoogleEvent.description && (
+                <div className="mt-2 max-h-40 overflow-y-auto rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap border border-slate-100">
+                  {selectedGoogleEvent.description}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              {selectedGoogleEvent.htmlLink && (
+                <a
+                  href={selectedGoogleEvent.htmlLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 transition"
+                >
+                  <span>Open in Google Calendar</span>
+                  <ExternalLink className="size-3.5" />
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedGoogleEvent(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

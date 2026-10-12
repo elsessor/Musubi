@@ -5,7 +5,8 @@ import {
   calendarCallbackController,
   calendarStatusController,
   disconnectCalendarController,
-  syncAllEventsController
+  syncAllEventsController,
+  getCalendarEventsController
 } from "../controllers/calendar.controller.js";
 
 export const calendarRouter = Router();
@@ -16,5 +17,6 @@ calendarRouter.get("/google/callback", calendarCallbackController);
 // Authenticated endpoints for user
 calendarRouter.get("/google/connect-url", requireAuth, getConnectUrlController);
 calendarRouter.get("/google/status", requireAuth, calendarStatusController);
+calendarRouter.get("/google/events", requireAuth, getCalendarEventsController);
 calendarRouter.post("/google/disconnect", requireAuth, disconnectCalendarController);
 calendarRouter.post("/google/sync-all", requireAuth, syncAllEventsController);

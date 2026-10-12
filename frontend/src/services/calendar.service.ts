@@ -117,3 +117,44 @@ export async function syncAllEventsToGoogle(
   return { syncedCount: data.syncedCount || 0 };
 }
 
+export type GoogleCalendarItem = {
+  id: string;
+  title: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  isAllDay: boolean;
+  location: string;
+  htmlLink: string;
+  status: string;
+};
+
+export async function fetchUserGoogleCalendarEvents(
+  user: User | null
+): Promise<GoogleCalendarItem[]> {
+  const token = await getValidToken(user);
+  if (!token) return [];
+  const uid = user?.uid || useAuthStore.getState().firebaseUser?.uid || useAuthStore.getState().profile?.uid || "";
+  const query = uid ? `?uid=${encodeURIComponent(uid)}` : "";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/calendar/google/events${query}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json().catch(() => ({}));
+    return Array.isArray(data.events) ? data.events : [];
+  } catch (err) {
+    console.warn("Failed to fetch Google Calendar events:", err);
+    return [];
+  }
+}
+

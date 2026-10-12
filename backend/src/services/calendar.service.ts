@@ -589,3 +589,92 @@ export async function syncAllUserEventsToCalendar(uid: string): Promise<{ synced
   return { syncedCount: count };
 }
 
+/**
+ * Fetches Google Calendar events from the user's primary calendar.
+ * Excludes events pushed by Musubi to avoid visual duplication.
+ */
+export async function getGoogleCalendarEventsForUser(
+  uid: string,
+  timeMin?: string,
+  timeMax?: string
+): Promise<
+  Array<{
+    id: string;
+    title: string;
+    description: string;
+    startDate: string;
+    endDate: string;
+    isAllDay: boolean;
+    location: string;
+    htmlLink: string;
+    status: string;
+  }>
+> {
+  const calendar = await getCalendarClientForUser(uid);
+  if (!calendar) return [];
+
+  const now = new Date();
+  const defaultMin = timeMin || new Date(now.getFullYear(), 0, 1).toISOString();
+  const defaultMax = timeMax || new Date(now.getFullYear() + 2, 0, 1).toISOString();
+
+  try {
+    const response = await calendar.events.list({
+      calendarId: "primary",
+      timeMin: defaultMin,
+      timeMax: defaultMax,
+      singleEvents: true,
+      orderBy: "startTime",
+      maxResults: 2500
+    });
+
+    const items = response.data.items || [];
+    const results = [];
+
+    for (const item of items) {
+      if (!item.summary || item.status === "cancelled") continue;
+
+      // Filter out Musubi's own synced items so they don't appear duplicated
+      const isMusubiSynced = Boolean(
+        item.description?.includes("Synced from Musubi Campus Workflow") ||
+        item.description?.includes("https://musubi-1bf94.web.app")
+      );
+      if (isMusubiSynced) continue;
+
+      const isAllDay = Boolean(item.start?.date && !item.start?.dateTime);
+      let startDate = item.start?.dateTime || item.start?.date || "";
+      let endDate = item.end?.dateTime || item.end?.date || startDate;
+
+      // Adjust Google's exclusive end date for all-day events
+      if (isAllDay && item.start?.date && item.end?.date) {
+        const s = new Date(item.start.date);
+        const e = new Date(item.end.date);
+        const adjusted = new Date(e.getTime() - 86400000);
+        if (adjusted >= s) {
+          const yyyy = adjusted.getFullYear();
+          const mm = String(adjusted.getMonth() + 1).padStart(2, "0");
+          const dd = String(adjusted.getDate()).padStart(2, "0");
+          endDate = `${yyyy}-${mm}-${dd}`;
+        }
+      }
+
+      results.push({
+        id: item.id || `gcal-${Math.random().toString(36).substring(2, 9)}`,
+        title: item.summary,
+        description: item.description || "",
+        startDate,
+        endDate,
+        isAllDay,
+        location: item.location || "",
+        htmlLink: item.htmlLink || "",
+        status: "Google Calendar"
+      });
+    }
+
+    return results;
+  } catch (err) {
+    console.warn(`[Calendar Fetch] Error fetching Google Calendar events for ${uid}:`, err);
+    return [];
+  }
+}
+
+
