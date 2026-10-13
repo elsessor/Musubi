@@ -4,6 +4,7 @@ import { Calendar, ChevronRight, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
 import type { Task } from "@/components/events/types";
+import { OverdueBadge } from "@/components/events/overdue";
 
 type MemberActiveSubtaskItem = Task & {
   eventTitle?: string;
@@ -62,7 +63,7 @@ export function MemberActiveSubtasks({ subtasks }: MemberActiveSubtasksProps) {
                     )}
                     <span className="inline-flex items-center gap-1 text-slate-400">
                       <Calendar size={12} />
-                      {task.dueDate || task.deadline || "TBD"}
+                      {task.dueDate || task.deadline || "No deadline"}
                     </span>
                   </div>
                 </div>
@@ -73,6 +74,7 @@ export function MemberActiveSubtasks({ subtasks }: MemberActiveSubtasksProps) {
                       {task.matchPercentage}%
                     </span>
                   )}
+                  <OverdueBadge task={task} />
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${statusBadgeClasses}`}
                   >

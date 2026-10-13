@@ -1,5 +1,6 @@
 import type { TaskActor, TaskRecord } from "./taskPermissions.js";
 import { assertEventAccess, isTaskLeader } from "./taskPermissions.js";
+import { getTaskDeliveryTime, getTaskPerformanceDeadline } from "./taskTiming.js";
 
 export function ownsProfileTask(user: Pick<TaskActor, "uid" | "fullName">, task: TaskRecord): boolean {
   if (task.assignedMemberUID) return task.assignedMemberUID === user.uid;
@@ -60,12 +61,11 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
   for (const task of tasks) {
     if (!["completed", "done"].includes(String(task.status).trim().toLowerCase())) continue;
     const completed = validDate(task.completedAt);
-    const deadlineValue = validDate(task.dueDate) ? task.dueDate : task.deadline;
-    const deadline = validDate(deadlineValue);
-    if (!completed || !deadline) continue;
-    if (!/[T]|\d{1,2}:\d{2}/.test(deadlineValue)) deadline.setHours(23, 59, 59, 999);
+    const deadline = getTaskPerformanceDeadline(task);
+    const delivered = getTaskDeliveryTime(task);
+    if (!completed || !deadline || !delivered) continue;
     dated += 1;
-    if (completed <= deadline) onTime += 1;
+    if (delivered <= deadline) onTime += 1;
   }
   return {
     ...publicProfile,
@@ -73,6 +73,8 @@ export function memberForViewer(user: TaskActor, id: string, data: TaskRecord, e
     reliability: dated ? `${Math.round(onTime / dated * 100)}%` : "—",
     assignedTasks: tasks.map((task: TaskRecord, index: number) => ({
       ...assignedTasks[index], completedAt: task.completedAt || null, matchPercentage: task.matchPercentage,
+      submittedAt: task.submittedAt || null, submittedDueDate: task.submittedDueDate || null,
+      completedDueDate: task.completedDueDate || null,
       performanceReview: task.performanceReview || null
     }))
   };

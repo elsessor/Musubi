@@ -1,4 +1,5 @@
 import { AppError } from "./AppError.js";
+import { recordTaskSchedules } from "./taskSchedule.js";
 
 type TaskRecord = Record<string, any>;
 type ReviewActor = { uid: string; fullName: string; isLeader: boolean };
@@ -13,9 +14,22 @@ export function recordTaskPerformance(
   tasks: TaskRecord[], originals: TaskRecord[], actor: ReviewActor, now = new Date().toISOString()
 ): TaskRecord[] {
   const byId = new Map(originals.map((task) => [task.id, task]));
-  return tasks.map((task) => {
+  return recordTaskSchedules(tasks, originals, actor, now).map((task) => {
     const original = byId.get(task.id);
     const updated = { ...task };
+    const review = String(task.status || "").trim().toLowerCase() === "in review";
+    const wasReview = String(original?.status || "").trim().toLowerCase() === "in review";
+    const cancelled = ["cancelled", "canceled"].includes(String(task.status || "").trim().toLowerCase());
+    const newSubmission = review && !wasReview && !isDone(original);
+    const retainsSubmission = review || isDone(task) || cancelled;
+    updated.submittedAt = newSubmission ? now : retainsSubmission ? original?.submittedAt || null : null;
+    updated.submittedDueDate = updated.submittedAt
+      ? newSubmission ? task.dueDate || task.deadline || "" : original?.submittedDueDate ?? original?.dueDate ?? original?.deadline ?? ""
+      : null;
+    updated.completedDueDate = isDone(task)
+      ? isDone(original) ? original?.completedDueDate ?? original?.dueDate ?? original?.deadline ?? "" : task.dueDate || task.deadline || ""
+      : null;
+    if (cancelled && isDone(original)) throw new AppError("Completed tasks cannot be cancelled. Archive them to preserve their history.", 409);
     updated.completedAt = isDone(task)
       ? isDone(original) ? original?.completedAt || null : now
       : null;

@@ -3,7 +3,7 @@ import { LoginForm } from "@/components/auth/LoginForm";
 
 export default function SignInPage() {
   return (
-    <AuthLayout marketingPosition="right">
+    <AuthLayout marketingPosition="right" compactMobile>
       <LoginForm />
     </AuthLayout>
   );

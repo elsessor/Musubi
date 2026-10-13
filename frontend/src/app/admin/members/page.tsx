@@ -50,7 +50,6 @@ export default function AdminMembersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [orgFilter, setOrgFilter] = useState<string>("all");
-  const [committeeFilter, setCommitteeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Selection state for multi-select / bulk operations
@@ -140,12 +139,11 @@ export default function AdminMembersPage() {
 
       const matchesRole = roleFilter === "all" || member.role === roleFilter;
       const matchesOrg = orgFilter === "all" || member.organization === orgFilter;
-      const matchesCommittee = committeeFilter === "all" || member.committee === committeeFilter;
       const matchesStatus = statusFilter === "all" || member.accountStatus === statusFilter;
 
-      return matchesSearch && matchesRole && matchesOrg && matchesCommittee && matchesStatus;
+      return matchesSearch && matchesRole && matchesOrg && matchesStatus;
     });
-  }, [members, searchQuery, roleFilter, orgFilter, committeeFilter, statusFilter]);
+  }, [members, searchQuery, roleFilter, orgFilter, statusFilter]);
 
   // Bulk Selection Handlers
   const isAllSelected =
@@ -403,19 +401,6 @@ export default function AdminMembersPage() {
                 {availableOrganizations.map((org) => (
                   <option key={org} value={org}>
                     {org}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={committeeFilter}
-                onChange={(e) => setCommitteeFilter(e.target.value)}
-                className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
-              >
-                <option value="all">All Committees</option>
-                {availableCommittees.map((comm) => (
-                  <option key={comm} value={comm}>
-                    {comm}
                   </option>
                 ))}
               </select>

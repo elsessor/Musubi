@@ -20,6 +20,8 @@ import { getOrganization, subscribeOrganizationMembersFirestore, type Organizati
 import { subscribeEventsFirestore } from "@/services/events.service";
 import { checkAndDispatchDueNudges } from "@/services/notifications.service";
 import type { Event, Task } from "@/components/events/types";
+import { getAssignedProfileTasks } from "@/utils/profileMetrics";
+import { getTaskReminder, isTaskInactive } from "@/utils/taskTiming";
 
 function formatGreetingDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-US", {
@@ -310,41 +312,11 @@ export function DashboardPage() {
   // Member View computations
   const isMemberView = dashboardUser.role === "Organization Member";
 
-  const memberSubtasks = useMemo(() => {
-    const matched: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
-    const allInOrg: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
-
-    const userNameLower = (dashboardUser.name || "").toLowerCase().trim();
-    const userId = dashboardUser.id;
-
-    realtimeEventsList.forEach((event) => {
-      if (Array.isArray(event.tasks)) {
-        event.tasks.forEach((task) => {
-          const item = { ...task, eventTitle: event.title, customStatuses: event.customStatuses };
-          allInOrg.push(item);
-
-          const assignedNameLower = (task.assignedMemberName || task.assignee?.name || "").toLowerCase().trim();
-          const assignedUid = task.assignedMemberUID;
-
-          const isMatch =
-            (userId && assignedUid === userId) ||
-            (userNameLower && assignedNameLower.includes(userNameLower)) ||
-            (userNameLower && userNameLower.includes(assignedNameLower) && assignedNameLower.length > 2);
-
-          if (isMatch) {
-            matched.push(item);
-          }
-        });
-      }
-    });
-
-    return matched.length > 0 ? matched : allInOrg;
-  }, [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
-
+  const memberSubtasks = useMemo(() => getAssignedProfileTasks(realtimeEventsList, dashboardUser.id || "", dashboardUser.name), [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
   const activeMemberSubtasks = useMemo(() => {
     return memberSubtasks.filter((t) => {
       const st = (t.status || "").toLowerCase();
-      return !st.includes("completed") && !st.includes("done");
+      return !isTaskInactive(t) && !st.includes("completed") && !st.includes("done");
     });
   }, [memberSubtasks]);
 
@@ -377,96 +349,21 @@ export function DashboardPage() {
     void checkAndDispatchDueNudges();
   }, []);
 
-  const memberNudges: NudgeItem[] = useMemo(() => {
-    const nudgesList: NudgeItem[] = [];
+  const [deadlineNow, setDeadlineNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setDeadlineNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  const memberNudges: NudgeItem[] = useMemo(() => memberSubtasks.flatMap(task => {
+    const parent = realtimeEventsList.find(event => event.id === task.eventId);
+    if (!parent || isTaskInactive(parent) || parent.status === "Completed") return [];
+    const timing = getTaskReminder(task, deadlineNow);
+    if (!timing) return [];
+    return [{ id: `deadline_${task.eventId}_${task.id}`, type: timing.label,
+      title: `${task.title || "Subtask"}${task.blockedBy ? ` — Waiting for: ${(task.blockedByTaskTitles || []).join(", ")}` : ""}`,
+      date: task.dueDate || task.deadline || "No deadline", eventTitle: task.eventTitle, eventId: task.eventId, taskId: task.id }];
+  }).sort((a, b) => Number(b.type.startsWith("Overdue")) - Number(a.type.startsWith("Overdue"))), [memberSubtasks, realtimeEventsList, deadlineNow]);
 
-    memberSubtasks.forEach((task) => {
-      const isCompleted = (task.status || "").toLowerCase().includes("completed") || (task.status || "").toLowerCase().includes("done");
-      if (isCompleted) return;
-
-      if (Array.isArray(task.nudges) && task.nudges.length > 0) {
-        task.nudges.forEach((n) => {
-          nudgesList.push({
-            id: `nudge_${n.nudgeUID || task.id}`,
-            type: (n.nudgeType as any) || "Follow-up",
-            title: task.title || task.description || "Subtask",
-            date: n.triggerDate || task.dueDate || "Upcoming",
-            eventTitle: task.eventTitle,
-            taskId: task.id
-          });
-        });
-      } else {
-        const dueDateStr = task.dueDate || task.deadline;
-        if (dueDateStr) {
-          const parsedDate = new Date(dueDateStr);
-          const now = new Date();
-          const diffDays = Math.ceil((parsedDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
-
-          if (diffDays <= 1 && diffDays >= 0) {
-            nudgesList.push({
-              id: `nudge_1d_${task.id}`,
-              type: "1 Day Prior (Urgent)",
-              title: task.title || task.description || "Subtask",
-              date: dueDateStr,
-              eventTitle: task.eventTitle,
-              taskId: task.id
-            });
-          } else if (diffDays <= 3 && diffDays > 1) {
-            nudgesList.push({
-              id: `nudge_3d_${task.id}`,
-              type: "3 Days Prior",
-              title: task.title || task.description || "Subtask",
-              date: dueDateStr,
-              eventTitle: task.eventTitle,
-              taskId: task.id
-            });
-          } else if (task.priority === "Critical" || task.priority === "High") {
-            nudgesList.push({
-              id: `nudge_deadline_${task.id}`,
-              type: "Deadline Alert",
-              title: task.title || task.description || "Subtask",
-              date: dueDateStr,
-              eventTitle: task.eventTitle,
-              taskId: task.id
-            });
-          } else {
-            nudgesList.push({
-              id: `nudge_followup_${task.id}`,
-              type: "Follow-up",
-              title: task.title || task.description || "Subtask",
-              date: dueDateStr,
-              eventTitle: task.eventTitle,
-              taskId: task.id
-            });
-          }
-        } else {
-          nudgesList.push({
-            id: `nudge_followup_${task.id}`,
-            type: "Follow-up",
-            title: task.title || task.description || "Subtask",
-            date: "Upcoming",
-            eventTitle: task.eventTitle,
-            taskId: task.id
-          });
-        }
-      }
-    });
-
-    const map = new Map<string, NudgeItem>();
-    nudgesList.forEach((n) => {
-      const key = `${n.type}_${n.title}`;
-      if (!map.has(key)) map.set(key, n);
-    });
-
-    const result = Array.from(map.values());
-    result.sort((a, b) => {
-      if (a.type === "Deadline Alert" && b.type !== "Deadline Alert") return -1;
-      if (a.type !== "Deadline Alert" && b.type === "Deadline Alert") return 1;
-      return 0;
-    });
-
-    return result;
-  }, [memberSubtasks]);
 
   // Do not render a role-specific shell until auth has resolved. Rendering
   // the default leader shell first causes a visible leader/member flicker.

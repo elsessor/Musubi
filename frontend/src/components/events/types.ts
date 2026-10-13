@@ -15,6 +15,14 @@ export type Nudge = {
   triggerDate: string;
   nudgeType: string;
   sent: boolean;
+  sentAt?: string;
+  deadlineKey?: string;
+  recipientUID?: string;
+  recipientKind?: "assignee" | "leader";
+  assigneeUID?: string | null;
+  emailState?: "reserved" | "sent" | "failed" | "suppressed";
+  emailReservedAt?: string;
+  emailError?: string;
 };
 
 export type TaskAttachment = {
@@ -55,7 +63,11 @@ export type Task = {
   deadline?: string;
   originalStartDate?: string;
   originalDueDate?: string;
-  dueDateHistory?: Array<{ from: string; to: string; changedAt: string; changedBy?: string }>;
+  dueDateHistory?: Array<{ from: string; to: string; changedAt: string; changedBy?: string; changedByUID?: string; changedByName?: string; reason?: string }>;
+  deadlineChangeReason?: string;
+  submittedAt?: string | null;
+  submittedDueDate?: string | null;
+  completedDueDate?: string | null;
   matchPercentage?: number;
   completedAt?: string | null;
   performanceReview?: {
@@ -75,6 +87,7 @@ export type Task = {
 };
 
 export type Event = {
+  orgId?: string | null;
   archivedAt?: string | null;
   archivedByUID?: string | null;
   statusBeforeArchive?: EventStatus;

@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true,
+    "paths": {
+      "@/*": ["../../frontend/src/*"]
+    }
+  },
+  "include": ["taskSelfAssignment.test.ts", "taskDependencyUi.test.ts", "announcementSubscription.test.ts", "taskOverdue.test.ts", "taskReminderDispatch.test.ts", "deadlineNotifications.test.ts", "nudgeEmailContent.test.ts"]
+}

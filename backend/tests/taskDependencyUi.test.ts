@@ -6,7 +6,11 @@ import ts from "typescript";
 import * as dependencies from "../../frontend/src/utils/taskDependencies.js";
 import * as assignment from "../../frontend/src/utils/taskAssignment.js";
 import * as dates from "../../frontend/src/utils/dateRange.js";
+import * as timing from "../../frontend/src/utils/taskTiming.js";
 import * as eventMembers from "../../frontend/src/utils/eventMembers.js";
+import * as claims from "../../frontend/src/utils/taskClaims.js";
+import * as calendarViews from "../../frontend/src/utils/calendarViews.js";
+import * as calendarSchedule from "../../frontend/src/utils/calendarSchedule.js";
 
 type Node = { type: any; props: Record<string, any> };
 function children(node: any): Node[] {
@@ -25,7 +29,7 @@ function ui(file: string, role = "Student Leader", extraMocks: Record<string, an
     return [state[index], (next: any) => { state[index] = typeof next === "function" ? next(state[index]) : next; }];
   }, createContext: (value: any) => ({ value, Provider: "ContextProvider" }), useContext: (context: any) => context.value,
   useId: () => "dependency-test", useEffect: () => {}, useMemo: (value: () => any) => value(), useRef: () => ({ current: null }) };
-  const auth = { firebaseUser: { uid: "member" }, profile: { uid: "member", fullName: "Member", role } };
+  const auth = { firebaseUser: { uid: "member" }, profile: { uid: "member", fullName: "Member", role, organizationId: "org" } };
   const toast = { showToast: () => {} };
   const useAuthStore = Object.assign((selector: (value: any) => any) => selector(auth), { getState: () => auth });
   const useToastStore = Object.assign((selector: (value: any) => any) => selector(toast), { getState: () => toast });
@@ -34,7 +38,8 @@ function ui(file: string, role = "Student Leader", extraMocks: Record<string, an
     react, "react/jsx-runtime": { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }), Fragment: "Fragment" },
     "react-dom": { createPortal: (node: any) => node }, "lucide-react": components,
     "@/utils/taskDependencies": dependencies, "@/utils/taskAssignment": assignment, "@/utils/dateRange": dates,
-    "@/utils/eventMembers": eventMembers,
+    "@/utils/eventMembers": eventMembers, "@/utils/taskTiming": timing,
+    "@/utils/taskClaims": claims,
     "@/store/authStore": { useAuthStore }, "@/store/toastStore": { useToastStore },
     "./priorityUtils": { ALL_PRIORITIES: ["Low", "Medium", "High", "Critical"], PRIORITY_CONFIG: new Proxy({}, { get: (_target, name) => ({ label: name, classes: "", dot: "" }) }) },
     "./statusUtils": { getStatusTheme: () => ({ badge: "", dot: "", border: "" }), getOrderedTaskStatuses: () => ["To Do", "In Progress", "In Review", "Completed"] }
@@ -51,6 +56,238 @@ const allTasks = () => dependencies.withTaskDependencyState([
   { id: "b", title: "Purchase materials", status: "To Do", assignee: { initials: "M", color: "bg-blue-600" }, priority: "Medium", dueDate: "", assignedMemberUID: "member", dependsOnTaskIds: ["a"] }
 ]);
 const find = (tree: Node, predicate: (node: Node) => boolean) => children(tree).find(predicate)!;
+
+test("task views include deadline indicators and task details offer archive with confirmation", async () => {
+  const task = { ...allTasks()[0], dueDate: "2020-01-01" };
+  for (const [file, name] of [["TaskCard.tsx", "TaskCard"], ["TaskGridView.tsx", "TaskGridView"], ["TaskTableView.tsx", "TaskTableView"], ["TaskExpandedView.tsx", "TaskExpandedView"]]) {
+    const tree = ui(file).render(name, { task, tasks: [task], onUpdateStatus: () => {} });
+    assert.equal(find(tree, node => node.type === "OverdueBadge").props.task.id, task.id);
+  }
+  let archived = "", closed = 0;
+  const props = { task, tasks: [task], eventId: "event", isLeader: true, canEdit: true, onAttachmentsUpdated: () => {}, onClose: () => { closed++; },
+    onUpdateTask: () => { throw new Error("Archive must not change task status."); }, onArchiveTask: (id: string) => { archived = id; } };
+  const render = ui("TaskDetailModal.tsx");
+  let tree = render.render("TaskDetailModal", props);
+  assert.equal(children(tree).some(node => node.props.children === "Cancel task"), false);
+  const archiveButton = find(tree, node => node.type === "button" && Array.isArray(node.props.children) && node.props.children.includes("Archive task"));
+  archiveButton.props.onClick();
+  assert.equal(archived, "");
+  tree = render.render("TaskDetailModal", props);
+  let confirm = find(tree, node => node.type === "ConfirmArchiveModal");
+  confirm.props.onCancel();
+  assert.equal(archived, "");
+  archiveButton.props.onClick();
+  tree = render.render("TaskDetailModal", props);
+  confirm = find(tree, node => node.type === "ConfirmArchiveModal");
+  await confirm.props.onConfirm();
+  assert.equal(archived, task.id); assert.equal(task.status, "To Do"); assert.equal(closed, 1);
+  const memberTree = ui("TaskDetailModal.tsx", "Organization Member").render("TaskDetailModal", { ...props, isLeader: false });
+  assert.equal(children(memberTree).some(node => node.props.children === "Cancel task"), false);
+});
+
+test("overdue badge names blockers and review and completed-late indicators do not replace status", () => {
+  const render = ui("overdue.tsx");
+  const task = { ...allTasks()[1], dueDate: "2020-01-01" };
+  let badge = render.render("OverdueBadge", { task });
+  assert.match(badge.props["aria-label"], /Overdue.*Blocked/);
+  assert.match(badge.props.title, /Approve budget/);
+  badge = render.render("OverdueBadge", { task: { ...task, status: "In Review" } });
+  assert.match(badge.props["aria-label"], /Awaiting review/);
+  badge = render.render("OverdueBadge", { task: { ...task, status: "Completed", completedAt: "2020-01-02T00:00:00Z" } });
+  assert.match(badge.props["aria-label"], /Completed late/);
+  assert.equal(render.render("OverdueBadge", { task: { ...task, status: "Cancelled" } }), null);
+});
+
+test("member assignee dropdown offers only self, requests confirmation and blocks forged selections", () => {
+  let requested = "";
+  const context = { event: { orgId: "org", status: "Planning" }, assigning: false,
+    onRequestAssignment: (id: string) => { requested = id; } };
+  const mocks = { react: { createContext: () => ({}), useContext: () => context } };
+  const member = ui("TaskSelfAssignmentSelect.tsx", "Organization Member", mocks);
+  const task = { ...allTasks()[0], assignedMemberUID: null, assignedMemberName: null, assignee: { name: "" } };
+  let select = member.render("TaskSelfAssignmentSelect", { task });
+  assert.equal(select.type, "CustomSelect");
+  assert.deepEqual(select.props.options.map((option: any) => option.value), ["", "member"]);
+  assert.equal(select.props.options[1].label, "Member");
+  select.props.onChange("");
+  select.props.onChange("other");
+  assert.equal(requested, "");
+  select.props.onChange("member");
+  assert.equal(requested, task.id);
+  assert.equal(member.render("TaskSelfAssignmentSelect", { task }).props.value, ""); // Wait for confirmation and the server.
+  context.assigning = true;
+  requested = "";
+  select = member.render("TaskSelfAssignmentSelect", { task });
+  assert.equal(select.props.disabled, true);
+  select.props.onChange("member");
+  assert.equal(requested, "");
+  context.assigning = false;
+  for (const blocked of [
+    { task, readOnly: true }, { task: { ...task, isLeaderOnly: true } },
+    { task: { ...task, priority: "Critical" } }, { task: { ...task, assignedMemberUID: "other" } },
+    { task: { ...task, status: "Completed" } }, { task: { ...task, archivedAt: "archived" } }
+  ]) assert.equal(member.render("TaskSelfAssignmentSelect", blocked).type, "TaskAssignee");
+  for (const role of ["Admin", "Student Leader"]) assert.equal(ui("TaskSelfAssignmentSelect.tsx", role, mocks).render("TaskSelfAssignmentSelect", { task }).type, "TaskAssignee");
+  context.event.orgId = "other";
+  assert.equal(member.render("TaskSelfAssignmentSelect", { task }).type, "TaskAssignee");
+});
+
+test("task cards show assignments and task details expose the member self-assignment dropdown", () => {
+  const task = { ...allTasks()[0], assignedMemberUID: null };
+  for (const [file, name] of [
+    ["TaskCard.tsx", "TaskCard"], ["TaskGridView.tsx", "TaskGridView"],
+    ["TaskTableView.tsx", "TaskTableView"], ["TaskExpandedView.tsx", "TaskExpandedView"]
+  ]) {
+    const tree = ui(file, "Organization Member").render(name, { task, tasks: [task], eventId: "event", canEdit: false, isLeader: false,
+      onUpdateTask: () => {}, onAttachmentsUpdated: () => {}, onUpdateStatus: () => {}, onClose: () => {} });
+    assert.equal(find(tree, n => n.type === "TaskAssignee").props.task.id, task.id);
+    assert.equal(children(tree).some(n => n.type === "TaskClaimButton"), false);
+  }
+  const detail = ui("TaskDetailModal.tsx", "Organization Member").render("TaskDetailModal", { task, tasks: [task], eventId: "event", canEdit: false, isLeader: false,
+    onUpdateTask: () => {}, onAttachmentsUpdated: () => {}, onClose: () => {} });
+  assert.equal(find(detail, n => n.type === "TaskSelfAssignmentSelect").props.task.id, task.id);
+  assert.equal(children(detail).some(n => n.type === "TaskClaimButton"), false);
+  const tree = ui("TaskCalendarView.tsx", "Organization Member").render("TaskCalendarView", { tasks: [task], onUpdateStatus: () => {} });
+  const calendar = find(tree, n => n.type === "CalendarView");
+  assert.equal(calendar.props.renderActions, undefined);
+});
+
+test("leaders can choose themselves or other members in task details and save the chosen identity", async () => {
+  const task = { ...allTasks()[0], assignedMemberUID: null, assignedMemberName: null };
+  const roster = [{ id: "member", name: "Leader", position: "President", initials: "L", color: "bg-blue-600" },
+    { id: "other", name: "Other Member", position: "Member", initials: "OM", color: "bg-blue-600" }];
+  for (const selected of roster) {
+    let saved: any;
+    const render = ui("TaskDetailModal.tsx", "Student Leader");
+    const props = { task, tasks: [task], eventId: "event", roster, isLeader: true, canEdit: true,
+      onUpdateTask: (next: any) => { saved = next; }, onAttachmentsUpdated: () => {}, onClose: () => {} };
+    let tree = render.render("TaskDetailModal", props);
+    const select = find(tree, node => node.type === "CustomSelect" && node.props.options.some((option: any) => option.value === "other"));
+    assert.equal(select.props.disabled, false);
+    select.props.onChange(selected.id);
+    tree = render.render("TaskDetailModal", props);
+    await find(tree, node => node.type === "form").props.onSubmit({ preventDefault: () => {} });
+    assert.equal(saved.assignedMemberUID, selected.id);
+    assert.equal(saved.assignedMemberName, selected.name);
+  }
+});
+
+test("self-assignment requires confirmation, cancellation never writes, and duplicate confirms produce one request", async () => {
+  const unassigned = { ...allTasks()[0], assignedMemberUID: null, assignedMemberName: null };
+  let writes = 0, release: (task: any) => void = () => {};
+  const render = ui("KanbanBoard.tsx", "Organization Member", {
+    "./TaskSelfAssignmentSelect": { TaskSelfAssignmentContext: { Provider: "AssignmentProvider" } },
+    "@/services/events.service": { claimTaskInEvent: async () => {
+      writes++;
+      return new Promise(resolve => { release = resolve; });
+    } }
+  });
+  const updates: any[] = [];
+  const props = { event: { id: "event", orgId: "org", title: "Event", status: "Planning", tasks: [unassigned], progress: 0 },
+    isLeader: false, onBack: () => {}, onUpdateEvent: (event: any) => updates.push(event) };
+  let tree = render.render("KanbanBoard", props);
+  const context = find(tree, n => n.type === "AssignmentProvider").props.value;
+  context.onRequestAssignment(unassigned.id);
+  assert.equal(writes, 0);
+  tree = render.render("KanbanBoard", props);
+  let modal = find(tree, n => n.type === "ConfirmTaskAssignmentModal");
+  assert.equal(modal.props.task.title, unassigned.title);
+  modal.props.onCancel();
+  tree = render.render("KanbanBoard", props);
+  assert.equal(children(tree).some(n => n.type === "ConfirmTaskAssignmentModal"), false);
+  assert.equal(writes, 0);
+  find(tree, n => n.type === "AssignmentProvider").props.value.onRequestAssignment(unassigned.id);
+  tree = render.render("KanbanBoard", props);
+  modal = find(tree, n => n.type === "ConfirmTaskAssignmentModal");
+  const pending = modal.props.onConfirm();
+  await modal.props.onConfirm();
+  modal.props.onCancel(); // Cancellation is blocked while the request is in flight.
+  assert.equal(writes, 1);
+  tree = render.render("KanbanBoard", props);
+  assert.equal(find(tree, n => n.type === "AssignmentProvider").props.value.assigning, true);
+  assert.equal(find(tree, n => n.type === "ConfirmTaskAssignmentModal").props.pending, true);
+  release({ ...unassigned, assignedMemberUID: "member", assignedMemberName: "Member" });
+  await pending;
+  tree = render.render("KanbanBoard", props);
+  assert.equal(find(tree, n => n.type === "TaskGridView").props.tasks[0].assignedMemberUID, "member");
+  assert.equal(find(tree, n => n.type === "AssignmentProvider").props.value.assigning, false);
+  assert.equal(children(tree).some(n => n.type === "ConfirmTaskAssignmentModal"), false);
+  assert.equal(updates.at(-1).memberCount, 1);
+  assert.equal(updates.at(-1).tasks[0].status, "To Do");
+});
+
+test("calendar actions are siblings of the detail button, never nested buttons", () => {
+  const task = allTasks()[0];
+  let selected = "";
+  const render = ui("CalendarView.tsx", "Organization Member", {
+    "@/utils/calendarViews": calendarViews, "@/utils/calendarSchedule": calendarSchedule
+  });
+  const tree = render.render("CalendarView", { items: [task], itemLabel: "tasks", getId: (item: any) => item.id,
+    getTitle: (item: any) => item.title, getStatus: (item: any) => item.status, isScheduled: () => true,
+    onSelect: (item: any) => { selected = item.id; },
+    renderActions: () => ({ type: "button", props: { "aria-label": "Example action" } }) });
+  const action = find(tree, node => node.props["aria-label"] === "Example action");
+  assert.ok(action);
+  for (const button of children(tree).filter(node => node.type === "button")) {
+    assert.equal(children(button.props.children).some(node => node.type === "button"), false);
+  }
+  find(tree, node => node.type === "button" && children(node.props.children).some(child => child.props.children === task.title)).props.onClick();
+  assert.equal(selected, task.id);
+});
+
+test("a rejected self-assignment refreshes a competing assignment and keeps the confirmation open with an error", async () => {
+  const task = { ...allTasks()[0], assignedMemberUID: null, assignedMemberName: null };
+  const event = { id: "event", orgId: "org", title: "Event", status: "Active", tasks: [task], progress: 0 };
+  const refreshed = { ...event, tasks: [{ ...task, assignedMemberUID: "other", assignedMemberName: "Other Member" }] };
+  const updates: any[] = [];
+  let reads = 0;
+  const render = ui("KanbanBoard.tsx", "Organization Member", {
+    "./TaskSelfAssignmentSelect": { TaskSelfAssignmentContext: { Provider: "AssignmentProvider" } },
+    "@/services/events.service": {
+      claimTaskInEvent: async () => { throw new Error("This task has already been assigned."); },
+      invalidateEventsCache: () => {}, fetchEvents: async () => { reads++; return [refreshed]; }
+    }
+  });
+  const props = { event, isLeader: false, onBack: () => {}, onUpdateEvent: (next: any) => updates.push(next) };
+  let tree = render.render("KanbanBoard", props);
+  find(tree, node => node.type === "AssignmentProvider").props.value.onRequestAssignment(task.id);
+  tree = render.render("KanbanBoard", props);
+  await find(tree, node => node.type === "ConfirmTaskAssignmentModal").props.onConfirm();
+  tree = render.render("KanbanBoard", props);
+  assert.equal(reads, 1);
+  const modal = find(tree, node => node.type === "ConfirmTaskAssignmentModal");
+  assert.match(modal.props.error, /already been assigned/);
+  assert.equal(modal.props.disabled, true);
+  assert.equal(modal.props.pending, false);
+  assert.equal(find(tree, node => node.type === "AssignmentProvider").props.value.assigning, false);
+  assert.equal(find(tree, node => node.type === "TaskGridView").props.tasks[0].assignedMemberUID, "other");
+  assert.equal(updates.at(-1).tasks[0].assignedMemberUID, "other");
+});
+
+test("assignment confirmation exposes Cancel and Confirm, blocks dismissal and repeat submission while pending", async () => {
+  let confirms = 0, cancels = 0, escaped = false;
+  const render = ui("ConfirmTaskAssignmentModal.tsx", "Organization Member");
+  const props = { task: allTasks()[0], pending: false, error: "Temporary connection failure.",
+    onCancel: () => { cancels++; }, onConfirm: async () => { confirms++; } };
+  let tree = render.render("ConfirmTaskAssignmentModal", props);
+  assert.equal(find(tree, node => node.props.role === "alert").props.children, props.error);
+  const button = find(tree, node => node.type === "button" && node.props.onClick);
+  button.props.onClick();
+  assert.equal(confirms, 1);
+  tree.props.onOpenChange(false);
+  assert.equal(cancels, 1);
+  tree = render.render("ConfirmTaskAssignmentModal", { ...props, pending: true });
+  for (const button of children(tree).filter(node => node.type === "button")) assert.equal(button.props.disabled, true);
+  find(tree, node => node.type === "button" && node.props.onClick).props.onClick();
+  tree.props.onOpenChange(false);
+  find(tree, node => node.type === "Content").props.onEscapeKeyDown({ preventDefault: () => { escaped = true; } });
+  assert.equal(confirms, 1);
+  assert.equal(cancels, 1);
+  assert.equal(escaped, true);
+  tree = render.render("ConfirmTaskAssignmentModal", { ...props, disabled: true });
+  find(tree, node => node.type === "button" && node.props.onClick).props.onClick();
+  assert.equal(confirms, 1);
+});
 
 test("card dependency indicators retain prerequisite names after completion and expose blockers", () => {
   const tasks = allTasks();
@@ -90,8 +327,33 @@ test("task cards in every view retain dependency indicators when prerequisites a
   const view = find(tree, (node) => node.type === "CalendarView");
   assert.equal(find(view.props.renderDetails(ready), (node) => node.type === "TaskDependencyBadge").props.task.id, ready.id);
   const compact = view.props.renderCompactIndicator(ready);
-  assert.equal(compact.type, "TaskDependencyBadge");
-  assert.equal(compact.props.compact, true);
+  assert.equal(find(compact, node => node.type === "TaskDependencyBadge").props.compact, true);
+  assert.equal(find(compact, node => node.type === "OverdueBadge").props.compact, true);
+});
+
+test("new tasks keep unset dates empty and create reminder dates only for an explicit deadline", async () => {
+  const start = "Oct 8, 2070 at 09:00 AM", due = "Oct 9, 2070 at 10:00 AM";
+  for (const [startDate, dueDate, clear] of [["", "", false], [start, "", false], ["", due, false], [start, due, true]] as const) {
+    let saved: any;
+    const render = ui("AddTaskModal.tsx");
+    const props = { eventName: "Campus event", onAddTask: (task: any) => { saved = task; }, onClose: () => {} };
+    let tree = render.render("AddTaskModal", props);
+    find(tree, node => node.type === "input" && node.props.type === "text").props.onChange({ target: { value: "Arrange chairs" } });
+    const pickers = children(tree).filter(node => node.type === "MiniCalendarPicker");
+    pickers[0].props.onChange(startDate);
+    pickers[1].props.onChange(dueDate);
+    if (clear) { pickers[0].props.onChange(""); pickers[1].props.onChange(""); }
+    tree = render.render("AddTaskModal", props);
+    await find(tree, node => node.type === "form").props.onSubmit({ preventDefault: () => {} });
+    assert.ok(saved);
+    assert.equal(saved.startDate, clear ? "" : startDate);
+    assert.equal(saved.dueDate, clear ? "" : dueDate);
+    if (!dueDate || clear) assert.deepEqual(saved.nudges, []);
+    else {
+      assert.equal(saved.nudges.length, 2);
+      assert.ok(saved.nudges.every((nudge: any) => /^\d{4}-\d{2}-\d{2}$/.test(nudge.triggerDate)));
+    }
+  }
 });
 
 test("task forms report equal or reversed times, block saves, and recover after correcting the deadline", async () => {
@@ -127,6 +389,7 @@ test("task forms report equal or reversed times, block saves, and recover after 
     }
     pickers[1].props.onChange("Oct 8, 2070 at 09:01 AM");
     tree = render.render(component, props);
+    assert.equal(children(tree).some(node => String(node.props.id || "").endsWith("deadline-reason")), false);
     assert.equal(children(tree).some((node) => node.props.role === "alert"), false);
     assert.equal(find(tree, (node) => node.props.type === "submit").props.disabled, false);
     await find(tree, (node) => node.type === "form").props.onSubmit({ preventDefault: () => {} });

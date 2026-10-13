@@ -113,7 +113,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
       {showPerformance && <section aria-label="Profile statistics" aria-busy={loading || tasksLoading} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {[
           { label: "Workload score", value: `${metrics.workload}%`, tone: metrics.workload >= 80 ? "text-rose-500" : metrics.workload >= 50 ? "text-amber-500" : "text-emerald-500", hint: `${metrics.counts.active + metrics.counts.pending} unfinished tasks / ${PROFILE_TASK_CAPACITY}-task capacity` },
-          { label: "Reliability score", value: metrics.reliability === null ? "—" : `${metrics.reliability}%`, tone: "text-blue-600", hint: metrics.reliabilitySampleCount ? `On-time completions across ${metrics.reliabilitySampleCount} tasks with recorded dates` : "No completed tasks with both a completion date and a deadline yet" },
+          { label: "Reliability score", value: metrics.reliability === null ? "—" : `${metrics.reliability}%`, tone: "text-blue-600", hint: metrics.reliabilitySampleCount ? `On-time delivery across ${metrics.reliabilitySampleCount} completed tasks; review delays are excluded when submission time is recorded` : "No completed tasks with recorded delivery dates and deadlines yet" },
           { label: "Avg match %", value: metrics.averageMatch === null ? "—" : `${metrics.averageMatch}%`, tone: "text-blue-600", hint: "Average of saved assignment match scores" },
           { label: "Tasks done", value: metrics.counts.done, tone: "text-slate-900", hint: "Completed tasks assigned to this profile" }
         ].map((metric) => <div key={metric.label} title={metric.hint} className={`${cardClass} px-3 py-5 text-center`}>

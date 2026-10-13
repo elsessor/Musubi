@@ -54,6 +54,7 @@ async function getValidToken(user: User | null): Promise<string> {
 export function normalizeEvent(id: string, data: Record<string, any>): Event {
   return {
     id,
+    orgId: typeof data.orgId === "string" ? data.orgId : null,
     archivedAt: typeof data.archivedAt === "string" ? data.archivedAt : null,
     archivedByUID: typeof data.archivedByUID === "string" ? data.archivedByUID : null,
     statusBeforeArchive: data.statusBeforeArchive,
@@ -293,6 +294,12 @@ async function requestTask(user: User | null, eventId: string, taskId: string, p
 
 export async function updateTaskStatus(user: User | null, eventId: string, taskId: string, status: Task["status"]): Promise<Task> {
   const response = await requestTask(user, eventId, taskId, "/status", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+  return (await response.json()).task;
+}
+
+export async function claimTaskInEvent(user: User | null, eventId: string, taskId: string): Promise<Task> {
+  const response = await requestTask(user, eventId, taskId, "/claim", { method: "POST" });
+  invalidateEventsCache();
   return (await response.json()).task;
 }
 

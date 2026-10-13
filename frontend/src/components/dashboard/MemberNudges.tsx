@@ -71,7 +71,7 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
             onClick={handleCheckAndDispatch}
             disabled={checking}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
-            title="Check and dispatch due 3-day and 1-day prior nudges"
+            title="Check approaching, due today, due tomorrow, and overdue reminders"
           >
             <Bell size={12} className="text-blue-600" />
             {checking ? "Checking..." : "Check Nudges"}
@@ -99,7 +99,7 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
       ) : (
         <div className="mt-4 space-y-3">
           {nudges.map((nudge) => {
-            const isDeadline = nudge.type === "Deadline Alert" || nudge.type.includes("1 Day");
+            const isDeadline = nudge.type === "Deadline Alert" || nudge.type.startsWith("Overdue") || nudge.type.startsWith("Due today") || nudge.type.startsWith("Due tomorrow");
             const isFollowUp = nudge.type === "Follow-up" || nudge.type.includes("3 Days");
 
             const cardClasses = isDeadline

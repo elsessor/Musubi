@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Bell, Check, LogOut, Menu, Settings, User } from "lucide-react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 
@@ -380,7 +381,19 @@ export function TopHeader({
       </div>
       <div className="flex shrink-0 items-center gap-3 sm:gap-4">
         {liveUser.role !== "Admin" ? (
-          <div ref={notificationRef} className="static sm:relative">
+          <>
+          <Link
+            href="/dashboard/notifications"
+            aria-label={`Notifications ${bellCount}`}
+            onClick={() => { setNotificationsOpen(false); setMenuOpen(false); }}
+            className="relative flex size-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:hidden"
+          >
+            <Bell className="size-5" strokeWidth={1.75} />
+            <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
+              {bellCount}
+            </span>
+          </Link>
+          <div ref={notificationRef} className="relative hidden sm:block">
           <button
             ref={notificationBellRef}
             aria-label={`Notifications ${bellCount}`}
@@ -402,6 +415,7 @@ export function TopHeader({
             <NotificationPanel notifications={notifications} onClose={closeNotifications} onRead={readNotification} onReadAll={readAllNotifications} />
           )}
           </div>
+          </>
         ) : null}
         <div ref={menuRef} className="relative">
           <button

@@ -58,44 +58,36 @@ export function mapOrgMemberToItem(member: OrganizationMember): OrgMemberItem {
 
 export const memberToOrgItem = mapOrgMemberToItem;
 
-export const MOCK_ROSTER: OrgMemberItem[] = [
-  { id: "m1", name: "Luis Garcia", initials: "LG", color: "bg-[#1e3a5f]", position: "Operations Lead" },
-  { id: "m2", name: "Beatrice Lim", initials: "BL", color: "bg-purple-600", position: "Marketing Lead" },
-  { id: "m3", name: "Marco Dela Cruz", initials: "MC", color: "bg-emerald-600", position: "Tech Lead" },
-  { id: "m4", name: "Ana Reyes", initials: "AR", color: "bg-[#d97706]", position: "Logistics Lead" },
-  { id: "m5", name: "Patricia Uy", initials: "PU", color: "bg-rose-600", position: "Finance Lead" }
-];
-
 type AddTaskModalProps = {
   eventName: string;
+  eventCommittee?: string;
   tasks?: Task[];
   members?: OrganizationMember[];
   onClose: () => void;
   onAddTask: (newTask: Task) => void | Promise<void>;
   roster?: OrgMemberItem[];
-  committees?: { id: string; name: string }[];
   customStatuses?: CustomStatusConfig[];
   statusOrder?: string[];
 };
 
 export function AddTaskModal({
   eventName,
+  eventCommittee = "",
   tasks = [],
+  members = [],
   onClose,
   onAddTask,
   roster,
-  committees = [],
   customStatuses = [],
   statusOrder
 }: AddTaskModalProps) {
-  const activeRoster = roster && roster.length > 0 ? roster : MOCK_ROSTER;
+  const activeRoster = roster ?? members.map(mapOrgMemberToItem);
   const [title, setTitle] = useState("");
   const [taskId] = useState(() => `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`);
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>("To Do");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
-  const [assigneeId, setAssigneeId] = useState(activeRoster[0]?.id || "m1");
-  const [committee, setCommittee] = useState(committees[0]?.name || "");
+  const [assigneeId, setAssigneeId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [dateError, setDateError] = useState("");
@@ -106,7 +98,6 @@ export function AddTaskModal({
 
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses);
 
-  const committeeOptions = committees.map((c) => c.name);
   const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
     return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge,
@@ -118,46 +109,37 @@ export function AddTaskModal({
     indicatorClass: PRIORITY_CONFIG[value].dot,
     selectedClass: PRIORITY_CONFIG[value].classes
   }));
-  const assigneeOptions: CustomSelectOption[] = activeRoster.map((member) => ({
-    value: member.id,
-    label: member.name,
-    sublabel: member.position,
-    initials: member.initials,
-    color: member.color
-  }));
+  const assigneeOptions: CustomSelectOption[] = [
+    { value: "", label: "No assignee" },
+    ...activeRoster.map((member) => ({
+      value: member.id,
+      label: member.name,
+      sublabel: member.position,
+      initials: member.initials,
+      color: member.color
+    }))
+  ];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || saving) return;
 
-    const selectedMember = activeRoster.find((m) => m.id === assigneeId) || activeRoster[0];
+    const selectedMember = activeRoster.find((m) => m.id === assigneeId);
+    if (assigneeId && !selectedMember) {
+      setDateError("The selected assignee is no longer available. Choose another member or No assignee.");
+      return;
+    }
 
-    const nowStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    const error = getDateRangeError(startDate.trim() || nowStr, dueDate.trim() || nowStr, "Task");
+    const error = getDateRangeError(startDate.trim(), dueDate.trim(), "Task");
     setDateError(error || "");
     if (error) return;
-    const targetDue = new Date(dueDate.trim() || nowStr);
-    const threeDaysBefore = !isNaN(targetDue.getTime())
-      ? new Date(targetDue.getTime() - 3 * 24 * 3600 * 1000).toISOString().split("T")[0]
-      : "";
-    const oneDayBefore = !isNaN(targetDue.getTime())
-      ? new Date(targetDue.getTime() - 1 * 24 * 3600 * 1000).toISOString().split("T")[0]
-      : "";
-
-    const defaultNudges: Nudge[] = [
-      {
-        nudgeUID: `nudge_${Date.now()}_3d`,
-        triggerDate: threeDaysBefore,
-        nudgeType: "3 Days Prior",
-        sent: false
-      },
-      {
-        nudgeUID: `nudge_${Date.now()}_1d`,
-        triggerDate: oneDayBefore,
-        nudgeType: "1 Day Prior",
-        sent: false
-      }
-    ];
+    const targetDue = parseScheduleDate(dueDate);
+    const defaultNudges: Nudge[] = targetDue ? [3, 1].map((days) => ({
+      nudgeUID: `nudge_${Date.now()}_${days}d`,
+      triggerDate: new Date(targetDue.getTime() - days * 24 * 3600 * 1000).toISOString().split("T")[0],
+      nudgeType: days === 3 ? "3 Days Prior" : "1 Day Prior",
+      sent: false
+    })) : [];
 
     const newTask: Task = {
       id: taskId,
@@ -166,16 +148,16 @@ export function AddTaskModal({
       status,
       dependsOnTaskIds,
       priority,
-      committee,
-      startDate: startDate.trim() || nowStr,
-      dueDate: dueDate.trim() || nowStr,
+      committee: eventCommittee,
+      startDate: startDate.trim(),
+      dueDate: dueDate.trim(),
       assignee: {
-        initials: selectedMember.initials,
-        color: selectedMember.color,
-        name: selectedMember.name
+        initials: selectedMember?.initials ?? "",
+        color: selectedMember?.color ?? "bg-slate-400",
+        name: selectedMember?.name ?? ""
       },
-      assignedMemberName: selectedMember.name,
-      assignedMemberUID: selectedMember.id,
+      assignedMemberName: selectedMember?.name ?? null,
+      assignedMemberUID: selectedMember?.id ?? null,
       isLeaderOnly,
       requiredSkills: ["Event Coordination"],
       nudges: defaultNudges
@@ -262,24 +244,17 @@ export function AddTaskModal({
             </div>
           </div>
 
-          <div className="grid min-w-0 grid-cols-1 gap-3">
-            <div className="min-w-0">
-              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
-              <CustomSelect
-                value={assigneeId}
-                onChange={(val) => setAssigneeId(val)}
-                options={assigneeOptions}
-                multiline
-                buttonClassName="min-h-11 rounded-xl"
-                dropdownClassName="[&_button]:min-h-11"
-                portal
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Committee</label>
-              <CustomSelect value={committee} onChange={setCommittee} disabled={committeeOptions.length === 0} placeholder="No committees available" options={committeeOptions.map((name) => ({ value: name, label: name.endsWith("Committee") ? name : `${name} Committee` }))} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
-            </div>
+          <div className="min-w-0">
+            <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
+            <CustomSelect
+              value={assigneeId}
+              onChange={(val) => setAssigneeId(val)}
+              options={assigneeOptions}
+              multiline
+              buttonClassName="min-h-11 rounded-xl"
+              dropdownClassName="[&_button]:min-h-11"
+              portal
+            />
           </div>
 
           {/* START DATE & DUE/END DATE WITH TIME */}

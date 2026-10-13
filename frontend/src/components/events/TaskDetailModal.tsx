@@ -29,7 +29,9 @@ import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSel
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ConfirmArchiveModal } from "./ConfirmArchiveModal";
 import { TaskAttachments } from "./TaskAttachments";
-import { TaskAssignee } from "./TaskAssignee";
+import { TaskSelfAssignmentSelect } from "./TaskSelfAssignmentSelect";
+import { OverdueBadge } from "./overdue";
+import { getTaskReminder, isTaskInactive } from "@/utils/taskTiming";
 import { isTaskAssignedToUser } from "@/utils/taskAssignment";
 import { TaskDependencySelector } from "./TaskDependencies";
 import { getTaskDependencyError, isTaskArchived } from "@/utils/taskDependencies";
@@ -46,7 +48,6 @@ type TaskDetailModalProps = {
   onArchiveTask?: (taskId: string) => void | boolean | Promise<void | boolean>;
   customStatuses?: CustomStatusConfig[];
   statusOrder?: string[];
-  committees?: { id: string; name: string }[];
   roster?: OrgMemberItem[];
   isLeader?: boolean;
   canEdit?: boolean;
@@ -63,7 +64,6 @@ export function TaskDetailModal({
   onArchiveTask,
   customStatuses = [],
   statusOrder,
-  committees = [],
   roster = [],
   isLeader = true,
   canEdit = true
@@ -83,7 +83,6 @@ export function TaskDetailModal({
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(task.dependsOnTaskIds || []);
   const [priority, setPriority] = useState<TaskPriority>(task.priority || "Medium");
-  const [committee, setCommittee] = useState<string>(task.committee || committees[0]?.name || "");
   const [startDate, setStartDate] = useState<string>(task.startDate || "");
   const [dueDate, setDueDate] = useState<string>(task.dueDate || task.deadline || "");
   const [dateError, setDateError] = useState("");
@@ -106,6 +105,7 @@ export function TaskDetailModal({
   );
   const nudgeRecipientUID = nudgeRecipient?.id || selectedMemberId || task.assignedMemberUID;
   const canSendNudge = isLeader && canEdit && (reviewerRole === "Student Leader" || reviewerRole === "Admin")
+    && !isTaskInactive(task) && !["completed", "done", "in review"].includes(task.status.trim().toLowerCase())
     && Boolean(reviewerUID && nudgeRecipientUID && nudgeRecipientUID !== reviewerUID);
   const archived = isTaskArchived(task);
   const canArchiveTask = isLeader && (canEdit || archived) && Boolean(onArchiveTask);
@@ -122,29 +122,18 @@ export function TaskDetailModal({
     try {
       const targetName = nudgeRecipient?.name || task.assignedMemberName || task.assignee?.name || "Team Member";
 
-      const dueDateStr = dueDate || task.dueDate || task.deadline;
-      let nudgeType = "3_days_prior";
-      let isUrgent = false;
-
-      if (dueDateStr) {
-        const parsedDate = new Date(dueDateStr);
-        if (!isNaN(parsedDate.getTime())) {
-          const diffDays = Math.ceil((parsedDate.getTime() - Date.now()) / (1000 * 3600 * 24));
-          if (diffDays <= 1) {
-            nudgeType = "1_day_prior";
-            isUrgent = true;
-          }
-        }
-      }
+      // Remind against the saved schedule, not unsaved edits in the form.
+      const dueDateStr = task.dueDate || task.deadline;
+      const timing = getTaskReminder(task);
+      const nudgeType = timing?.kind === "due-tomorrow" ? "1_day_prior" : timing?.kind === "due-today" ? "due_today" : timing?.kind === "overdue" ? "overdue" : "followup";
+      const isUrgent = timing?.kind === "overdue" || timing?.kind === "due-today";
 
       const res = await sendNudgeEmail({
         recipientUID: nudgeRecipientUID || undefined,
         taskTitle: title.trim() || task.title,
         eventName: "Organization Event",
-        deadline: dueDateStr || "Upcoming",
-        message: isUrgent
-          ? "Urgent Reminder: This task is due tomorrow!"
-          : "Contextual Nudge: Checking in on progress 3 days prior to deadline.",
+        deadline: dueDateStr || "No deadline",
+        message: timing ? `${timing.label}. Please check your task progress${task.blockedBy ? ` and unfinished prerequisites: ${(task.blockedByTaskTitles || []).join(", ")}` : ""}.` : "Checking in on your task progress.",
         isUrgent,
         nudgeType
       });
@@ -152,7 +141,7 @@ export function TaskDetailModal({
       if (res.success) {
         useToastStore.getState().showToast({
           title: "Nudge Email Sent",
-          description: `Successfully sent ${nudgeType === "1_day_prior" ? "1-Day Prior (Urgent)" : "3-Days Prior"} nudge for "${title || task.title}" to ${targetName}.`,
+          description: `Sent a reminder for "${task.title}" to ${targetName}.`,
           tone: "success"
         });
       } else {
@@ -175,9 +164,6 @@ export function TaskDetailModal({
 
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, [task.status]);
 
-  const committeeOptions = Array.from(
-    new Set([...committees.map((c) => c.name), ...(task.committee ? [task.committee] : [])])
-  );
   const assigneeOptions: CustomSelectOption[] = activeRoster.map((member) => ({
     value: member.id,
     label: member.name,
@@ -194,7 +180,7 @@ export function TaskDetailModal({
   const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
     return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge,
-      disabled: Boolean(getTaskDependencyError(tasks.map((item) => item.id === task.id ? { ...item, status: value, dependsOnTaskIds } : item), tasks)) };
+      disabled: !isLeader && ["cancelled", "canceled"].includes(value.trim().toLowerCase()) || Boolean(getTaskDependencyError(tasks.map((item) => item.id === task.id ? { ...item, status: value, dependsOnTaskIds } : item), tasks)) };
   });
   const selectedAssignee = activeRoster.find((member) => member.id === selectedMemberId);
 
@@ -224,7 +210,6 @@ export function TaskDetailModal({
 
     const selectedMember = isLeader ? selectedAssignee : null;
     const nextDueDate = dueDate.trim();
-    const dueDateChanged = nextDueDate !== (task.dueDate || "");
 
     const updated: Task = {
       ...task,
@@ -234,14 +219,11 @@ export function TaskDetailModal({
       dependsOnTaskIds,
       priority,
       priorityChangeRequest: task.priorityChangeRequest,
-      committee,
       startDate: startDate.trim(),
       dueDate: nextDueDate,
       originalStartDate: task.originalStartDate ?? task.startDate,
       originalDueDate: task.originalDueDate ?? task.dueDate,
-      dueDateHistory: dueDateChanged
-        ? [...(task.dueDateHistory ?? []), { from: task.dueDate || "", to: nextDueDate, changedAt: new Date().toISOString() }]
-        : task.dueDateHistory,
+      ...(task.deadline !== undefined ? { deadline: nextDueDate } : {}),
       isLeaderOnly,
       assignee: selectedMember ? {
         initials: selectedMember.initials,
@@ -267,6 +249,7 @@ export function TaskDetailModal({
             <div className="min-w-0">
               <h3 id={`${panelId}-title`} className="text-base font-semibold text-slate-900">{isLeader ? "Leader task panel" : "Task details"}</h3>
               <p className="mt-1 break-words text-xs leading-5 text-slate-500 line-clamp-2">{isLeader ? task.title : canEdit ? "Update status or add attachments to your assigned subtask." : "View task details and attachments."}</p>
+              <OverdueBadge task={task} />
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Close task panel" className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
@@ -316,7 +299,6 @@ export function TaskDetailModal({
           {submitError ? <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{submitError}</p> : null}
           <section aria-label="Task status and assignment" className="space-y-4 border-t border-slate-100 pt-5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status &amp; assignment</h4>
-          {!isLeader ? <TaskAssignee task={task} /> : null}
           {/* STATUS & PRIORITY */}
           <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4">
             <div>
@@ -342,24 +324,21 @@ export function TaskDetailModal({
             </div>
           </div>
 
-          {/* ASSIGNEE & COMMITTEE */}
-          {isLeader ? <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
+          {/* ASSIGNEE */}
+          <div className="min-w-0">
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">Assignee</label>
-              <CustomSelect
+              {isLeader ? <CustomSelect
                 value={selectedMemberId}
                 onChange={setSelectedMemberId}
                 options={assigneeOptions}
-                placeholder="Select a member"
-                buttonClassName="py-2 text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">Committee</label>
-              <CustomSelect value={committee} onChange={setCommittee} disabled={committeeOptions.length === 0} placeholder="No committees available" options={committeeOptions.map((name) => ({ value: name, label: name.endsWith("Committee") ? name : `${name} Committee` }))} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
-            </div>
-          </div> : null}
+                placeholder="No assignee"
+                disabled={!canEdit}
+                multiline
+                portal
+                buttonClassName="min-h-11 rounded-xl text-xs"
+                dropdownClassName="[&_button]:min-h-11"
+              /> : <TaskSelfAssignmentSelect task={task} readOnly={archived} />}
+          </div>
 
           </section>
           {/* START DATE & DUE/END DATE WITH TIME */}
@@ -397,9 +376,19 @@ export function TaskDetailModal({
             <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Schedule</h4>
             <dl className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2">
               <div className="min-w-0"><dt className="text-slate-500">Start date</dt><dd className="mt-1 break-words font-medium text-slate-700">{task.startDate || "Not set"}</dd></div>
-              <div className="min-w-0"><dt className="text-slate-500">Deadline</dt><dd className="mt-1 break-words font-medium text-slate-700">{task.dueDate || task.deadline || "Not set"}</dd></div>
+              <div className="min-w-0"><dt className="text-slate-500">Deadline</dt><dd className="mt-1 break-words font-medium text-slate-700">{task.dueDate || task.deadline || "No deadline"}</dd></div>
             </dl>
           </section>}
+          {(task.submittedAt || task.completedAt || task.dueDateHistory?.length) ? <section aria-label="Task schedule history" className="space-y-3 border-t border-slate-100 pt-5">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Schedule history</h4>
+            {task.submittedAt ? <p className="text-xs text-slate-600">Submitted for review: {new Date(task.submittedAt).toLocaleString()}</p> : null}
+            {task.completedAt ? <p className="text-xs text-slate-600">Completed: {new Date(task.completedAt).toLocaleString()}</p> : null}
+            {task.dueDateHistory?.map((change, index) => <div key={`${change.changedAt}-${index}`} className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+              <p className="font-semibold">{change.from || "No deadline"} → {change.to || "No deadline"}</p>
+              {change.reason ? <p className="mt-1 break-words">{change.reason}</p> : null}
+              <p className="mt-1">{change.changedByName || change.changedByUID || change.changedBy || "Reviewer not recorded"} · {new Date(change.changedAt).toLocaleString()}</p>
+            </div>)}
+          </section> : null}
           {/* LEADER ONLY RESTRICTION */}
           {isLeader ? <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
             <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">

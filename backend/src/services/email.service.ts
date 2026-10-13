@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 type NudgeEmailParams = {
   to: string;
   recipientName?: string;
+  recipientKind?: "assignee" | "leader";
   taskTitle: string;
   eventName?: string;
   deadline?: string;
@@ -50,6 +51,8 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
     const {
       to,
       recipientName = "Team Member",
+      recipientKind = "assignee",
+      assigneeName,
       taskTitle,
       eventName = "Organization Event",
       deadline = "Upcoming Deadline",
@@ -58,14 +61,15 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
       nudgeType
     } = params;
 
-    const subject = nudgeType === "1_day_prior"
-      ? `🚨 Urgent Nudge: "${taskTitle}" is due tomorrow! (${eventName})`
-      : nudgeType === "3_days_prior"
-      ? `🔔 3-Day Reminder: "${taskTitle}" is due in 3 days (${eventName})`
-      : isUrgent
-      ? `🚨 Urgent Nudge: "${taskTitle}" is due soon!`
-      : `🔔 Task Nudge: "${taskTitle}" (${eventName})`;
-
+    const reminderLabel = nudgeType === "overdue" ? "Overdue"
+      : nudgeType === "due_today" ? "Due today"
+      : nudgeType === "1_day_prior" ? "Due tomorrow"
+      : nudgeType === "3_days_prior" || nudgeType === "approaching" ? "Approaching deadline"
+      : "Task reminder";
+    const subject = `${recipientKind === "leader" ? "Leader alert · " : ""}${reminderLabel}: "${taskTitle}" (${eventName})`;
+    const introduction = recipientKind === "leader"
+      ? `An organization task ${assigneeName && assigneeName !== "Unassigned" ? `assigned to <strong>${assigneeName}</strong>` : "with no assignee"} needs your attention in <strong>${eventName}</strong>.`
+      : `You have a nudge update regarding your assigned task in <strong>${eventName}</strong>.`;
     const actionUrl = `${env.frontendUrl || "https://musubi-1bf94.web.app"}/dashboard/events`;
 
     const htmlContent = `
@@ -99,7 +103,7 @@ export async function sendNudgeNotificationEmail(params: NudgeEmailParams): Prom
           <div class="body">
             <div class="greeting">Hello ${recipientName},</div>
             <div class="message">
-              You have a nudge update regarding your assigned task in <strong>${eventName}</strong>.
+              ${introduction}
               ${message ? `<p style="margin-top:8px; font-style:italic;">"${message}"</p>` : ""}
             </div>
 
