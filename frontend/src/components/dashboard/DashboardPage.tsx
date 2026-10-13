@@ -497,7 +497,7 @@ export function DashboardPage() {
           ))}
         </section>
 
-        <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(340px,1fr)]">
+        <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(340px,1fr)] items-stretch">
           <MemberActiveSubtasks subtasks={activeMemberSubtasks} />
           <MemberNudges nudges={memberNudges} />
         </section>
