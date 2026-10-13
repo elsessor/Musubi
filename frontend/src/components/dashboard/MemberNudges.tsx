@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Clock, ChevronRight, Bell } from "lucide-react";
+import { AlertCircle, Clock, ChevronRight, ChevronLeft, Bell } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { checkAndDispatchDueNudges } from "@/services/notifications.service";
@@ -22,6 +22,15 @@ type MemberNudgesProps = {
 
 export function MemberNudges({ nudges }: MemberNudgesProps) {
   const [checking, setChecking] = useState(false);
+  const [page, setPage] = useState(1);
+
+  const pageSize = 5;
+  const totalPages = Math.max(1, Math.ceil(nudges.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visibleNudges = nudges.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const pageStart = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+  const pages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
   async function handleCheckAndDispatch() {
     setChecking(true);
@@ -97,50 +106,96 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
           </p>
         </div>
       ) : (
-        <div className="mt-4 space-y-3">
-          {nudges.map((nudge) => {
-            const isDeadline = nudge.type === "Deadline Alert" || nudge.type.includes("1 Day");
-            const isFollowUp = nudge.type === "Follow-up" || nudge.type.includes("3 Days");
+        <>
+          <div className="mt-4 space-y-3">
+            {visibleNudges.map((nudge) => {
+              const isDeadline = nudge.type === "Deadline Alert" || nudge.type.includes("1 Day");
+              const isFollowUp = nudge.type === "Follow-up" || nudge.type.includes("3 Days");
 
-            const cardClasses = isDeadline
-              ? "bg-rose-50/60 border-rose-100 hover:border-rose-200"
-              : isFollowUp
-              ? "bg-amber-50/40 border-amber-100 hover:border-amber-200"
-              : "bg-blue-50/40 border-blue-100 hover:border-blue-200";
+              const cardClasses = isDeadline
+                ? "bg-rose-50/60 border-rose-100 hover:border-rose-200"
+                : isFollowUp
+                ? "bg-amber-50/40 border-amber-100 hover:border-amber-200"
+                : "bg-blue-50/40 border-blue-100 hover:border-blue-200";
 
-            const badgeTextClasses = isDeadline
-              ? "text-rose-600"
-              : isFollowUp
-              ? "text-amber-600"
-              : "text-blue-600";
+              const badgeTextClasses = isDeadline
+                ? "text-rose-600"
+                : isFollowUp
+                ? "text-amber-600"
+                : "text-blue-600";
 
-            const Icon = isDeadline ? AlertCircle : Clock;
+              const Icon = isDeadline ? AlertCircle : Clock;
 
-            return (
-              <div
-                key={nudge.id}
-                className={`rounded-xl border p-3.5 transition-all hover:shadow-xs ${cardClasses}`}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-bold">
-                  <Icon size={14} className={badgeTextClasses} />
-                  <span className={badgeTextClasses}>{nudge.type}</span>
-                  <span className="text-slate-300">•</span>
-                </div>
-                <h4 className="mt-1 text-xs font-semibold text-slate-800 leading-snug">
-                  {nudge.title}
-                </h4>
-                {nudge.eventTitle && (
-                  <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-                    @ {nudge.eventTitle}
+              return (
+                <div
+                  key={nudge.id}
+                  className={`rounded-xl border p-3.5 transition-all hover:shadow-xs ${cardClasses}`}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
+                    <Icon size={14} className={badgeTextClasses} />
+                    <span className={badgeTextClasses}>{nudge.type}</span>
+                    <span className="text-slate-300">•</span>
+                  </div>
+                  <h4 className="mt-1 text-xs font-semibold text-slate-800 leading-snug">
+                    {nudge.title}
+                  </h4>
+                  {nudge.eventTitle && (
+                    <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                      @ {nudge.eventTitle}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[11px] font-medium text-slate-400">
+                    {nudge.date}
                   </p>
-                )}
-                <p className="mt-1 text-[11px] font-medium text-slate-400">
-                  {nudge.date}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+              <span className="text-[11px] font-medium text-slate-500">
+                Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, nudges.length)} of {nudges.length}
+              </span>
+              <nav aria-label="Nudges pagination" className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Previous page"
+                  disabled={currentPage === 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="flex size-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {pages.map((number) => (
+                  <button
+                    key={number}
+                    type="button"
+                    aria-label={`Page ${number}`}
+                    aria-current={currentPage === number ? "page" : undefined}
+                    onClick={() => setPage(number)}
+                    className={`flex size-7 items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      currentPage === number
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {number}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  aria-label="Next page"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="flex size-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </nav>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
