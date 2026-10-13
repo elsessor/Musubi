@@ -526,7 +526,9 @@ export async function auditLogsController(request: Request, response: Response, 
     const token = getBearerToken(request);
     if (!token) throw new AppError("Firebase ID token is required.", 400);
     const decoded = await firebaseAuth.verifyIdToken(token);
-    response.status(200).json({ logs: await getAuditLogs(decoded.uid) });
+    const rawLimit = Number(request.query.pageSize || request.query.limit);
+    const limit = !isNaN(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50;
+    response.status(200).json({ logs: await getAuditLogs(decoded.uid, limit) });
   } catch (error) { next(error); }
 }
 

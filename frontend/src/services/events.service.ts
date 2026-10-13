@@ -99,7 +99,7 @@ export async function fetchEvents(user: User | null, orgId?: string | null, thro
   const targetOrgId = orgId && orgId.trim() ? orgId.trim() : "default";
   const now = Date.now();
   const cached = eventsMemoryCache.get(targetOrgId);
-  if (cached && now - cached.timestamp < 15000) {
+  if (cached && now - cached.timestamp < 30000) {
     return cached.data;
   }
   if (inFlightEventsPromises.has(targetOrgId)) {

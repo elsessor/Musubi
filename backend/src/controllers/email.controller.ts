@@ -85,6 +85,7 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
 
   const eventsSnapshot = await firestore.collection("events").get();
   const sentResults: Array<{ taskId: string; taskTitle: string; recipientEmail: string; nudgeType: string }> = [];
+  const userLookupCache = new Map<string, { email: string; name: string }>();
 
   const now = new Date();
   const todayMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime();
@@ -111,6 +112,9 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
       const dueMidnight = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate())).getTime();
       const diffDays = Math.round((dueMidnight - todayMidnight) / (1000 * 3600 * 24));
 
+      // Skip lookups and processing if task is not in the 3-day or 1-day notification window
+      if (diffDays > 3 || diffDays < 0) continue;
+
       const nudges: any[] = Array.isArray(task.nudges) ? [...task.nudges] : [];
       let taskModified = false;
 
@@ -119,7 +123,6 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
         const threeDaysBefore = new Date(dueMidnight - 3 * 24 * 3600 * 1000).toISOString().split("T")[0];
         nudge3d = { nudgeUID: `${task.id}_3d`, triggerDate: threeDaysBefore, nudgeType: "3 Days Prior", sent: false };
         nudges.push(nudge3d);
-        taskModified = true;
       }
 
       let nudge1d = nudges.find((n) => n.nudgeType === "1 Day Prior");
@@ -127,17 +130,24 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
         const oneDayBefore = new Date(dueMidnight - 1 * 24 * 3600 * 1000).toISOString().split("T")[0];
         nudge1d = { nudgeUID: `${task.id}_1d`, triggerDate: oneDayBefore, nudgeType: "1 Day Prior", sent: false };
         nudges.push(nudge1d);
-        taskModified = true;
       }
 
       let targetEmail = task.assignedMemberEmail || task.assigneeEmail || task.assignee?.email || "";
       let targetName = task.assignee?.name || task.assignedMemberName || "Team Member";
+
+      const cacheKey = task.assignedMemberUID || targetName;
+      if (!targetEmail && cacheKey && userLookupCache.has(cacheKey)) {
+        const cachedUser = userLookupCache.get(cacheKey)!;
+        targetEmail = cachedUser.email;
+        targetName = cachedUser.name;
+      }
 
       if (!targetEmail && task.assignedMemberUID && firebaseAuth) {
         try {
           const userRecord = await firebaseAuth.getUser(task.assignedMemberUID);
           targetEmail = userRecord.email || "";
           targetName = userRecord.displayName || targetName;
+          if (targetEmail) userLookupCache.set(task.assignedMemberUID, { email: targetEmail, name: targetName });
         } catch {}
       }
       if (!targetEmail && task.assignedMemberUID) {
@@ -147,6 +157,7 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
             const uData = userDoc.data();
             targetEmail = uData?.email || "";
             targetName = uData?.name || uData?.displayName || targetName;
+            if (targetEmail) userLookupCache.set(task.assignedMemberUID, { email: targetEmail, name: targetName });
           }
         } catch {}
       }
@@ -155,6 +166,7 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
           const usersQuery = await firestore.collection("users").where("name", "==", targetName).limit(1).get();
           if (!usersQuery.empty) {
             targetEmail = usersQuery.docs[0].data()?.email || "";
+            if (targetEmail) userLookupCache.set(targetName, { email: targetEmail, name: targetName });
           }
         } catch {}
       }

@@ -313,75 +313,6 @@ export function subscribeNotificationsFirestore(
     }
   );
 
-  // 4. Subscribe to audit logs
-  const auditQuery = targetOrgId
-    ? query(collection(db, "audit_logs"), where("orgId", "==", targetOrgId), limit(15))
-    : query(collection(db, "audit_logs"), limit(15));
-  const unsubAudit = onSnapshot(
-    auditQuery,
-    (snapshot) => {
-      auditNotifs = [];
-      snapshot.docs.forEach((docSnap) => {
-        const data = docSnap.data();
-        const itemOrgId = typeof data.orgId === "string" ? data.orgId : null;
-
-        if (targetOrgId && itemOrgId && itemOrgId !== targetOrgId) return;
-
-        const category = typeof data.actionCategory === "string" ? data.actionCategory : "";
-        const action = typeof data.action === "string" ? data.action : "System activity";
-
-        if (
-          category === "Security & Access" ||
-          action.toLowerCase().includes("signed in") ||
-          action.toLowerCase().includes("login") ||
-          action.toLowerCase().includes("announcement")
-        ) {
-          return;
-        }
-        const actorName = typeof data.actorName === "string" ? data.actorName : "System";
-        const targetName = typeof data.targetName === "string" ? data.targetName : "";
-
-        let title = "System Notification";
-        let type: NotificationRecord["type"] = "system";
-
-        if (category === "AI Agent Actions") {
-          title = "AI Atomization Completed";
-          type = "ai";
-        } else if (category === "Events & Tasks") {
-          title = "New Task / Event Activity";
-          type = "task";
-        } else if (category === "Organization") {
-          title = "Organization Update";
-          type = "organization";
-        } else if (category === "User Management") {
-          title = "Member Activity";
-          type = "system";
-        }
-
-        const description = targetName
-          ? `${action} on '${targetName}' by ${actorName}`
-          : `${action} by ${actorName}`;
-
-        const notifId = `audit_${docSnap.id}`;
-
-        auditNotifs.push({
-          id: notifId,
-          orgId: itemOrgId,
-          title,
-          description,
-          type,
-          unread: true,
-          time: formatRelativeTime(data.createdAt),
-          createdAt: data.createdAt ? (typeof data.createdAt.toDate === "function" ? data.createdAt.toDate().toISOString() : String(data.createdAt)) : null
-        });
-      });
-      emitMerged();
-    },
-    (err) => {
-      emitMerged();
-    }
-  );
-
   const handleUpdate = () => {
     emitMerged();
   };
@@ -399,7 +330,6 @@ export function subscribeNotificationsFirestore(
     unsubAnnouncements();
     unsubEvents();
     unsubNotifs();
-    unsubAudit();
   };
 }
 

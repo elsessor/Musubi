@@ -306,7 +306,7 @@ export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]
     onboardingCompleted: user.onboardingCompleted
   };
 
-  appCache.set(cacheKey, profile, 60_000);
+  appCache.set(cacheKey, profile, 120_000);
   return profile;
 }
 
@@ -599,7 +599,7 @@ export async function getOrganizationMembers(uid: string, organizationId: string
     ]);
     const events = eventSnapshot.docs.map((document) => ({ ...document.data(), id: document.id }));
     rawMembers = snapshot.docs.map((document) => ({ id: document.id, data: document.data(), events }));
-    appCache.set(cacheKey, rawMembers, 30_000);
+    appCache.set(cacheKey, rawMembers, 90_000);
   }
 
   return rawMembers.map((member) => memberForViewer(user, member.id, member.data, member.events));
@@ -1389,13 +1389,18 @@ function normalizeAuditLog(id: string, data: FirebaseFirestore.DocumentData): Au
   };
 }
 
-export async function getAuditLogs(uid: string): Promise<AuditLogEntry[]> {
+export async function getAuditLogs(uid: string, limitCount = 50): Promise<AuditLogEntry[]> {
   const user = await getCurrentUser(uid);
-  let queryRef: FirebaseFirestore.Query = firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200);
+  const orgScope = user.role === "Admin" ? "admin" : (user.organizationId || "none");
+  const cacheKey = `audit_logs:${orgScope}:${limitCount}`;
+  const cached = appCache.get<AuditLogEntry[]>(cacheKey);
+  if (cached) return cached;
+
+  let queryRef: FirebaseFirestore.Query = firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(limitCount);
 
   if (user.role !== "Admin") {
     if (!user.organizationId) return [];
-    queryRef = firestore.collection("audit_logs").where("orgId", "==", user.organizationId).limit(200);
+    queryRef = firestore.collection("audit_logs").where("orgId", "==", user.organizationId).limit(limitCount);
   }
 
   const snapshot = await queryRef.get();
@@ -1405,6 +1410,7 @@ export async function getAuditLogs(uid: string): Promise<AuditLogEntry[]> {
     const timeB = b.createdAt ? new Date(String(b.createdAt)).getTime() : 0;
     return timeB - timeA;
   });
+  appCache.set(cacheKey, logs, 60_000);
   return logs;
 }
 
@@ -1414,14 +1420,14 @@ export async function watchAuditLogs(
   onError: (error: Error) => void
 ): Promise<() => void> {
   const user = await getCurrentUser(uid);
-  let queryRef: FirebaseFirestore.Query = firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(200);
+  let queryRef: FirebaseFirestore.Query = firestore.collection("audit_logs").orderBy("createdAt", "desc").limit(50);
 
   if (user.role !== "Admin") {
     if (!user.organizationId) {
       onData([]);
       return () => { };
     }
-    queryRef = firestore.collection("audit_logs").where("orgId", "==", user.organizationId).limit(200);
+    queryRef = firestore.collection("audit_logs").where("orgId", "==", user.organizationId).limit(50);
   }
 
   const unsubscribe = queryRef.onSnapshot(
@@ -1725,7 +1731,7 @@ export async function getEventsForUser(uid: string, orgId?: string) {
   if (!rawEvents) {
     const snapshot = await firestore.collection("events").where("orgId", "==", targetOrgId).get();
     rawEvents = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-    appCache.set(eventsCacheKey, rawEvents, 30_000);
+    appCache.set(eventsCacheKey, rawEvents, 60_000);
   }
 
   return rawEvents.map((data) => {
@@ -1870,7 +1876,7 @@ export async function getAnnouncementsService(uid: string, orgId?: string) {
       snapshot = await firestore.collection("announcements").limit(50).get();
     }
     rawList = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-    appCache.set(cacheKey, rawList, 45_000);
+    appCache.set(cacheKey, rawList, 90_000);
   }
 
   const list: any[] = [];

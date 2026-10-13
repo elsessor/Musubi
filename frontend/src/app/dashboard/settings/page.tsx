@@ -287,24 +287,10 @@ export default function DashboardSettingsPage() {
       }
     }
 
-    const unsubscribe = onSnapshot(
-      doc(getFirebaseDb(), "organizations", targetOrgId),
-      (snapshot) => {
-        const data = snapshot.data();
-        if (typeof data?.name === "string" && data.name.trim()) {
-          setOrganizationName(data.name.trim());
-        } else {
-          void loadOrganizationFallback();
-        }
-      },
-      () => {
-        void loadOrganizationFallback();
-      }
-    );
+    void loadOrganizationFallback();
 
     return () => {
       cancelled = true;
-      unsubscribe();
     };
   }, [orgId, firebaseUser]);
 
