@@ -184,6 +184,21 @@ export function TopHeader({
         if (liveOrgName) {
           setLiveOrganizationName(liveOrgName);
         }
+
+        const currentProfile = useAuthStore.getState().profile;
+        if (
+          currentProfile &&
+          (currentProfile.organizationId !== liveOrgId ||
+            currentProfile.organizationName !== liveOrgName ||
+            currentProfile.role !== liveRole)
+        ) {
+          useAuthStore.getState().setProfile({
+            ...currentProfile,
+            organizationId: liveOrgId,
+            organizationName: liveOrgName,
+            role: liveRole
+          });
+        }
       },
       () => {
         // Silent fallback when client Firestore rules restrict direct SDK subscription

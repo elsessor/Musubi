@@ -183,6 +183,8 @@ export async function loginWithFirebaseToken(idToken: string, clientFullName?: s
     organizationId: user.organizationId
   };
 
+  invalidateUserCache(decodedToken.uid);
+
   writeAuditLog({
     actorUID: user.uid,
     actorName: user.fullName,
@@ -250,10 +252,12 @@ export async function verifyAppJwtAsync(token: string): Promise<JwtPayload> {
   }
 }
 
-export async function getCurrentUser(uid: string): Promise<LoginResponse["user"]> {
+export async function getCurrentUser(uid: string, forceFresh = false): Promise<LoginResponse["user"]> {
   const cacheKey = "user_profile:" + uid;
-  const cached = appCache.get<LoginResponse["user"]>(cacheKey);
-  if (cached) return cached;
+  if (!forceFresh) {
+    const cached = appCache.get<LoginResponse["user"]>(cacheKey);
+    if (cached) return cached;
+  }
 
   const snapshot = await firestore.collection("users").doc(uid).get();
 
@@ -437,6 +441,11 @@ export async function reviewOrganizationRequest(uid: string, requestId: string, 
       status: "active", requestedByUID: typeof request.requestedBy?.uid === "string" ? request.requestedBy.uid : null,
       organizationConfig: {}, createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
+    appCache.delete("org_record:" + request.organizationId);
+    appCache.delete("org_doc:" + request.organizationId);
+    if (typeof request.requestedBy?.uid === "string") {
+      invalidateUserCache(request.requestedBy.uid);
+    }
   }
   writeAuditLog({
     actorUID: uid,
@@ -452,8 +461,13 @@ export async function reviewOrganizationRequest(uid: string, requestId: string, 
 }
 
 export async function getOrganizationForUser(uid: string, organizationId: string) {
-  const user = await getCurrentUser(uid);
-  if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to this organization.", 403);
+  let user = await getCurrentUser(uid);
+  if (user.role !== "Admin" && user.organizationId !== organizationId) {
+    user = await getCurrentUser(uid, true);
+    if (user.role !== "Admin" && user.organizationId !== organizationId) {
+      throw new AppError("You do not have access to this organization.", 403);
+    }
+  }
 
   const cacheKey = "org_record:" + organizationId;
   const cached = appCache.get<any>(cacheKey);
@@ -546,6 +560,11 @@ export async function reviewOrganizationJoinRequest(uid: string, organizationId:
     const orgDoc = await firestore.collection("organizations").doc(organizationId).get();
     const orgName = orgDoc.exists && typeof orgDoc.data()?.name === "string" ? orgDoc.data()?.name : null;
     await firestore.collection("users").doc(request.requestedByUID).set({ organizationId, ...(orgName ? { organizationName: orgName } : {}) }, { merge: true });
+    invalidateUserCache(request.requestedByUID);
+    appCache.deletePrefix("members:");
+    appCache.delete("admin_member_directory");
+  } else {
+    invalidateUserCache(request.requestedByUID);
   }
   writeAuditLog({
     actorUID: uid,
@@ -569,6 +588,8 @@ export async function createOrganization(uid: string, input: { name: string; typ
     organizationConfig: {}, createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   });
   await firestore.collection("users").doc(uid).set({ organizationId: ref.id, organizationName: input.name.trim() }, { merge: true });
+  invalidateUserCache(uid);
+  appCache.deletePrefix("members:");
   await firestore.collection("org_requests").add({
     organizationId: ref.id, orgName: input.name.trim(), orgType: input.type.trim(), description: input.description.trim(), status: "pending", rejectionReason: null,
     submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), requestedBy: { uid, name: user.fullName, email: user.email }
@@ -587,8 +608,13 @@ export async function createOrganization(uid: string, input: { name: string; typ
 }
 
 export async function getOrganizationMembers(uid: string, organizationId: string) {
-  const user = await getCurrentUser(uid);
-  if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to these members.", 403);
+  let user = await getCurrentUser(uid);
+  if (user.role !== "Admin" && user.organizationId !== organizationId) {
+    user = await getCurrentUser(uid, true);
+    if (user.role !== "Admin" && user.organizationId !== organizationId) {
+      throw new AppError("You do not have access to these members.", 403);
+    }
+  }
 
   const cacheKey = "members:" + organizationId;
   let rawMembers = appCache.get<{ id: string; data: any; events: any[] }[]>(cacheKey);
@@ -636,6 +662,9 @@ export async function removeOrganizationMember(uid: string, organizationId: stri
     if (committee.data().headMemberUID === memberId) batch.update(committee.ref, { headMemberUID: null });
   });
   await batch.commit();
+  invalidateUserCache(memberId);
+  appCache.deletePrefix("members:");
+  appCache.delete("admin_member_directory");
 
   const memberName = typeof member.fullName === "string" ? member.fullName : "Organization member";
   writeAuditLog({
@@ -651,8 +680,13 @@ export async function removeOrganizationMember(uid: string, organizationId: stri
 }
 
 export async function getOrganizationCommittees(uid: string, organizationId: string) {
-  const user = await getCurrentUser(uid);
-  if (user.role !== "Admin" && user.organizationId !== organizationId) throw new AppError("You do not have access to these committees.", 403);
+  let user = await getCurrentUser(uid);
+  if (user.role !== "Admin" && user.organizationId !== organizationId) {
+    user = await getCurrentUser(uid, true);
+    if (user.role !== "Admin" && user.organizationId !== organizationId) {
+      throw new AppError("You do not have access to these committees.", 403);
+    }
+  }
   const organizationRef = firestore.collection("organizations").doc(organizationId);
   const snapshot = await firestore.collection("committees").where("orgId", "==", organizationRef).get();
   return snapshot.docs.map((document) => {
@@ -1110,6 +1144,9 @@ export async function updateMemberRoleForAdmin(uid: string, targetUid: string, i
     position: input.position,
     updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   });
+  invalidateUserCache(targetUid);
+  appCache.deletePrefix("members:");
+  appCache.delete("admin_member_directory");
 
   writeAuditLog({
     actorUID: uid,
@@ -1135,6 +1172,9 @@ export async function reassignMemberForAdmin(uid: string, targetUid: string, inp
     committee: input.committee,
     updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   });
+  invalidateUserCache(targetUid);
+  appCache.deletePrefix("members:");
+  appCache.delete("admin_member_directory");
 
   writeAuditLog({
     actorUID: uid,
@@ -1305,6 +1345,9 @@ export async function updateMemberForAdmin(
   if (input.committeeName !== undefined) update.committeeName = input.committeeName;
 
   await ref.update(update);
+  invalidateUserCache(memberId);
+  appCache.deletePrefix("members:");
+  appCache.delete("admin_member_directory");
 
   const memberName = typeof before.data()?.fullName === "string" ? before.data()!.fullName : memberId;
   const beforeData = before.data() ?? {};
@@ -1353,6 +1396,11 @@ export async function bulkUpdateMemberRolesForAdmin(
     batch.update(firestore.collection("users").doc(memberId), { role });
   }
   await batch.commit();
+  for (const memberId of memberIds) {
+    invalidateUserCache(memberId);
+  }
+  appCache.deletePrefix("members:");
+  appCache.delete("admin_member_directory");
 
   writeAuditLog({
     actorUID: uid,
@@ -1708,9 +1756,20 @@ export async function clearEventsForOrg(uid: string, organizationId: string) {
 }
 
 export async function getEventsForUser(uid: string, orgId?: string) {
-  const user = await getCurrentUser(uid);
+  let user = await getCurrentUser(uid);
+  if (!orgId && !user.organizationId && user.role !== "Admin") {
+    return [];
+  }
+  if (orgId === "default-org" && !user.organizationId && user.role !== "Admin") {
+    return [];
+  }
   const targetOrgId = orgId || user.organizationId || "default-org";
-  assertEventAccess(user, targetOrgId);
+  try {
+    assertEventAccess(user, targetOrgId);
+  } catch {
+    user = await getCurrentUser(uid, true);
+    assertEventAccess(user, targetOrgId);
+  }
 
   const orgCacheKey = "org_doc:" + targetOrgId;
   let organization = appCache.get<any>(orgCacheKey);
@@ -1843,9 +1902,20 @@ export async function createAnnouncementService(
 }
 
 export async function getAnnouncementsService(uid: string, orgId?: string) {
-  const user = await getCurrentUser(uid);
+  let user = await getCurrentUser(uid);
+  if (!orgId && !user.organizationId && user.role !== "Admin") {
+    return [];
+  }
+  if (orgId === "default-org" && !user.organizationId && user.role !== "Admin") {
+    return [];
+  }
+  if (user.role !== "Admin" && orgId && orgId !== user.organizationId) {
+    user = await getCurrentUser(uid, true);
+    if (user.role !== "Admin" && orgId && orgId !== user.organizationId) {
+      throw new AppError("You do not have access to this organization's announcements.", 403);
+    }
+  }
   const targetOrgId = orgId || user.organizationId;
-  if (user.role !== "Admin" && orgId && orgId !== user.organizationId) throw new AppError("You do not have access to this organization's announcements.", 403);
 
   const cacheKey = `announcements:${targetOrgId || "all"}`;
   let rawList = appCache.get<any[]>(cacheKey);

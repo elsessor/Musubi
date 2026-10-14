@@ -104,7 +104,11 @@ export default function OrganizationPage() {
   const [isPostAnnouncementOpen, setIsPostAnnouncementOpen] = useState(false);
 
   useEffect(() => {
-    const orgId = profile?.organizationId || "default-org";
+    if (!profile?.organizationId) {
+      setAnnouncements([]);
+      return;
+    }
+    const orgId = profile.organizationId;
     const unsubscribe = subscribeAnnouncementsFirestore(orgId, profile?.role, (data) => {
       setAnnouncements(data);
     });
@@ -135,7 +139,8 @@ export default function OrganizationPage() {
     committeeId?: string;
     isPinned: boolean;
   }) {
-    const orgId = profile?.organizationId || "default-org";
+    if (!profile?.organizationId) return;
+    const orgId = profile.organizationId;
     try {
       const newAnn = await createAnnouncementFirestore(orgId, {
         ...data,
