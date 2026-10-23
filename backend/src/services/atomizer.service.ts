@@ -52,27 +52,38 @@ Guidelines:
 6. Order prerequisites before dependent tasks. For each task, include dependencyIndexes with the zero-based indexes of only the earlier tasks that truly must be completed first. Use [] for independent tasks. Allow parallel work; do not make every task depend on the previous task.
 `;
 
-    const candidateModels = [
+    const primaryModel = process.env.GEMINI_MODEL?.trim() || "googleai/gemini-3.8-flash";
+    const candidateModels = Array.from(new Set([
+      primaryModel,
+      "googleai/gemini-3.8-flash",
+      "googleai/gemini-3.7-flash",
       "googleai/gemini-3.6-flash",
       "googleai/gemini-3.5-flash",
-      "googleai/gemini-3.5-flash-lite",
-      "googleai/gemini-3.7-flash",
-      "googleai/gemini-flash-latest"
-    ];
+      "googleai/gemini-3.5-flash-lite"
+    ]));
 
     let lastError: unknown = null;
 
     // Helper delay for rate limit / service unavailable retries
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const withTimeout = <T>(promise: Promise<T>, ms: number, errMsg: string): Promise<T> =>
+      Promise.race([
+        promise,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(errMsg)), ms))
+      ]);
 
     for (const model of candidateModels) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          const { output } = await ai.generate({
-            model,
-            prompt,
-            output: { schema: AtomizeGoalOutputSchema }
-          });
+          const { output } = await withTimeout(
+            ai.generate({
+              model,
+              prompt,
+              output: { schema: AtomizeGoalOutputSchema }
+            }),
+            75000,
+            `Model ${model} request timed out after 75s`
+          );
           if (output) return { ...output, tasks: output.tasks.map((task, index) => ({ ...task,
             dependencyIndexes: [...new Set(task.dependencyIndexes || [])].filter((dependency) => dependency >= 0 && dependency < index)
           })) };
@@ -84,7 +95,7 @@ Guidelines:
           if (errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("Quota")) {
             await delay(1500 * attempt);
           } else {
-            // Non-transient error for this model (e.g. 404 or unsupported), skip to next model
+            // Non-transient error or timeout for this model, skip to next candidate model
             break;
           }
         }
@@ -172,25 +183,36 @@ Requirements:
 5. Calculate a realistic AI Match Score between 75% and 98%.
 `;
 
-    const candidateModels = [
+    const primaryModel = process.env.GEMINI_MODEL?.trim() || "googleai/gemini-3.8-flash";
+    const candidateModels = Array.from(new Set([
+      primaryModel,
+      "googleai/gemini-3.8-flash",
+      "googleai/gemini-3.7-flash",
       "googleai/gemini-3.6-flash",
       "googleai/gemini-3.5-flash",
-      "googleai/gemini-3.5-flash-lite",
-      "googleai/gemini-3.7-flash",
-      "googleai/gemini-flash-latest"
-    ];
+      "googleai/gemini-3.5-flash-lite"
+    ]));
 
     let lastError: unknown = null;
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const withTimeout = <T>(promise: Promise<T>, ms: number, errMsg: string): Promise<T> =>
+      Promise.race([
+        promise,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(errMsg)), ms))
+      ]);
 
     for (const model of candidateModels) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          const { output } = await ai.generate({
-            model,
-            prompt,
-            output: { schema: RerollSubtaskOutputSchema }
-          });
+          const { output } = await withTimeout(
+            ai.generate({
+              model,
+              prompt,
+              output: { schema: RerollSubtaskOutputSchema }
+            }),
+            60000,
+            `Model ${model} re-roll timed out after 60s`
+          );
           if (output) return output;
         } catch (err) {
           lastError = err;

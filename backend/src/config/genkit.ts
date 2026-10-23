@@ -18,7 +18,7 @@ if (!apiKey) {
 }
 
 const rawModel = process.env.GEMINI_MODEL?.trim();
-const modelName = rawModel && !rawModel.includes("1.5") && !rawModel.includes("2.0") && !rawModel.includes("2.5") ? rawModel : "googleai/gemini-3.6-flash";
+const modelName = rawModel && !rawModel.includes("1.5") && !rawModel.includes("2.0") && !rawModel.includes("2.5") ? rawModel : "googleai/gemini-3.8-flash";
 
 export const ai = genkit({
   plugins: [googleAI({ apiKey })],

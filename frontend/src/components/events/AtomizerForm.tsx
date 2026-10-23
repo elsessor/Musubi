@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, Loader2, SlidersHorizontal, Zap } from "lucide-react";
+import { Check, ChevronDown, Clock, Hourglass, Loader2, SlidersHorizontal, Sparkles, Zap } from "lucide-react";
 import { useEffect, useRef, useState, type SetStateAction } from "react";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
@@ -221,6 +221,38 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
   // Manage Statuses Modal State
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!isAtomizing) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isAtomizing]);
+
+  function formatElapsed(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  }
+
+  function getGenerationStep(seconds: number): string {
+    if (seconds < 25) {
+      return "Analyzing event goals and decomposing into operational milestones...";
+    } else if (seconds < 60) {
+      return "Drafting actionable task descriptions and suggested assignees...";
+    } else if (seconds < 100) {
+      return "Evaluating prerequisite dependencies and assigning priority levels...";
+    } else if (seconds < 140) {
+      return "Calculating skill requirements and matching organization members...";
+    } else {
+      return "Finalizing structured task breakdown and review board...";
+    }
+  }
 
   const targetEvent = isCreateFromDescription ? undefined : events.find((event) => event.id === selectedEventId);
   useEffect(() => {
@@ -498,15 +530,74 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           <textarea
             value={goalDescription}
             onChange={(e) => setGoalDescription(e.target.value)}
+            disabled={isAtomizing}
             placeholder='e.g. "Organize a campus-wide culture week celebration across all departments"'
             rows={4}
-            className="w-full resize-none rounded-2xl border border-slate-200/60 bg-[#F0F4F8] p-4 text-sm text-slate-700 placeholder:text-slate-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="w-full resize-none rounded-2xl border border-slate-200/60 bg-[#F0F4F8] p-4 text-sm text-slate-700 placeholder:text-slate-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
 
         {errorMsg && (
           <div className="mt-3 rounded-2xl bg-rose-50 p-4 text-xs font-semibold text-rose-600 border border-rose-200">
             {errorMsg}
+          </div>
+        )}
+
+        {/* Loading Message & Expectation Banner */}
+        {isAtomizing && (
+          <div className="mt-5 rounded-2xl border border-blue-200/90 bg-gradient-to-br from-blue-50/90 via-sky-50/60 to-indigo-50/70 p-4 sm:p-5 shadow-xs animate-in fade-in duration-200">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
+                <Loader2 className="size-5 animate-spin" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-900">
+                      AI Task Atomizer in Progress
+                    </h4>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-100/90 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200/60">
+                      <Sparkles className="size-3" />
+                      Generating Subtasks
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-lg border border-blue-200/80 bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs">
+                    <Clock className="size-3.5 text-blue-600" />
+                    <span>Elapsed: {formatElapsed(elapsedSeconds)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-2.5 rounded-xl border border-blue-100/90 bg-white/80 p-3.5 text-xs leading-relaxed text-slate-700 backdrop-blur-xs">
+                  <p className="font-semibold text-slate-800">
+                    <span className="text-blue-700">Please note:</span> Task generation may take approximately <span className="text-blue-700 font-bold">2–3 minutes</span> to complete.
+                  </p>
+                  <p className="mt-1 text-slate-600 text-[11px] leading-normal">
+                    The AI model is thoroughly decomposing the macro-goal, generating actionable descriptions, calculating prerequisite dependencies, and matching assignees based on committee skillsets. Please keep this page open while processing.
+                  </p>
+                </div>
+
+                {/* Live Progress Bar & Step Tracker */}
+                <div className="mt-3.5 space-y-1.5">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-blue-200/60">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 transition-all duration-700 ease-out"
+                      style={{
+                        width: `${Math.min(96, Math.max(8, Math.round((elapsedSeconds / 160) * 100)))}%`
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-1.5 font-medium text-blue-800 truncate">
+                      <span className="size-1.5 rounded-full bg-blue-500 animate-ping shrink-0" />
+                      <span className="truncate">{getGenerationStep(elapsedSeconds)}</span>
+                    </span>
+                    <span className="shrink-0 font-semibold text-slate-500 ml-2">
+                      Est. ~2–3 mins
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -523,7 +614,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
             ) : (
               <Zap size={16} className="shrink-0" />
             )}
-            {isAtomizing ? "Atomizing with Genkit..." : "Atomize Event with AI"}
+            {isAtomizing ? "Generating Tasks (~2–3 mins)..." : "Atomize Event with AI"}
           </button>
         </div>
       </div>
