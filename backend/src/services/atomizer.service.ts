@@ -52,14 +52,14 @@ Guidelines:
 6. Order prerequisites before dependent tasks. For each task, include dependencyIndexes with the zero-based indexes of only the earlier tasks that truly must be completed first. Use [] for independent tasks. Allow parallel work; do not make every task depend on the previous task.
 `;
 
-    const primaryModel = process.env.GEMINI_MODEL?.trim() || "googleai/gemini-3.8-flash";
+    const primaryModel = process.env.GEMINI_MODEL?.trim() || "googleai/gemini-3.6-flash";
     const candidateModels = Array.from(new Set([
       primaryModel,
-      "googleai/gemini-3.8-flash",
-      "googleai/gemini-3.7-flash",
       "googleai/gemini-3.6-flash",
       "googleai/gemini-3.5-flash",
-      "googleai/gemini-3.5-flash-lite"
+      "googleai/gemini-3.5-flash-lite",
+      "googleai/gemini-3.8-flash",
+      "googleai/gemini-3.7-flash"
     ]));
 
     let lastError: unknown = null;
@@ -183,14 +183,14 @@ Requirements:
 5. Calculate a realistic AI Match Score between 75% and 98%.
 `;
 
-    const primaryModel = process.env.GEMINI_MODEL?.trim() || "googleai/gemini-3.8-flash";
+    const primaryModel = process.env.GEMINI_MODEL?.trim() || "googleai/gemini-3.6-flash";
     const candidateModels = Array.from(new Set([
       primaryModel,
-      "googleai/gemini-3.8-flash",
-      "googleai/gemini-3.7-flash",
       "googleai/gemini-3.6-flash",
       "googleai/gemini-3.5-flash",
-      "googleai/gemini-3.5-flash-lite"
+      "googleai/gemini-3.5-flash-lite",
+      "googleai/gemini-3.8-flash",
+      "googleai/gemini-3.7-flash"
     ]));
 
     let lastError: unknown = null;

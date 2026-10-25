@@ -221,18 +221,22 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
   // Manage Statuses Modal State
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [isLocalGenerating, setIsLocalGenerating] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  const isAtomizingActive = isLocalGenerating || isAtomizing;
+
   useEffect(() => {
-    if (!isAtomizing) {
+    if (!isAtomizingActive) {
       setElapsedSeconds(0);
       return;
     }
+    setElapsedSeconds(0);
     const interval = setInterval(() => {
       setElapsedSeconds((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [isAtomizing]);
+  }, [isAtomizingActive]);
 
   function formatElapsed(seconds: number): string {
     const mins = Math.floor(seconds / 60);
@@ -287,12 +291,13 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   }
 
   async function handleAtomize() {
-    if (isAtomizing || !goalDescription.trim()) return;
+    if (isAtomizingActive || !goalDescription.trim()) return;
     if (!firebaseUser) {
       setErrorMsg("Your session has expired. Please sign in again.");
       return;
     }
 
+    setIsLocalGenerating(true);
     setIsAtomizing(true);
     setErrorMsg("");
 
@@ -362,6 +367,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         setErrorMsg(rawMsg);
       }
     } finally {
+      setIsLocalGenerating(false);
       setIsAtomizing(false);
     }
   }
@@ -530,7 +536,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           <textarea
             value={goalDescription}
             onChange={(e) => setGoalDescription(e.target.value)}
-            disabled={isAtomizing}
+            disabled={isAtomizingActive}
             placeholder='e.g. "Organize a campus-wide culture week celebration across all departments"'
             rows={4}
             className="w-full resize-none rounded-2xl border border-slate-200/60 bg-[#F0F4F8] p-4 text-sm text-slate-700 placeholder:text-slate-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -544,7 +550,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         )}
 
         {/* Loading Message & Expectation Banner */}
-        {isAtomizing && (
+        {isAtomizingActive && (
           <div className="mt-5 rounded-2xl border border-blue-200/90 bg-gradient-to-br from-blue-50/90 via-sky-50/60 to-indigo-50/70 p-4 sm:p-5 shadow-xs animate-in fade-in duration-200">
             <div className="flex items-start gap-3.5">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
@@ -606,15 +612,17 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           <button
             type="button"
             onClick={handleAtomize}
-            disabled={isAtomizing || !goalDescription.trim()}
+            disabled={isAtomizingActive || !goalDescription.trim()}
             className="flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-blue-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-5"
           >
-            {isAtomizing ? (
+            {isAtomizingActive ? (
               <Loader2 size={16} className="shrink-0 animate-spin" />
             ) : (
               <Zap size={16} className="shrink-0" />
             )}
-            {isAtomizing ? "Generating Tasks (~2–3 mins)..." : "Atomize Event with AI"}
+            {isAtomizingActive
+              ? `Generating Tasks (${formatElapsed(elapsedSeconds)} · Est. 2–3 mins)...`
+              : "Atomize Event with AI"}
           </button>
         </div>
       </div>
