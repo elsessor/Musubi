@@ -64,12 +64,14 @@ export function TopHeader({
 
   function readNotification(id: string) {
     setNotifications((items) => items.map((item) => item.id === id ? { ...item, unread: false } : item));
+    setLiveUnreadCount((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
     void markNotificationAsRead(firebaseUser, id);
   }
 
   function readAllNotifications() {
     const ids = notifications.filter((item) => item.unread).map((item) => item.id);
     setNotifications((items) => items.map((item) => ({ ...item, unread: false })));
+    setLiveUnreadCount(0);
     void markAllNotificationsAsRead(firebaseUser, ids);
   }
 

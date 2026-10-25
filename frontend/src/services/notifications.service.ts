@@ -26,23 +26,84 @@ export type NotificationRecord = {
 };
 
 const READ_NOTIFS_STORAGE_KEY = "musubi_read_notifications";
+const ALL_READ_TIMESTAMP_KEY = "musubi_all_read_timestamp";
+const NOTIF_READ_EVENT = "musubi_notif_read_change";
 
-function getReadNotifIdsFromStorage(): string[] {
+// In-memory registry of all notification IDs seen across all subscriptions in the current session
+const allKnownNotifIds = new Set<string>();
+
+// Active subscriber callbacks across the entire app
+const subscribers = new Set<() => void>();
+
+export function notifyNotifSubscribers(): void {
+  subscribers.forEach((cb) => {
+    try {
+      cb();
+    } catch (e) {
+      console.warn("[notifications] Error in subscriber callback:", e);
+    }
+  });
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(new CustomEvent(NOTIF_READ_EVENT));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function getStorageKey(uid?: string | null): string {
+  return uid ? `${READ_NOTIFS_STORAGE_KEY}_${uid}` : READ_NOTIFS_STORAGE_KEY;
+}
+
+function getTimestampKey(uid?: string | null): string {
+  return uid ? `${ALL_READ_TIMESTAMP_KEY}_${uid}` : ALL_READ_TIMESTAMP_KEY;
+}
+
+function getReadNotifIdsFromStorage(uid?: string | null): string[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(READ_NOTIFS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const key = getStorageKey(uid);
+    const raw = localStorage.getItem(key);
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    if (key !== READ_NOTIFS_STORAGE_KEY) {
+      const globalRaw = localStorage.getItem(READ_NOTIFS_STORAGE_KEY);
+      if (globalRaw) {
+        const globalList: string[] = JSON.parse(globalRaw);
+        list.push(...globalList);
+      }
+    }
+    return Array.from(new Set(list));
   } catch {
     return [];
   }
 }
 
-function addReadNotifIdToStorage(id: string): void {
-  if (typeof window === "undefined") return;
+function getAllReadTimestamp(uid?: string | null): number {
+  if (typeof window === "undefined") return 0;
   try {
-    const current = getReadNotifIdsFromStorage();
+    const key = getTimestampKey(uid);
+    const raw = localStorage.getItem(key);
+    let val = raw ? parseInt(raw, 10) || 0 : 0;
+    if (key !== ALL_READ_TIMESTAMP_KEY) {
+      const globalRaw = localStorage.getItem(ALL_READ_TIMESTAMP_KEY);
+      const globalVal = globalRaw ? parseInt(globalRaw, 10) || 0 : 0;
+      val = Math.max(val, globalVal);
+    }
+    return val;
+  } catch {
+    return 0;
+  }
+}
+
+function addReadNotifIdToStorage(id: string, uid?: string | null): void {
+  if (typeof window === "undefined" || !id) return;
+  try {
+    const key = getStorageKey(uid);
+    const current = getReadNotifIdsFromStorage(uid);
     if (!current.includes(id)) {
       current.push(id);
+      localStorage.setItem(key, JSON.stringify(current));
       localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(current));
     }
   } catch {
@@ -50,12 +111,25 @@ function addReadNotifIdToStorage(id: string): void {
   }
 }
 
-function addMultipleReadNotifIdsToStorage(ids: string[]): void {
+function addMultipleReadNotifIdsToStorage(ids: string[], uid?: string | null): void {
+  if (typeof window === "undefined" || !ids || ids.length === 0) return;
+  try {
+    const key = getStorageKey(uid);
+    const current = getReadNotifIdsFromStorage(uid);
+    const updated = Array.from(new Set([...current, ...ids]));
+    localStorage.setItem(key, JSON.stringify(updated));
+    localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function setAllReadTimestamp(ts: number, uid?: string | null): void {
   if (typeof window === "undefined") return;
   try {
-    const current = getReadNotifIdsFromStorage();
-    const updated = Array.from(new Set([...current, ...ids]));
-    localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(updated));
+    const key = getTimestampKey(uid);
+    localStorage.setItem(key, String(ts));
+    localStorage.setItem(ALL_READ_TIMESTAMP_KEY, String(ts));
   } catch {
     // ignore storage errors
   }
@@ -104,25 +178,38 @@ export function subscribeNotificationsFirestore(
   let eventNotifs: NotificationRecord[] = [];
 
   function emitMerged() {
-    const readStorage = getReadNotifIdsFromStorage();
+    const readStorage = getReadNotifIdsFromStorage(user?.uid);
+    const allReadAt = getAllReadTimestamp(user?.uid);
     const map = new Map<string, NotificationRecord>();
+
+    const checkIsRead = (id: string, createdAt?: string | null, explicitlyRead?: boolean) => {
+      if (explicitlyRead) return true;
+      if (readStorage.includes(id)) return true;
+      if (allReadAt > 0 && createdAt) {
+        const itemTime = new Date(createdAt).getTime();
+        if (!isNaN(itemTime) && itemTime <= allReadAt) {
+          return true;
+        }
+      }
+      return false;
+    };
 
     // 1. Real-time Announcements
     announcementNotifs.forEach((item) => {
-      const isRead = readStorage.includes(item.id);
+      const isRead = checkIsRead(item.id, item.createdAt);
       map.set(item.id, { ...item, unread: !isRead });
     });
 
     // 2. Direct Notifications
     directNotifs.forEach((item) => {
-      const isRead = !item.unread || readStorage.includes(item.id);
+      const isRead = checkIsRead(item.id, item.createdAt, !item.unread);
       map.set(item.id, { ...item, unread: !isRead });
     });
 
     // 3. Event Nudges & Subtasks
     eventNotifs.forEach((item) => {
       if (!map.has(item.id)) {
-        const isRead = !item.unread || readStorage.includes(item.id);
+        const isRead = checkIsRead(item.id, item.createdAt, !item.unread);
         map.set(item.id, { ...item, unread: !isRead });
       }
     });
@@ -130,12 +217,17 @@ export function subscribeNotificationsFirestore(
     // 4. Audit Logs
     auditNotifs.forEach((item) => {
       if (!map.has(item.id)) {
-        const isRead = !item.unread || readStorage.includes(item.id);
+        const isRead = checkIsRead(item.id, item.createdAt, !item.unread);
         map.set(item.id, { ...item, unread: !isRead });
       }
     });
 
     const merged = Array.from(map.values());
+
+    // Register all seen notification IDs
+    merged.forEach((item) => {
+      allKnownNotifIds.add(item.id);
+    });
 
     // Deduplicate merged array by type + title + description to eliminate duplicate notifications
     const dedupMap = new Map<string, NotificationRecord>();
@@ -162,6 +254,18 @@ export function subscribeNotificationsFirestore(
     });
 
     onData(finalMerged);
+  }
+
+  // Register into active subscribers
+  subscribers.add(emitMerged);
+
+  const handleGlobalReadChange = () => {
+    emitMerged();
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener(NOTIF_READ_EVENT, handleGlobalReadChange);
+    window.addEventListener("storage", handleGlobalReadChange);
   }
 
   // Initial immediate emit
@@ -376,6 +480,11 @@ export function subscribeNotificationsFirestore(
   );
 
   return () => {
+    subscribers.delete(emitMerged);
+    if (typeof window !== "undefined") {
+      window.removeEventListener(NOTIF_READ_EVENT, handleGlobalReadChange);
+      window.removeEventListener("storage", handleGlobalReadChange);
+    }
     unsubAnnouncements();
     unsubEvents();
     unsubNotifs();
@@ -384,14 +493,17 @@ export function subscribeNotificationsFirestore(
 }
 
 export async function markNotificationAsRead(user: User | null, notificationId: string): Promise<void> {
-  addReadNotifIdToStorage(notificationId);
-  if (!user || !notificationId || notificationId.startsWith("audit_") || notificationId.startsWith("event_") || notificationId.startsWith("announcement_")) return;
+  const authUser = user || useAuthStore.getState().firebaseUser;
+  addReadNotifIdToStorage(notificationId, authUser?.uid);
+  notifyNotifSubscribers();
+
+  if (!authUser || !notificationId || notificationId.startsWith("audit_") || notificationId.startsWith("event_") || notificationId.startsWith("announcement_")) return;
 
   try {
     const db = getFirebaseDb();
     const docRef = doc(db, "notifications", notificationId);
     await updateDoc(docRef, {
-      readBy: arrayUnion(user.uid),
+      readBy: arrayUnion(authUser.uid),
       read: true
     });
   } catch (err) {
@@ -399,11 +511,31 @@ export async function markNotificationAsRead(user: User | null, notificationId: 
   }
 }
 
-export async function markAllNotificationsAsRead(user: User | null, notificationIds: string[]): Promise<void> {
-  addMultipleReadNotifIdsToStorage(notificationIds);
-  const directIds = notificationIds.filter((id) => !id.startsWith("audit_") && !id.startsWith("event_") && !id.startsWith("announcement_"));
-  if (user && directIds.length > 0) {
-    await Promise.all(directIds.map((id) => markNotificationAsRead(user, id)));
+export async function markAllNotificationsAsRead(user: User | null, notificationIds?: string[]): Promise<void> {
+  const authUser = user || useAuthStore.getState().firebaseUser;
+  const now = Date.now();
+  setAllReadTimestamp(now, authUser?.uid);
+
+  const allIds = Array.from(new Set([...(notificationIds || []), ...allKnownNotifIds]));
+  addMultipleReadNotifIdsToStorage(allIds, authUser?.uid);
+  notifyNotifSubscribers();
+
+  const directIds = allIds.filter((id) => !id.startsWith("audit_") && !id.startsWith("event_") && !id.startsWith("announcement_"));
+  if (authUser && directIds.length > 0) {
+    await Promise.all(
+      directIds.map(async (id) => {
+        try {
+          const db = getFirebaseDb();
+          const docRef = doc(db, "notifications", id);
+          await updateDoc(docRef, {
+            readBy: arrayUnion(authUser.uid),
+            read: true
+          });
+        } catch (err) {
+          console.warn("Failed to mark notification as read in Firestore:", err);
+        }
+      })
+    );
   }
 }
 
