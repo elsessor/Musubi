@@ -10,6 +10,7 @@ import {
   Edit3,
   LayoutGrid,
   Plus,
+  Repeat,
   Rows,
   Search,
   SlidersHorizontal,
@@ -22,6 +23,7 @@ import type { Event, EventStatus, Task, TaskPriority, TaskStatus } from "./types
 import type { OrganizationMember } from "@/services/auth.service";
 import { AddTaskModal, mapOrgMemberToItem, type OrgMemberItem } from "./AddTaskModal";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
+import { TaskReuseModal } from "./TaskReuseModal";
 import { EditEventModal } from "./EditEventModal";
 import { KanbanColumn } from "./KanbanColumn";
 import { ReassignTaskModal } from "./ReassignTaskModal";
@@ -57,6 +59,7 @@ const VIEW_MODES: { mode: ViewMode; title: string; icon: React.ComponentType<{ s
 
 type KanbanBoardProps = {
   event: Event;
+  allEvents?: Event[];
   members?: OrganizationMember[];
   onBack: () => void;
   onUpdateEvent?: (updatedEvent: Event) => void;
@@ -67,6 +70,7 @@ type KanbanBoardProps = {
 
 export function KanbanBoard({
   event,
+  allEvents = [],
   onBack,
   onUpdateEvent,
   onArchiveEvent,
@@ -117,6 +121,7 @@ export function KanbanBoard({
 
   // Modals state
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [showTaskReuseModal, setShowTaskReuseModal] = useState(false);
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
   const [ratingTaskTarget, setRatingTaskTarget] = useState<Task | null>(null);
@@ -330,6 +335,52 @@ export function KanbanBoard({
       throw error;
     }
     setShowAddTaskModal(false);
+  }
+
+  async function handleReuseTasks(importedTasks: Task[]) {
+    if (!importedTasks.length) return;
+
+    const updatedTasks = [...tasks, ...importedTasks];
+    const newActiveTasks = updatedTasks.filter((t) => !isTaskArchived(t));
+    const completedCount = newActiveTasks.filter((t) => t.status === "Completed" || t.status === "Done").length;
+    const progress = newActiveTasks.length ? Math.round((completedCount / newActiveTasks.length) * 100) : 0;
+    const newMemberCount = getEventMemberCount(updatedTasks);
+
+    const updatedEvent: Event = {
+      ...currentEvent,
+      tasks: updatedTasks,
+      progress,
+      memberCount: newMemberCount
+    };
+
+    // Immediate optimistic local update for real-time reactivity
+    setTasks(updatedTasks);
+    setCurrentEvent(updatedEvent);
+    if (onUpdateEvent) onUpdateEvent(updatedEvent);
+
+    try {
+      await updateEventFirestore(firebaseUser, currentEvent.id, {
+        tasks: updatedTasks,
+        progress,
+        memberCount: newMemberCount
+      });
+      showToast({
+        title: "Tasks Reused in Real-time",
+        description: `Successfully imported ${importedTasks.length} ${importedTasks.length === 1 ? "task" : "tasks"}.`,
+        tone: "success"
+      });
+    } catch (err) {
+      console.error("Failed to save reused tasks in Firestore:", err);
+      // Revert if write fails
+      setTasks(tasks);
+      setCurrentEvent(currentEvent);
+      if (onUpdateEvent) onUpdateEvent(currentEvent);
+      showToast({
+        title: "Failed to Import Tasks",
+        description: err instanceof Error ? err.message : "Unable to reuse tasks.",
+        tone: "error"
+      });
+    }
   }
 
   function handleReassignConfirm(taskId: string, newAssignee: OrgMemberItem) {
@@ -610,7 +661,22 @@ export function KanbanBoard({
           <div className="min-w-0 flex-1">
             <CustomSelect value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[{ value: "grid", label: "Grid" }, { value: "table", label: "Table" }, { value: "expanded", label: "Expandable list" }, { value: "kanban", label: "Kanban" }, { value: "calendar", label: "Calendar" }]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11" portal />
           </div>
-          {isLeader && <button type="button" onClick={() => setShowAddTaskModal(true)} className="flex min-h-11 items-center gap-1 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white"><Plus size={16} /> Task</button>}
+          {isLeader && currentEvent.status !== "Archived" && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowTaskReuseModal(true)}
+                className="flex min-h-11 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700"
+                title="Reuse tasks from a previous event"
+              >
+                <Repeat size={13} className="text-blue-600" />
+                <span>Reuse</span>
+              </button>
+              <button type="button" onClick={() => setShowAddTaskModal(true)} className="flex min-h-11 items-center gap-1 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white">
+                <Plus size={16} /> Task
+              </button>
+            </div>
+          )}
         </div>
         <div className="relative">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -745,14 +811,27 @@ export function KanbanBoard({
             ))}
           </div>
 
-          {isLeader && currentEvent.status !== "Archived" ? <button
-            type="button"
-            onClick={() => setShowAddTaskModal(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={14} />
-            Add Task
-          </button> : null}
+          {isLeader && currentEvent.status !== "Archived" ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowTaskReuseModal(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                title="Reuse tasks from a previous event"
+              >
+                <Repeat size={13} className="text-blue-600" />
+                <span>Reuse Tasks</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddTaskModal(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition-colors"
+              >
+                <Plus size={14} />
+                <span>Add Task</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -938,6 +1017,18 @@ export function KanbanBoard({
           customStatuses={customStatuses}
           statusOrder={statusOrder}
           roster={realRoster}
+        />
+      )}
+
+      {/* Reuse Tasks from Previous Event Modal */}
+      {isLeader && showTaskReuseModal && (
+        <TaskReuseModal
+          isOpen={showTaskReuseModal}
+          onClose={() => setShowTaskReuseModal(false)}
+          targetEvent={currentEvent}
+          allEvents={allEvents}
+          members={members}
+          onReuseTasks={handleReuseTasks}
         />
       )}
 

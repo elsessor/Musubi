@@ -19,6 +19,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { createEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
 import { getOrganizationCommittees, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
+import { prepareTasksForReuse } from "@/utils/taskReuse";
 
 type Tab = "events" | "atomizer";
 
@@ -68,6 +69,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [committee, setCommittee] = useState("");
+  const [seedEventId, setSeedEventId] = useState("");
   const [creating, setCreating] = useState(false);
   const [dateError, setDateError] = useState("");
 
@@ -193,6 +195,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
   function handleNewEvent(initialStatus: EventStatus = "Active") {
     setNewEventInitialStatus(initialStatus);
     setCommittee("");
+    setSeedEventId("");
     setDateError("");
     setIsModalOpen(true);
   }
@@ -213,6 +216,17 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
     if (error) return;
     setCreating(true);
     try {
+      let initialTasks: Task[] = [];
+      const sourceEv = seedEventId ? events.find((ev) => ev.id === seedEventId) : null;
+      if (sourceEv && sourceEv.tasks?.length) {
+        initialTasks = prepareTasksForReuse(
+          sourceEv.tasks,
+          sourceEv,
+          { title: title.trim(), startDate: startFormatted, endDate: endFormatted },
+          { shiftDates: true, resetAssignees: true, targetRoster: members }
+        );
+      }
+
       await createEventFirestore(firebaseUser, effectiveOrgId, {
         title: title.trim(),
         description: description.trim(),
@@ -220,17 +234,24 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
         committee: committee.trim(),
         startDate: startFormatted,
         endDate: endFormatted,
-        memberCount: 0,
+        memberCount: getEventMemberCount(initialTasks),
         progress: 0,
-        tasks: []
+        tasks: initialTasks
       });
-      showToast({ title: "Event created", description: `${title.trim()} is ready to manage.`, tone: "success" });
+      showToast({
+        title: initialTasks.length ? "Event created with reused tasks" : "Event created",
+        description: initialTasks.length
+          ? `${title.trim()} created with ${initialTasks.length} tasks ready in real-time.`
+          : `${title.trim()} is ready to manage.`,
+        tone: "success"
+      });
       setIsModalOpen(false);
       setTitle("");
       setDescription("");
       setStartDate("");
       setEndDate("");
       setCommittee("");
+      setSeedEventId("");
     } catch (err) {
       setDateError(err instanceof Error ? err.message : "Unable to create the event. Please try again.");
     } finally {
@@ -267,6 +288,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
         ) : selectedEvent ? (
           <KanbanBoard
             event={selectedEvent}
+            allEvents={events}
             onBack={handleBack}
             onUpdateEvent={handleUpdateEvent}
             onArchiveEvent={handleArchiveSelectedEvent}
@@ -345,6 +367,36 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                 <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">COORDINATING COMMITTEE <span className="font-medium normal-case tracking-normal">(optional)</span></label>
                 <CustomSelect value={committee} onChange={setCommittee} options={[{ value: "", label: "No lead committee (cross-committee)" }, ...committees.map((item) => ({ value: item.name, label: item.name }))]} multiline buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
               </div>
+
+              {/* REUSE TASKS FROM PREVIOUS EVENT */}
+              {events.filter((ev) => (ev.tasks?.length || 0) > 0).length > 0 && (
+                <div className="min-w-0">
+                  <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
+                    REUSE TASKS FROM PREVIOUS EVENT <span className="font-medium normal-case tracking-normal">(optional)</span>
+                  </label>
+                  <CustomSelect
+                    value={seedEventId}
+                    onChange={setSeedEventId}
+                    options={[
+                      { value: "", label: "Start fresh with no tasks" },
+                      ...events
+                        .filter((ev) => (ev.tasks?.length || 0) > 0)
+                        .map((ev) => ({
+                          value: ev.id,
+                          label: `${ev.title} (${ev.tasks.length} tasks)`,
+                          sublabel: ev.startDate || undefined
+                        }))
+                    ]}
+                    multiline
+                    buttonClassName="min-h-11 rounded-xl border-dashed border-blue-200 bg-blue-50/30 text-slate-700"
+                    dropdownClassName="[&_button]:min-h-11"
+                    portal
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400 leading-tight">
+                    Tasks will be automatically shifted to this event&apos;s timeframe and set to &ldquo;To Do&rdquo;.
+                  </p>
+                </div>
+              )}
 
               {/* START DATE & END DATE WITH TIME */}
               <div className="grid grid-cols-2 gap-3">
