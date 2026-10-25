@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type SetStateAction } from "react";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
-import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { getStatusTheme, getTaskStatusDescription, getEventStatusDescription, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 import { atomizeGoal } from "@/services/auth.service";
 import { delegateSubtasksHeuristically, inferSkillsFromTask } from "@/utils/heuristicDelegation";
 import type { OrganizationMember } from "@/services/auth.service";
@@ -65,9 +65,10 @@ function ModernStatusDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all">
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all divide-y divide-slate-100/80">
           {options.map((status) => {
             const badge = getStatusBadge(status);
+            const statusInfo = getTaskStatusDescription(status, customStatuses);
             const isSelected = value === status;
             return (
               <button
@@ -77,19 +78,24 @@ function ModernStatusDropdown({
                   onChange(status as TaskStatus);
                   setIsOpen(false);
                 }}
-                className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm font-semibold transition ${
+                className={`flex w-full items-start justify-between px-3.5 py-2.5 text-left text-sm font-semibold transition ${
                   isSelected
-                    ? `${getStatusTheme(status, customStatuses).badge} font-bold`
+                    ? "bg-blue-50/80 text-blue-900"
                     : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold ${badge.bg}`}>
-                    <span className={`size-1.5 rounded-full ${badge.dot}`} />
-                    {status}
-                  </span>
+                <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold ${badge.bg}`}>
+                      <span className={`size-1.5 rounded-full ${badge.dot}`} />
+                      {status}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-normal text-slate-500 leading-tight">
+                    {statusInfo.description}
+                  </p>
                 </div>
-                {isSelected && <Check className="size-4 text-blue-600" />}
+                {isSelected && <Check className="size-4 shrink-0 text-blue-600 mt-1" />}
               </button>
             );
           })}
@@ -137,7 +143,7 @@ function ModernEventDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all">
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all divide-y divide-slate-100/80">
           <button
             type="button"
             onClick={() => {
@@ -153,6 +159,8 @@ function ModernEventDropdown({
           </button>
           {events.map((ev) => {
             const isSelected = value === ev.id;
+            const evStatus = ev.status || "Planning";
+            const evDesc = getEventStatusDescription(evStatus);
             return (
               <button
                 key={ev.id}
@@ -161,19 +169,24 @@ function ModernEventDropdown({
                   onChange(ev.id);
                   setIsOpen(false);
                 }}
-                className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm transition ${
+                className={`flex w-full items-start justify-between px-3.5 py-2.5 text-left text-sm transition ${
                   isSelected
                     ? "bg-blue-50/80 font-bold text-blue-900"
                     : "text-slate-700 font-semibold hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="truncate">{ev.title}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${getStatusTheme(ev.status, ev.eventCustomStatuses).badge}`}>
-                    {ev.status || "Planning"}
-                  </span>
+                <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="truncate">{ev.title}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${getStatusTheme(evStatus, ev.eventCustomStatuses).badge}`}>
+                      {evStatus}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-normal text-slate-500 leading-tight">
+                    <span className="font-semibold text-slate-600">{evStatus}:</span> {evDesc.description}
+                  </p>
                 </div>
-                {isSelected && <Check className="size-4 shrink-0 text-blue-600" />}
+                {isSelected && <Check className="size-4 shrink-0 text-blue-600 mt-1" />}
               </button>
             );
           })}
@@ -270,8 +283,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
     });
   }, [draftScope, isCreateFromDescription, selectedEventId, targetEvent, updateDraft, workflowSource]);
 
-  function handleAddStatus(name: string, color: StatusThemeColor, insertIndex?: number) {
-    const newConfig: CustomStatusConfig = { name, color };
+  function handleAddStatus(name: string, color: StatusThemeColor, insertIndex?: number, description?: string) {
+    const newConfig: CustomStatusConfig = { name, color, ...(description ? { description } : {}) };
     setCustomStatuses((prev) => [...prev, newConfig]);
     setStatusOrder((prev) => {
       const idx = typeof insertIndex === "number" ? insertIndex : prev.length;

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useId, useState } from "react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
-import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
 import { type OrgMemberItem } from "./AddTaskModal";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
@@ -193,8 +193,15 @@ export function TaskDetailModal({
   }));
   const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
-    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge,
-      disabled: Boolean(getTaskDependencyError(tasks.map((item) => item.id === task.id ? { ...item, status: value, dependsOnTaskIds } : item), tasks)) };
+    const descInfo = getTaskStatusDescription(value, customStatuses);
+    return {
+      value,
+      label: value,
+      description: descInfo.description,
+      indicatorClass: theme.dot,
+      selectedClass: theme.badge,
+      disabled: Boolean(getTaskDependencyError(tasks.map((item) => item.id === task.id ? { ...item, status: value, dependsOnTaskIds } : item), tasks))
+    };
   });
   const selectedAssignee = activeRoster.find((member) => member.id === selectedMemberId);
 

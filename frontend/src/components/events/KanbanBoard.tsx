@@ -197,14 +197,14 @@ export function KanbanBoard({
     });
   }
 
-  function handleAddCustomStatus(statusName: string, color: StatusThemeColor, insertIndex?: number) {
+  function handleAddCustomStatus(statusName: string, color: StatusThemeColor, insertIndex?: number, description?: string) {
     if (
       customStatuses.some((cs) => cs.name.toLowerCase() === statusName.toLowerCase()) ||
       DEFAULT_STATUSES.some((ds) => ds.toLowerCase() === statusName.toLowerCase())
     ) {
       return;
     }
-    const updated = [...customStatuses, { name: statusName, color }];
+    const updated = [...customStatuses, { name: statusName, color, ...(description ? { description } : {}) }];
     setCustomStatuses(updated);
     const updatedOrder = [...statusOrder];
     const idx = typeof insertIndex === "number" ? insertIndex : updatedOrder.length;

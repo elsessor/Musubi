@@ -240,7 +240,7 @@ export function EventsDashboard({
     persistSettings(customStatuses, newOrder);
   }
 
-  function handleAddCustomStatus(statusName: string, color: StatusThemeColor, insertIndex?: number) {
+  function handleAddCustomStatus(statusName: string, color: StatusThemeColor, insertIndex?: number, description?: string) {
     if (!isLeader || !settingsReady) return;
     if (
       customStatuses.some((cs) => cs.name.toLowerCase() === statusName.toLowerCase()) ||
@@ -248,7 +248,7 @@ export function EventsDashboard({
     ) {
       return;
     }
-    const updated = [...customStatuses, { name: statusName, color }];
+    const updated = [...customStatuses, { name: statusName, color, ...(description ? { description } : {}) }];
     setCustomStatuses(updated);
     const updatedOrder = [...statusOrder];
     const idx = typeof insertIndex === "number" ? insertIndex : updatedOrder.length;

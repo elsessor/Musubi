@@ -4,7 +4,7 @@ import { Calendar, CheckCircle2, ShieldAlert, Sparkles, ChevronDown, Check } fro
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { OverdueBadge } from "./overdue";
 import { useState } from "react";
-import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
 import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
@@ -138,6 +138,7 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
                   {canEditStatus(task) ? (
                   <button
                     type="button"
+                    title={`${task.status}: ${getTaskStatusDescription(task.status, customStatuses).description}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setOpenPriorityDropdownId(null);
@@ -149,15 +150,16 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
                     {task.status}
                     <ChevronDown size={12} className="opacity-60" />
                   </button>
-                  ) : <span onClick={(event) => event.stopPropagation()} className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold ${theme.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />{task.status}</span>}
+                  ) : <span onClick={(event) => event.stopPropagation()} title={`${task.status}: ${getTaskStatusDescription(task.status, customStatuses).description}`} className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold ${theme.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />{task.status}</span>}
 
                   {canEditStatus(task) && openDropdownId === task.id && (
                     <div
-                      className="absolute right-0 top-full z-30 mt-1.5 max-h-56 w-40 space-y-0.5 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 animate-in fade-in duration-100"
+                      className="absolute right-0 top-full z-30 mt-1.5 max-h-60 w-56 space-y-0.5 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 animate-in fade-in duration-100"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {allStatuses.map((st) => {
                         const stTheme = getStatusTheme(st, customStatuses);
+                        const stDesc = getTaskStatusDescription(st, customStatuses);
                         return (
                           <button
                             key={st}
@@ -168,13 +170,20 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
                               if (canEditStatus(task) && !isBlockedTaskStatus(task, st)) onUpdateStatus(task.id, st);
                               setOpenDropdownId(null);
                             }}
-                            className={`flex min-w-0 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                            className={`flex min-w-0 w-full items-start justify-between rounded-lg px-2.5 py-2 text-xs font-medium text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                               task.status === st ? `${stTheme.badge} font-semibold ring-1 ring-inset` : "text-slate-700 hover:bg-slate-50"
                             }`}
                           >
-                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${stTheme.dot}`} />
-                            <span className="min-w-0 flex-1 break-words">{st}</span>
-                            {task.status === st && <Check size={12} className="shrink-0 text-current" />}
+                            <div className="flex flex-col min-w-0 pr-1">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${stTheme.dot}`} />
+                                <span className="min-w-0 break-words font-semibold">{st}</span>
+                              </div>
+                              <p className="mt-0.5 text-[10px] text-slate-500 font-normal leading-tight">
+                                {stDesc.description}
+                              </p>
+                            </div>
+                            {task.status === st && <Check size={12} className="shrink-0 text-current mt-0.5" />}
                           </button>
                         );
                       })}

@@ -6,7 +6,7 @@ import { Plus, Shield, X } from "lucide-react";
 import { useState } from "react";
 import type { Nudge, Task, TaskPriority, TaskStatus } from "./types";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
-import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
 import type { OrganizationMember } from "@/services/auth.service";
 import { CustomSelect, type CustomSelectOption } from "@/components/ui/CustomSelect";
 import { ALL_PRIORITIES, PRIORITY_CONFIG } from "./priorityUtils";
@@ -109,8 +109,15 @@ export function AddTaskModal({
   const committeeOptions = committees.map((c) => c.name);
   const statusOptions: CustomSelectOption[] = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
-    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge,
-      disabled: Boolean(getTaskDependencyError([...tasks, { id: taskId, status: value, dependsOnTaskIds }], tasks)) };
+    const descInfo = getTaskStatusDescription(value, customStatuses);
+    return {
+      value,
+      label: value,
+      description: descInfo.description,
+      indicatorClass: theme.dot,
+      selectedClass: theme.badge,
+      disabled: Boolean(getTaskDependencyError([...tasks, { id: taskId, status: value, dependsOnTaskIds }], tasks))
+    };
   });
   const priorityOptions: CustomSelectOption[] = ALL_PRIORITIES.map((value) => ({
     value,
