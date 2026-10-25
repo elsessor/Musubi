@@ -388,7 +388,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                         }))
                     ]}
                     multiline
-                    buttonClassName="min-h-11 rounded-xl border-dashed border-blue-200 bg-blue-50/30 text-slate-700"
+                    buttonClassName="min-h-11 rounded-xl"
                     dropdownClassName="[&_button]:min-h-11"
                     portal
                   />

@@ -1,8 +1,9 @@
 "use client";
 
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, X } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronDown, ChevronLeft, ChevronRight, Clock, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { cn } from "@/components/ui/utils";
 
 type MiniCalendarPickerProps = {
   value: string;
@@ -113,6 +114,10 @@ export function MiniCalendarPicker({
   const [selectedHour, setSelectedHour] = useState(parsedInfo.hour);
   const [selectedMinute, setSelectedMinute] = useState(parsedInfo.minute);
   const [selectedAmPm, setSelectedAmPm] = useState<"AM" | "PM">(parsedInfo.ampm);
+  const [openTimeMenu, setOpenTimeMenu] = useState<"hour" | "minute" | null>(null);
+  const timeSelectorRef = useRef<HTMLDivElement>(null);
+  const hourListRef = useRef<HTMLDivElement>(null);
+  const minuteListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const info = parseDate(value);
@@ -123,6 +128,35 @@ export function MiniCalendarPicker({
     setSelectedMinute(info.minute);
     setSelectedAmPm(info.ampm);
   }, [value]);
+
+  // Close time dropdown if clicking outside of the time selector
+  useEffect(() => {
+    if (!openTimeMenu) return;
+
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (timeSelectorRef.current && !timeSelectorRef.current.contains(e.target as Node)) {
+        setOpenTimeMenu(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [openTimeMenu]);
+
+  // Auto-scroll to selected item when hour or minute dropdown opens
+  useEffect(() => {
+    if (openTimeMenu === "hour" && hourListRef.current) {
+      const activeEl = hourListRef.current.querySelector<HTMLElement>('[data-active="true"]');
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: "center" });
+      }
+    } else if (openTimeMenu === "minute" && minuteListRef.current) {
+      const activeEl = minuteListRef.current.querySelector<HTMLElement>('[data-active="true"]');
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: "center" });
+      }
+    }
+  }, [openTimeMenu]);
 
   // Recalculate floating position
   const updatePosition = () => {
@@ -150,6 +184,7 @@ export function MiniCalendarPicker({
       setIsOpen(true);
     } else {
       setIsOpen(false);
+      setOpenTimeMenu(null);
     }
   };
 
@@ -189,6 +224,7 @@ export function MiniCalendarPicker({
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
 
   function prevMonth() {
+    setOpenTimeMenu(null);
     const previousMonth = new Date(viewYear, viewMonth - 1, 1);
     if (earliestDate && previousMonth < new Date(earliestDate.getFullYear(), earliestDate.getMonth(), 1)) return;
     if (viewMonth === 0) {
@@ -200,6 +236,7 @@ export function MiniCalendarPicker({
   }
 
   function nextMonth() {
+    setOpenTimeMenu(null);
     const next = new Date(viewYear, viewMonth + 1, 1);
     if (latestDate && next > new Date(latestDate.getFullYear(), latestDate.getMonth(), 1)) return;
     if (viewMonth === 11) {
@@ -235,6 +272,7 @@ export function MiniCalendarPicker({
   }
 
   function handleSelectDay(day: number) {
+    setOpenTimeMenu(null);
     if (isOutsideRange(new Date(viewYear, viewMonth, day))) return;
     setSelectedDay(day);
     formatAndEmit(day);
@@ -244,6 +282,7 @@ export function MiniCalendarPicker({
   }
 
   function handleSelectToday() {
+    setOpenTimeMenu(null);
     const today = new Date();
     if (isOutsideRange(new Date(today.getFullYear(), today.getMonth(), today.getDate()))) return;
     setViewYear(today.getFullYear());
@@ -373,45 +412,120 @@ export function MiniCalendarPicker({
                     <Clock size={12} className="text-blue-500" /> Time Selection
                   </span>
                 </div>
-                <div className="flex items-center justify-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200/80">
-                  {/* Hours dropdown */}
-                  <select
-                    value={selectedHour}
-                    onChange={(e) => {
-                      const h = parseInt(e.target.value, 10);
-                      setSelectedHour(h);
-                      formatAndEmit(selectedDay, h, selectedMinute, selectedAmPm);
-                    }}
-                    className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none focus:border-blue-500"
-                  >
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
-                      <option key={h} value={h}>
-                        {String(h).padStart(2, "0")}
-                      </option>
-                    ))}
-                  </select>
+                <div
+                  ref={timeSelectorRef}
+                  className="relative flex items-center justify-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200/80"
+                >
+                  {/* Hours custom dropdown */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenTimeMenu((curr) => (curr === "hour" ? null : "hour"))}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-slate-800 border transition shadow-2xs hover:border-blue-400 hover:bg-slate-50 focus:outline-none cursor-pointer",
+                        openTimeMenu === "hour" ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200"
+                      )}
+                      aria-label="Select hour"
+                    >
+                      <span>{String(selectedHour).padStart(2, "0")}</span>
+                      <ChevronDown
+                        size={12}
+                        className={cn(
+                          "text-slate-400 transition-transform duration-150",
+                          openTimeMenu === "hour" && "rotate-180 text-blue-600"
+                        )}
+                      />
+                    </button>
+
+                    {openTimeMenu === "hour" && (
+                      <div
+                        ref={hourListRef}
+                        className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-30 max-h-48 w-16 overflow-y-auto rounded-xl border border-slate-200/90 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-bottom-2 [scrollbar-width:thin]"
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => {
+                          const isSelected = h === selectedHour;
+                          return (
+                            <button
+                              key={h}
+                              type="button"
+                              data-active={isSelected}
+                              onClick={() => {
+                                setSelectedHour(h);
+                                formatAndEmit(selectedDay, h, selectedMinute, selectedAmPm);
+                                setOpenTimeMenu(null);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-center rounded-lg py-1 text-xs font-semibold transition cursor-pointer select-none",
+                                isSelected
+                                  ? "bg-blue-600 text-white font-bold shadow-2xs"
+                                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                              )}
+                            >
+                              {String(h).padStart(2, "0")}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
                   <span className="font-bold text-slate-400">:</span>
 
-                  {/* Minutes dropdown (00-59 continuous, no gaps) */}
-                  <select
-                    value={selectedMinute}
-                    onChange={(e) => {
-                      const m = parseInt(e.target.value, 10);
-                      setSelectedMinute(m);
-                      formatAndEmit(selectedDay, selectedHour, m, selectedAmPm);
-                    }}
-                    className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none focus:border-blue-500 max-h-36 overflow-y-auto"
-                  >
-                    {Array.from({ length: 60 }, (_, i) => i).map((m) => (
-                      <option key={m} value={m}>
-                        {String(m).padStart(2, "0")}
-                      </option>
-                    ))}
-                  </select>
+                  {/* Minutes custom dropdown */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenTimeMenu((curr) => (curr === "minute" ? null : "minute"))}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-slate-800 border transition shadow-2xs hover:border-blue-400 hover:bg-slate-50 focus:outline-none cursor-pointer",
+                        openTimeMenu === "minute" ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200"
+                      )}
+                      aria-label="Select minute"
+                    >
+                      <span>{String(selectedMinute).padStart(2, "0")}</span>
+                      <ChevronDown
+                        size={12}
+                        className={cn(
+                          "text-slate-400 transition-transform duration-150",
+                          openTimeMenu === "minute" && "rotate-180 text-blue-600"
+                        )}
+                      />
+                    </button>
+
+                    {openTimeMenu === "minute" && (
+                      <div
+                        ref={minuteListRef}
+                        className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-30 max-h-48 w-16 overflow-y-auto rounded-xl border border-slate-200/90 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-bottom-2 [scrollbar-width:thin]"
+                      >
+                        {Array.from({ length: 60 }, (_, i) => i).map((m) => {
+                          const isSelected = m === selectedMinute;
+                          return (
+                            <button
+                              key={m}
+                              type="button"
+                              data-active={isSelected}
+                              onClick={() => {
+                                setSelectedMinute(m);
+                                formatAndEmit(selectedDay, selectedHour, m, selectedAmPm);
+                                setOpenTimeMenu(null);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-center rounded-lg py-1 text-xs font-semibold transition cursor-pointer select-none",
+                                isSelected
+                                  ? "bg-blue-600 text-white font-bold shadow-2xs"
+                                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                              )}
+                            >
+                              {String(m).padStart(2, "0")}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
                   {/* AM / PM selector */}
-                  <div className="flex rounded-lg bg-white p-0.5 border border-slate-200 text-xs font-bold">
+                  <div className="flex rounded-lg bg-white p-0.5 border border-slate-200 text-xs font-bold shadow-2xs">
                     {(["AM", "PM"] as const).map((period) => (
                       <button
                         key={period}
@@ -419,12 +533,14 @@ export function MiniCalendarPicker({
                         onClick={() => {
                           setSelectedAmPm(period);
                           formatAndEmit(selectedDay, selectedHour, selectedMinute, period);
+                          setOpenTimeMenu(null);
                         }}
-                        className={`px-2 py-0.5 rounded-md transition ${
+                        className={cn(
+                          "px-2 py-0.5 rounded-md transition cursor-pointer select-none",
                           selectedAmPm === period
                             ? "bg-blue-600 text-white shadow-2xs"
                             : "text-slate-600 hover:text-slate-900"
-                        }`}
+                        )}
                       >
                         {period}
                       </button>
@@ -446,8 +562,11 @@ export function MiniCalendarPicker({
               </button>
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
-                className="rounded-lg bg-slate-900 px-3 py-1 font-bold text-white hover:bg-slate-800 transition"
+                onClick={() => {
+                  setIsOpen(false);
+                  setOpenTimeMenu(null);
+                }}
+                className="rounded-lg bg-slate-900 px-3 py-1 font-bold text-white hover:bg-slate-800 transition cursor-pointer"
               >
                 Done
               </button>
