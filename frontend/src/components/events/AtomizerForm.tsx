@@ -213,7 +213,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   const draftScope = JSON.stringify([firebaseUser?.uid || profile?.uid, profile?.organizationId?.trim()]);
   const draft = useAtomizerDraftStore((state) => state.drafts[draftScope] || EMPTY_ATOMIZER_DRAFT);
   const updateDraft = useAtomizerDraftStore((state) => state.updateDraft);
-  const { selectedEventId, isCreateFromDescription, newEventTitle, defaultStatus, goalDescription,
+  const { eventDate, participatingMembers, selectedEventId, isCreateFromDescription, newEventTitle, defaultStatus, goalDescription,
     isAtomizing, errorMsg, activeGoalDraft, customStatuses, statusOrder, workflowSource } = draft;
 
   function setDraftField<K extends keyof AtomizerDraftState>(field: K, action: SetStateAction<AtomizerDraftState[K]>) {
@@ -310,6 +310,11 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
       return;
     }
 
+    if (!eventDate || !Number.isSafeInteger(Number(participatingMembers)) || Number(participatingMembers) < 1) {
+      setErrorMsg("Enter an event date and a positive whole number of participating members.");
+      return;
+    }
+
     setIsLocalGenerating(true);
     setIsAtomizing(true);
     setErrorMsg("");
@@ -325,6 +330,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
       const data = await atomizeGoal(firebaseUser, {
         eventName,
+        eventDate,
+        participatingMembers: Number(participatingMembers),
         goalDescription: goalDescription.trim(),
         defaultStatus
       });
@@ -546,6 +553,21 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           <label className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
             Event Description
           </label>
+          <div className="grid gap-4 sm:grid-cols-2 mb-4">
+            <label className="text-sm font-semibold text-slate-700">
+              Event date
+              <input type="date" value={eventDate} disabled={isAtomizingActive}
+                onChange={(e) => setDraftField("eventDate", e.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 p-3" />
+            </label>
+            <label className="text-sm font-semibold text-slate-700">
+              Participating members
+              <input type="number" min="1" step="1" value={participatingMembers} disabled={isAtomizingActive}
+                onChange={(e) => setDraftField("participatingMembers", e.target.value)}
+                placeholder="Members available to work on tasks"
+                className="mt-2 w-full rounded-xl border border-slate-200 p-3" />
+            </label>
+          </div>
           <textarea
             value={goalDescription}
             onChange={(e) => setGoalDescription(e.target.value)}

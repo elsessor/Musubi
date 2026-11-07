@@ -17,6 +17,8 @@ export const AtomizeGoalOutputSchema = z.object({
 });
 
 export type AtomizeInput = {
+  eventDate: string;
+  participatingMembers: number;
   eventName: string;
   goalDescription: string;
   defaultStatus?: string;
@@ -29,19 +31,29 @@ export const atomizeGoalFlow = ai.defineFlow(
   {
     name: "atomizeGoalFlow",
     inputSchema: z.object({
+      eventDate: z.string(),
+      participatingMembers: z.number().int().positive(),
       eventName: z.string(),
       goalDescription: z.string(),
       defaultStatus: z.string().optional()
     }),
     outputSchema: AtomizeGoalOutputSchema
   },
-  async (input: { eventName: string; goalDescription: string; defaultStatus?: string }) => {
+  async (input: { eventName: string; goalDescription: string; eventDate: string; participatingMembers: number; defaultStatus?: string }) => {
     const prompt = `
 You are an expert AI Task Orchestrator for student governance and campus organizations.
 Break down the macro-goal for the campus event "${input.eventName}" into 4 to 8 concrete, actionable tasks.
 
 Macro-Goal Description:
 "${input.goalDescription}"
+
+Planning requirements:
+Event date: ${input.eventDate}
+Current date (UTC): ${new Date().toISOString().slice(0, 10)}
+Members available to execute tasks: ${input.participatingMembers}
+Scale workload and parallel assignments to this team size. Use roles rather than invented people.
+Plan preparation before the event and clearly identify event-day and follow-up work.
+For a short timeline, prioritize essential work and explicitly describe any infeasible requirements.
 
 Guidelines:
 1. Make tasks realistic, actionable, and tailored specifically to the goal description. Provide unique, detailed 1-2 sentence descriptions for each subtask explaining what steps to take.
@@ -112,6 +124,8 @@ Guidelines:
 
 export async function runAtomizerFlow(input: AtomizeInput) {
   const result = await atomizeGoalFlow({
+    eventDate: input.eventDate,
+    participatingMembers: input.participatingMembers,
     eventName: input.eventName,
     goalDescription: input.goalDescription,
     defaultStatus: input.defaultStatus
