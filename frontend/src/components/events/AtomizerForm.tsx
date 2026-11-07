@@ -445,6 +445,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               },
               assignedMemberName: memberName,
               assignedMemberUID: st.assignedMemberUID || matchedMember?.id || null,
+              ...(typeof st.aiMetadata?.confidenceScore === "number"
+                ? { matchPercentage: st.aiMetadata.confidenceScore } : {}),
               requiredSkills: st.requiredSkills,
               isLeaderOnly: st.isLeaderOnly,
               isAiGenerated: st.isAiGenerated,
