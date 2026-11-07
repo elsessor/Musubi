@@ -6,6 +6,8 @@ import { createPortal } from "react-dom";
 import { cn } from "@/components/ui/utils";
 
 type MiniCalendarPickerProps = {
+  id?: string;
+  disabled?: boolean;
   value: string;
   onChange: (dateStr: string) => void;
   placeholder?: string;
@@ -25,6 +27,8 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 export function MiniCalendarPicker({
+  id,
+  disabled = false,
   value,
   onChange,
   placeholder = "Select date",
@@ -311,10 +315,14 @@ export function MiniCalendarPicker({
     <div className={`relative inline-block w-full ${className}`}>
       {/* Trigger Button */}
       <button
+        id={id}
+        disabled={disabled}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
         ref={buttonRef}
         type="button"
         onClick={handleToggleOpen}
-        className={`flex w-full items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800 transition hover:bg-white hover:border-blue-400 focus:outline-none ${buttonClassName}`}
+        className={`flex w-full items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800 transition hover:bg-white hover:border-blue-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${buttonClassName}`}
       >
         <div className="flex items-center gap-2 truncate">
           <CalendarIcon size={14} className="text-blue-500 shrink-0" />
@@ -324,7 +332,7 @@ export function MiniCalendarPicker({
       </button>
 
       {/* Floating Pop-out Mini Calendar Popover Portal */}
-      {isOpen && popoverPos && typeof document !== "undefined" &&
+      {isOpen && !disabled && popoverPos && typeof document !== "undefined" &&
         createPortal(
           <div
             ref={popoverRef}

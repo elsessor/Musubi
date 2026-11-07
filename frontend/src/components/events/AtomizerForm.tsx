@@ -2,6 +2,7 @@
 
 import { Check, ChevronDown, Clock, Hourglass, Loader2, SlidersHorizontal, Sparkles, Zap } from "lucide-react";
 import { useEffect, useRef, useState, type SetStateAction } from "react";
+import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
@@ -554,14 +555,14 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
             <label htmlFor="atomizer-event-date" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
               Event Date <span className="text-rose-400">*</span>
             </label>
-            <input
+            <MiniCalendarPicker
               id="atomizer-event-date"
-              type="date"
-              required
               value={eventDate}
+              format="iso"
               disabled={isAtomizingActive}
-              onChange={(e) => setDraftField("eventDate", e.target.value)}
-              className="h-11 w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 text-sm font-semibold text-slate-800 shadow-xs transition-all hover:border-blue-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+              onChange={(value) => setDraftField("eventDate", value)}
+              placeholder="Select event date"
+              buttonClassName="h-11 !bg-[#F0F4F8] !px-4 !text-sm shadow-xs hover:!bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
           <div>
