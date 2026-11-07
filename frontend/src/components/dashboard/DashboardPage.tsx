@@ -476,6 +476,7 @@ export function DashboardPage() {
 
     return (
       <DashboardLayout
+        tutorialReady={!loading}
         activeNavId="dashboard"
         activities={[]}
         goals={[]}
@@ -507,6 +508,7 @@ export function DashboardPage() {
 
   return (
     <DashboardLayout
+      tutorialReady={!loading}
       activeNavId="dashboard"
       activities={activities}
       goals={goals}

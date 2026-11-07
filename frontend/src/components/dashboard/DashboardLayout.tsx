@@ -32,6 +32,7 @@ type DashboardLayoutProps = {
   notificationCount: number;
   onLogout: () => void;
   children?: ReactNode;
+  tutorialReady?: boolean;
 };
 
 const kpiIconMap = {
@@ -52,7 +53,8 @@ export function DashboardLayout({
   activeNavId,
   notificationCount,
   onLogout,
-  children
+  children,
+  tutorialReady = true
 }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const sidebarCollapsed = useDashboardUIStore((state) => state.sidebarCollapsed);
@@ -106,7 +108,7 @@ export function DashboardLayout({
           onMenuToggle={() => setMobileSidebarOpen(true)}
         />
 
-        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <main data-tour="workspace" data-tutorial-ready={!navigating && tutorialReady} data-tutorial-role={user.role} className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
           {navigating ? <DashboardContentSkeleton /> : children ?? <>
           {kpis.length > 0 ? (
             <section className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">

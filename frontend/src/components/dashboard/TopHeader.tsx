@@ -6,6 +6,7 @@ import { Bell, Check, LogOut, Menu, Settings, User } from "lucide-react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 
 import { MemberAvatar } from "./MemberAvatar";
+import { TutorialHelpButton } from "@/components/onboarding/TutorialProvider";
 import { getAvailabilityTheme } from "@/utils/availabilityTheme";
 import { getFirebaseDb } from "@/firebase/config";
 import { getOrganization } from "@/services/auth.service";
@@ -394,6 +395,7 @@ export function TopHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+        <TutorialHelpButton />
         {liveUser.role !== "Admin" ? (
           <div ref={notificationRef} className="static sm:relative">
           <button
@@ -421,6 +423,7 @@ export function TopHeader({
             aria-expanded={menuOpen}
             aria-haspopup="menu"
             aria-label="Open profile menu"
+            data-tour="profile"
             className="relative flex size-10 items-center justify-center rounded-full outline-none ring-offset-2 transition focus-visible:ring-2 focus-visible:ring-slate-400"
             onClick={() => { setMenuOpen((current) => !current); setNotificationsOpen(false); }}
             type="button"

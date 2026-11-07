@@ -458,6 +458,7 @@ export function EventsDashboard({
             <button
               type="button"
               onClick={() => onNewEvent()}
+              data-tour="create-event"
               className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700"
             >
               <Plus size={15} />

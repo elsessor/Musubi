@@ -136,6 +136,7 @@ export function Sidebar({
         collapsed ? "justify-center px-2" : "px-4"
       )}>
         <Link
+          data-tour="sidebar-profile"
           href="/dashboard/profile"
           onClick={onNavigate}
           aria-label={`View and edit profile for ${userName}`}
@@ -162,6 +163,7 @@ export function Sidebar({
             return (
               <li key={item.id}>
                 <Link
+                  data-tour={`nav-${item.id}`}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "group relative flex h-11 items-center gap-3 rounded-xl text-sm font-semibold transition",

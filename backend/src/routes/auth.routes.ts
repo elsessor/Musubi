@@ -47,12 +47,15 @@ import {
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { workflowRouter } from "./workflow.routes.js";
 import { taskRouter } from "./task.routes.js";
+import { tutorialController } from "../controllers/tutorial.controller.js";
 
 export const authRouter = Router();
 
 authRouter.post("/login", loginController);
 authRouter.post("/onboarding", onboardingController);
 authRouter.get("/me", requireAuth, meController);
+authRouter.get("/tutorial", requireAuth, tutorialController);
+authRouter.put("/tutorial", requireAuth, tutorialController);
 authRouter.patch("/profile", requireAuth, updateProfileController);
 authRouter.patch("/me", requireAuth, updateMeController);
 

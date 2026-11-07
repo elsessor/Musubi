@@ -265,6 +265,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
       {/* Tab navigation */}
       <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
         <TabButton
+          tourId="events-tab"
           icon={<CalendarDays size={14} />}
           label="Events & Tasks"
           active={currentTab === "events"}
@@ -272,6 +273,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
         />
         {isLeader && (
           <TabButton
+            tourId="ai-tab"
             icon={<Zap size={14} className="text-blue-500" />}
             label="AI Task Atomizer"
             badge="AI"
@@ -462,6 +464,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
 // ── Tab Button ────────────────────────────────────────────────────────────────
 
 type TabButtonProps = {
+  tourId?: string;
   icon: React.ReactNode;
   label: string;
   badge?: string;
@@ -469,11 +472,12 @@ type TabButtonProps = {
   onClick: () => void;
 };
 
-function TabButton({ icon, label, badge, active, onClick }: TabButtonProps) {
+function TabButton({ icon, label, badge, active, onClick, tourId }: TabButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-tour={tourId}
       className={`relative flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 px-2 pb-3 pt-1 text-xs font-medium transition-colors sm:flex-none sm:gap-1.5 sm:px-4 sm:text-sm ${
         active
           ? "text-blue-600"

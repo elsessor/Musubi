@@ -123,6 +123,7 @@ export function EventsPage() {
 
   return (
     <DashboardLayout
+      tutorialReady={!loading}
       activeNavId="events"
       activities={[]}
       goals={[]}
