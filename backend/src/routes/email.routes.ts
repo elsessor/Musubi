@@ -5,5 +5,5 @@ import { requireAuth } from "../middleware/auth.middleware.js";
 export const emailRouter = Router();
 
 emailRouter.post("/nudge", requireAuth, sendNudgeEmailController);
-emailRouter.post("/check-due-nudges", checkDueNudgesController);
+emailRouter.post("/check-due-nudges", requireAuth, checkDueNudgesController);
 emailRouter.get("/check-due-nudges", checkDueNudgesController);

@@ -33,6 +33,7 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
   const pages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
   async function handleCheckAndDispatch() {
+    if (checking) return;
     setChecking(true);
     try {
       const res = await checkAndDispatchDueNudges();

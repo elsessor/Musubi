@@ -78,26 +78,31 @@ export async function sendNudgeEmailController(req: AuthenticatedRequest, res: R
   }
 }
 
-export async function runDueNudgesCheck(): Promise<{ processedCount: number; sentNudges: any[] }> {
+export async function runDueNudgesCheck(scope?: { organizationId: string; memberUID?: string }): Promise<{ processedCount: number; sentNudges: any[]; failedCount: number }> {
   if (!firestore) {
     throw new Error("Firestore not initialized");
   }
 
-  const eventsSnapshot = await firestore.collection("events").get();
+  const eventsQuery = scope
+    ? firestore.collection("events").where("orgId", "==", scope.organizationId)
+    : firestore.collection("events");
+  const eventsSnapshot = await eventsQuery.get();
   const sentResults: Array<{ taskId: string; taskTitle: string; recipientEmail: string; nudgeType: string }> = [];
 
+  let failedCount = 0;
   const now = new Date();
   const todayMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime();
 
   for (const doc of eventsSnapshot.docs) {
     const eventData = doc.data();
-    if (eventData.status === "Archived") continue;
+    if (eventData.archivedAt || eventData.status === "Archived") continue;
     const eventId = doc.id;
     const eventTitle = eventData.title || "Organization Event";
     const tasks: any[] = Array.isArray(eventData.tasks) ? eventData.tasks : [];
     let tasksUpdated = false;
 
     for (const task of tasks) {
+      if (scope?.memberUID && task.assignedMemberUID !== scope.memberUID) continue;
       if (task.archivedAt || task.status === "Archived") continue;
       const isCompleted = (task.status || "").toLowerCase().includes("completed") || (task.status || "").toLowerCase().includes("done");
       if (isCompleted) continue;
@@ -128,6 +133,14 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
         nudge1d = { nudgeUID: `${task.id}_1d`, triggerDate: oneDayBefore, nudgeType: "1 Day Prior", sent: false };
         nudges.push(nudge1d);
         taskModified = true;
+      }
+
+      // Resolve recipients only when an unsent reminder is actually due.
+      const reminderDue = (diffDays <= 3 && diffDays > 1 && !nudge3d.sent)
+        || (diffDays <= 1 && diffDays >= 0 && !nudge1d.sent);
+      if (!reminderDue) {
+        if (taskModified) { task.nudges = nudges; tasksUpdated = true; }
+        continue;
       }
 
       let targetEmail = task.assignedMemberEmail || task.assigneeEmail || task.assignee?.email || "";
@@ -172,6 +185,7 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
             isUrgent: false,
             nudgeType: "3_days_prior"
           });
+          if (!sendRes.success) failedCount++;
           if (sendRes.success) {
             nudge3d.sent = true;
             nudge3d.sentAt = new Date().toISOString();
@@ -192,6 +206,7 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
             isUrgent: true,
             nudgeType: "1_day_prior"
           });
+          if (!sendRes.success) failedCount++;
           if (sendRes.success) {
             nudge1d.sent = true;
             nudge1d.sentAt = new Date().toISOString();
@@ -212,13 +227,28 @@ export async function runDueNudgesCheck(): Promise<{ processedCount: number; sen
     }
   }
 
-  return { processedCount: sentResults.length, sentNudges: sentResults };
+  return { processedCount: sentResults.length, sentNudges: sentResults, failedCount };
 }
 
-export async function checkDueNudgesController(_req: Request, res: Response): Promise<void> {
+export async function checkDueNudgesController(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const result = await runDueNudgesCheck();
-    res.status(200).json({ success: true, ...result });
+    const user = req.authUser;
+    if (req.method === "POST" && !user) {
+      res.status(401).json({ error: "Sign in again to check your nudges." });
+      return;
+    }
+    if (user && !user.organizationId) {
+      res.status(400).json({ error: "Join an organization before checking nudges." });
+      return;
+    }
+    const result = await runDueNudgesCheck(user ? {
+      organizationId: user.organizationId!,
+      ...(user.role === "Organization Member" ? { memberUID: user.uid } : {})
+    } : undefined);
+    res.status(result.failedCount ? 502 : 200).json({
+      success: result.failedCount === 0, ...result,
+      ...(result.failedCount ? { error: `${result.failedCount} reminder email(s) could not be sent. Please try again later.` } : {})
+    });
   } catch (err: any) {
     console.error("Error in checkDueNudgesController:", err);
     res.status(500).json({ error: err.message || "Failed to check due nudges" });
