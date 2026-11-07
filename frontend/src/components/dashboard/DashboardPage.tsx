@@ -303,9 +303,38 @@ export function DashboardPage() {
   // Member View computations
   const isMemberView = dashboardUser.role === "Organization Member";
 
-  const memberSubtasks = useMemo(() =>
-    getMemberDashboardTasks(realtimeEventsList, dashboardUser.id, dashboardUser.name),
-    [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
+  const memberSubtasks = useMemo(() => {
+    const matched: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+    const allInOrg: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+
+    const userNameLower = (dashboardUser.name || "").toLowerCase().trim();
+    const userId = dashboardUser.id;
+
+    realtimeEventsList.forEach((event) => {
+      if (Array.isArray(event.tasks)) {
+        event.tasks.forEach((task) => {
+          const item = { ...task, eventTitle: event.title, customStatuses: event.customStatuses };
+          allInOrg.push(item);
+
+          const assignedNameLower = (task.assignedMemberName || task.assignee?.name || "").toLowerCase().trim();
+          const assignedUid = task.assignedMemberUID;
+          const isMatch =
+            (userId && assignedUid === userId) ||
+            (userNameLower && assignedNameLower.includes(userNameLower)) ||
+            (userNameLower && userNameLower.includes(assignedNameLower) && assignedNameLower.length > 2);
+          if (isMatch) matched.push(item);
+        });
+      }
+    });
+
+    return matched.length > 0 ? matched : allInOrg;
+  }, [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
+
+  // Only the match-score card uses strict member ownership; preserve the existing
+  // task list, counts, and nudge display behavior above.
+  const memberAverageMatchScore = useMemo(() =>
+    getAverageMatchScore(getMemberDashboardTasks(realtimeEventsList, dashboardUser.id, dashboardUser.name)),
+    [realtimeEventsList, dashboardUser.id, dashboardUser.name]);
 
   const activeMemberSubtasks = useMemo(() => {
     return memberSubtasks.filter((t) => {
@@ -322,7 +351,7 @@ export function DashboardPage() {
       return st.includes("completed") || st.includes("done");
     }).length;
 
-    const avgMatch = getAverageMatchScore(memberSubtasks);
+    const avgMatch = memberAverageMatchScore;
 
     return [
       { id: "subtasks-assigned", label: "Sub-Tasks Assigned", value: totalAssigned, icon: "briefcase", accent: "purple" },
@@ -330,7 +359,7 @@ export function DashboardPage() {
       { id: "completed", label: "Completed", value: completed, icon: "check", accent: "green" },
       { id: "avg-match-score", label: "Avg Match Score", value: avgMatch === null ? "—" : `${avgMatch}%`, icon: "award", accent: "amber" }
     ];
-  }, [memberSubtasks]);
+  }, [memberSubtasks, memberAverageMatchScore]);
 
   useEffect(() => {
     void checkAndDispatchDueNudges();
