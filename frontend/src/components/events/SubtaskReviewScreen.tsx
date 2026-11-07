@@ -293,6 +293,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, existin
   const [showOnlyWarnings, setShowOnlyWarnings] = useState(false);
 
   function handleAutoFixSafeguards() {
+    setShowOnlyWarnings(false);
     setSubtasks((prev) =>
       prev.map((st) => {
         if (st.archivedAt) return st;
@@ -365,9 +366,14 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, existin
   const confirmedCount = activeSubtasks.filter((s) => s.confirmed).length;
   const isPublished = currentGoal.status === "Active";
   const subtasksWithWarnings = activeSubtasks.filter((st) => validateSubtaskSafeguards(st).length > 0);
-  const displayedSubtasks = showOnlyWarnings
-    ? activeSubtasks.filter((st) => validateSubtaskSafeguards(st).length > 0)
+  // A resolved audit must never leave the task list hidden behind an empty filter.
+  const displayedSubtasks = showOnlyWarnings && subtasksWithWarnings.length > 0
+    ? subtasksWithWarnings
     : activeSubtasks;
+
+  useEffect(() => {
+    if (subtasksWithWarnings.length === 0) setShowOnlyWarnings(false);
+  }, [subtasksWithWarnings.length]);
 
   return (
     <div className="flex min-w-0 flex-col gap-4 rounded-2xl bg-[#f4f7fb] p-3 sm:gap-6 sm:rounded-3xl sm:p-6">
