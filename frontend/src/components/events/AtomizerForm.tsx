@@ -548,27 +548,48 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           </div>
         </div>
 
+        {/* Event planning parameters */}
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <div>
+            <label htmlFor="atomizer-event-date" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
+              Event Date <span className="text-rose-400">*</span>
+            </label>
+            <input
+              id="atomizer-event-date"
+              type="date"
+              required
+              value={eventDate}
+              disabled={isAtomizingActive}
+              onChange={(e) => setDraftField("eventDate", e.target.value)}
+              className="h-11 w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 text-sm font-semibold text-slate-800 shadow-xs transition-all hover:border-blue-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </div>
+          <div>
+            <label htmlFor="atomizer-participating-members" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
+              Participating Members <span className="text-rose-400">*</span>
+            </label>
+            <input
+              id="atomizer-participating-members"
+              type="number"
+              required
+              min="1"
+              step="1"
+              value={participatingMembers}
+              disabled={isAtomizingActive}
+              onChange={(e) => setDraftField("participatingMembers", e.target.value)}
+              placeholder="Number of members available"
+              className="h-11 w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 text-sm font-semibold text-slate-800 placeholder:font-normal placeholder:text-slate-400 shadow-xs transition-all hover:border-blue-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </div>
+        </div>
+
         {/* Event description */}
         <div className="mt-5">
-          <label className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
+          <label htmlFor="atomizer-event-description" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
             Event Description
           </label>
-          <div className="grid gap-4 sm:grid-cols-2 mb-4">
-            <label className="text-sm font-semibold text-slate-700">
-              Event date
-              <input type="date" value={eventDate} disabled={isAtomizingActive}
-                onChange={(e) => setDraftField("eventDate", e.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 p-3" />
-            </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Participating members
-              <input type="number" min="1" step="1" value={participatingMembers} disabled={isAtomizingActive}
-                onChange={(e) => setDraftField("participatingMembers", e.target.value)}
-                placeholder="Members available to work on tasks"
-                className="mt-2 w-full rounded-xl border border-slate-200 p-3" />
-            </label>
-          </div>
           <textarea
+            id="atomizer-event-description"
             value={goalDescription}
             onChange={(e) => setGoalDescription(e.target.value)}
             disabled={isAtomizingActive}
