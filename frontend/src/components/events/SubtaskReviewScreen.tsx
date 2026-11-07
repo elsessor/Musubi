@@ -71,7 +71,10 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, existin
   }));
   const [isEditingEventName, setIsEditingEventName] = useState(false);
   const [eventNameInput, setEventNameInput] = useState(goalDraft.eventName || "");
-  const [liveMembers, setLiveMembers] = useState<OrganizationMember[]>(members || []);
+  const [rosterMembers, setLiveMembers] = useState<OrganizationMember[]>(members || []);
+  const liveMembers = goalDraft.participatingMemberUIDs
+    ? rosterMembers.filter((member) => goalDraft.participatingMemberUIDs!.includes(member.id))
+    : rosterMembers;
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
   const [regeneratingIds, setRegeneratingIds] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);

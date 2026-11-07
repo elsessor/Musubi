@@ -366,7 +366,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         ? { ...task, status: "To Do" as TaskStatus } : task);
       // Heuristically delegate subtasks to organization members with matching skills
       const delegatedSubtasks = members && members.length > 0
-        ? delegateSubtasksHeuristically(readySubtasks, members)
+        ? delegateSubtasksHeuristically(readySubtasks, members, Number(participatingMembers))
         : readySubtasks;
 
       const draft: GoalDraft = {
@@ -375,6 +375,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         description: goalDescription.trim(),
         status: "Draft",
         subtasks: delegatedSubtasks,
+        participatingMemberUIDs: [...new Set(delegatedSubtasks.flatMap((task) => task.assignedMemberUID ? [task.assignedMemberUID] : []))],
         generationSource: "ai"
       };
 

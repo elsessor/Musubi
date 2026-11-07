@@ -51,14 +51,18 @@ Planning requirements:
 Event date: ${input.eventDate}
 Current date (UTC): ${new Date().toISOString().slice(0, 10)}
 Members available to execute tasks: ${input.participatingMembers}
+Treat the available member count as a hard staffing limit across the entire plan.
+Use no more than ${input.participatingMembers} distinct assignee roles in total; reuse roles across tasks.
 Scale workload and parallel assignments to this team size. Use roles rather than invented people.
+Consolidate related work for small teams and sequence work that shares an assignee.
+Do not assume extra volunteers, committees, or staff beyond the available members.
 Plan preparation before the event and clearly identify event-day and follow-up work.
 For a short timeline, prioritize essential work and explicitly describe any infeasible requirements.
 
 Guidelines:
 1. Make tasks realistic, actionable, and tailored specifically to the goal description. Provide unique, detailed 1-2 sentence descriptions for each subtask explaining what steps to take.
 2. Assign appropriate priority levels: Low, Medium, High, or Critical.
-3. Suggest clear assignees (e.g., "Logistics Lead", "Ana Reyes", "Marco Dela Cruz", "Finance Officer").
+3. Suggest clear assignee roles (e.g., "Logistics Lead", "Finance Officer"), respecting the total staffing limit.
 4. Provide sensible deadline offsets (1 to 20 days from today).
 5. Calculate a realistic AI Match Score (between 65% and 98%) reflecting suitability.
 6. Order prerequisites before dependent tasks. For each task, include dependencyIndexes with the zero-based indexes of only the earlier tasks that truly must be completed first. Use [] for independent tasks. Allow parallel work; do not make every task depend on the previous task.
