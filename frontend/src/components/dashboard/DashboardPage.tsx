@@ -19,6 +19,7 @@ import { subscribeAuditLogsFirestore, type AuditLogRecord } from "@/services/aud
 import { getOrganization, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import { checkAndDispatchDueNudges } from "@/services/notifications.service";
+import { getMemberDashboardTasks, getAverageMatchScore } from "@/utils/memberDashboard";
 import type { Event, Task } from "@/components/events/types";
 
 function formatGreetingDate(date = new Date()) {
@@ -317,21 +318,23 @@ export function DashboardPage() {
 
           const assignedNameLower = (task.assignedMemberName || task.assignee?.name || "").toLowerCase().trim();
           const assignedUid = task.assignedMemberUID;
-
           const isMatch =
             (userId && assignedUid === userId) ||
             (userNameLower && assignedNameLower.includes(userNameLower)) ||
             (userNameLower && userNameLower.includes(assignedNameLower) && assignedNameLower.length > 2);
-
-          if (isMatch) {
-            matched.push(item);
-          }
+          if (isMatch) matched.push(item);
         });
       }
     });
 
     return matched.length > 0 ? matched : allInOrg;
   }, [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
+
+  // Only the match-score card uses strict member ownership; preserve the existing
+  // task list, counts, and nudge display behavior above.
+  const memberAverageMatchScore = useMemo(() =>
+    getAverageMatchScore(getMemberDashboardTasks(realtimeEventsList, dashboardUser.id, dashboardUser.name)),
+    [realtimeEventsList, dashboardUser.id, dashboardUser.name]);
 
   const activeMemberSubtasks = useMemo(() => {
     return memberSubtasks.filter((t) => {
@@ -348,22 +351,15 @@ export function DashboardPage() {
       return st.includes("completed") || st.includes("done");
     }).length;
 
-    const matchScores = memberSubtasks
-      .map((t) => t.matchPercentage)
-      .filter((score): score is number => typeof score === "number" && score > 0);
-
-    const avgMatch =
-      matchScores.length > 0
-        ? Math.round(matchScores.reduce((a, b) => a + b, 0) / matchScores.length)
-        : 92;
+    const avgMatch = memberAverageMatchScore;
 
     return [
       { id: "subtasks-assigned", label: "Sub-Tasks Assigned", value: totalAssigned, icon: "briefcase", accent: "purple" },
       { id: "in-progress", label: "In Progress", value: inProgress, icon: "clock", accent: "blue" },
       { id: "completed", label: "Completed", value: completed, icon: "check", accent: "green" },
-      { id: "avg-match-score", label: "Avg Match Score", value: `${avgMatch}%`, icon: "award", accent: "amber" }
+      { id: "avg-match-score", label: "Avg Match Score", value: avgMatch === null ? "—" : `${avgMatch}%`, icon: "award", accent: "amber" }
     ];
-  }, [memberSubtasks]);
+  }, [memberSubtasks, memberAverageMatchScore]);
 
   useEffect(() => {
     void checkAndDispatchDueNudges();

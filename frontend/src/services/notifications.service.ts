@@ -575,19 +575,36 @@ export async function sendNudgeEmail(input: {
 }
 
 export async function checkAndDispatchDueNudges(): Promise<{ success: boolean; processedCount?: number; error?: string }> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://musubi-backend-4roe.onrender.com";
-    const res = await fetch(`${apiBaseUrl}/email/check-due-nudges`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      }
-    });
-
-    const data = await res.json();
-    return { success: res.ok, processedCount: data.processedCount };
-  } catch (err: any) {
-    console.warn("Failed to trigger automated due nudges check:", err);
-    return { success: false, error: err.message };
+    // Bound token retrieval and the network request, including a stalled response body.
+    return await Promise.race([
+      (async () => {
+        const user = useAuthStore.getState().firebaseUser;
+        if (!user) return { success: false, error: "Sign in again to check your nudges." };
+        const token = await user.getIdToken();
+        if (controller.signal.aborted) throw new Error("Nudge check timed out.");
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://musubi-backend-4roe.onrender.com";
+        const res = await fetch(`${apiBaseUrl}/email/check-due-nudges`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          signal: controller.signal
+        });
+        const data = await res.json();
+        return { success: res.ok && data.success !== false, processedCount: data.processedCount,
+          error: res.ok ? undefined : data.error || data.message || "Could not check due nudges." };
+      })(),
+      new Promise<{ success: false; error: string }>((resolve) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          resolve({ success: false, error: "The nudge check took too long. Please try again shortly." });
+        }, 30000);
+      })
+    ]);
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "Could not check due nudges." };
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
