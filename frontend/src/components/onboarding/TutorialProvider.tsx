@@ -146,6 +146,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const role = profile?.role;
   const steps = useMemo(() => kind === "controls" ? controlSteps : role ? getTourSteps(role, kind) : [], [role, kind, controlSteps]);
   const workflows = profile ? getWorkflowTours(profile.role) : [];
+  const fullTourCount = profile ? getTourSteps(profile.role, "features").length : 0;
   const pages = profile ? [...getDashboardNavItems(profile.role), { id: "profile", label: "Profile", href: "/dashboard/profile" }] : [];
   const canResume = saved?.status === "in_progress" && (saved.tour === "quick" || saved.tour === "features" || workflows.some((tour) => tour.id === saved.tour));
   return <HelpContext.Provider value={() => {
@@ -159,20 +160,29 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
       <DialogContent data-tour-help overlayClassName="z-[200] motion-reduce:animate-none" className="z-[201] max-h-[85dvh] overflow-y-auto rounded-2xl bg-white text-slate-900 motion-reduce:animate-none" onCloseAutoFocus={(event) => { event.preventDefault(); if (!document.querySelector('[data-tour-dialog]')) document.querySelector<HTMLButtonElement>('[data-tour="help"]')?.focus(); }}>
         <DialogTitle className="pr-6 text-xl font-bold">{mode === "welcome" ? "Welcome to Musubi!" : "Help / User Guide"}</DialogTitle>
         <DialogDescription className="text-sm leading-relaxed text-slate-600">{mode === "welcome"
-          ? "Musubi helps campus organizations organize goals, coordinate tasks, and manage responsibilities through AI-assisted task orchestration and workflow management. Let's take a quick tour of your workspace."
-          : `Explore the tools available to you as ${profile?.role === "Admin" ? "a System Administrator" : profile?.role === "Student Leader" ? "a Student Leader" : "an Organization Member"}. Tours explain features without changing your organization or task records.`}</DialogDescription>
+          ? "Get to know your workspace in a few short steps. You can skip the tour and return to Help anytime."
+          : "Take a short overview of your workspace, or choose just the task you need help with. Related fields are explained together; extra detail is optional."}</DialogDescription>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={`${button} bg-blue-600 text-white hover:bg-blue-700`} onClick={() => start(mode === "welcome" ? "quick" : "features")}>{mode === "welcome" ? "Quick introduction" : `Full walkthrough · ${fullTourCount} steps`}</button>
+          {canResume && saved && <button type="button" className={`${button} border border-slate-200`} onClick={() => start(saved.tour, true)}>{saved.tour === "quick" || saved.tour === "features" ? "Resume walkthrough" : "Reopen last guide"}</button>}
+          <button type="button" className={`${button} text-slate-600 hover:bg-slate-100`} onClick={() => close()}>{mode === "welcome" ? "Maybe later" : "Close"}</button>
+        </div>
         {mode === "guide" && <div className="space-y-2">
-          <h3 className="text-sm font-bold">Choose a tab to learn</h3>
+          <h3 className="text-sm font-bold">Help with a specific task</h3>
           {pages.map((page) => <details key={page.id} open={page.href === pathname} className="rounded-xl border border-slate-200 p-3">
             <summary className="cursor-pointer text-sm font-bold text-slate-900">{page.label}</summary>
             <div className="mt-3 space-y-2">
-              <button type="button" onClick={() => inspectPage(page.href)} className={`${button} w-full border border-blue-200 text-left text-blue-700`}>Explain buttons, tabs, and filters</button>
               {workflows.filter((tour) => tour.route === page.href).map((tour) => <button key={tour.id} type="button" onClick={() => start(tour.id)} className="block w-full rounded-xl border border-blue-100 bg-blue-50/40 p-3 text-left hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                <span className="block text-sm font-semibold text-slate-900">{tour.title}</span><span className="mt-1 block text-xs leading-relaxed text-slate-600">{tour.description}</span>
+                <span className="block text-sm font-semibold text-slate-900">{tour.title}</span><span className="mt-1 block text-xs text-slate-600">{getTourSteps(profile!.role, tour.id).length} steps · optional field reference</span>
               </button>)}
+              <details className="rounded-xl border border-slate-200 p-3">
+                <summary className="cursor-pointer text-xs font-semibold text-slate-600">Detailed control guide</summary>
+                <p className="mt-2 text-xs leading-relaxed text-slate-500">An optional, longer tour of individual buttons, tabs, and filters.</p>
+                <button type="button" onClick={() => inspectPage(page.href)} className={`${button} mt-2 w-full border border-blue-200 text-left text-blue-700`}>Explore individual controls</button>
+              </details>
             </div>
           </details>)}
-          <p className="text-xs leading-relaxed text-slate-500">Select a tab or workflow here. Next opens safe forms and tabs automatically, then explains their contents. Saving, publishing, approval, and destructive actions are explained without submitting changes.</p>
+          <p className="text-xs leading-relaxed text-slate-500">Use Next to move through each guide. Forms and tabs open automatically. The guide never saves, publishes, or approves changes.</p>
           <h3 className="pt-3 text-sm font-bold">Read the user guide</h3>
           {getTourSteps(profile!.role, "features").filter((step) => step.id !== "finish").map((step) => <details key={step.id} className="rounded-xl border border-slate-200 p-3">
             <summary className="cursor-pointer text-sm font-semibold focus-visible:outline focus-visible:outline-blue-600">{step.title}</summary>
@@ -180,12 +190,6 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
           </details>)}
         </div>}
         {localOnly && <p role="status" className="text-xs text-slate-500">Account sync is unavailable. Progress is saved in this browser when storage is available.</p>}
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={`${button} bg-blue-600 text-white hover:bg-blue-700`} onClick={() => start("quick")}>{mode === "welcome" ? "Start Tutorial" : "Restart Guided Tour"}</button>
-          {canResume && saved && <button type="button" className={`${button} border border-slate-200`} onClick={() => start(saved.tour, true)}>{saved.tour === "quick" || saved.tour === "features" ? "Resume Tutorial" : "Reopen last feature guide"}</button>}
-          {mode === "guide" && <button type="button" className={`${button} border border-slate-200`} onClick={() => start("features")}>Feature Walkthrough</button>}
-          <button type="button" className={`${button} text-slate-600 hover:bg-slate-100`} onClick={() => close()}>{mode === "welcome" ? "Maybe Later" : "Close"}</button>
-        </div>
       </DialogContent>
     </Dialog>}
   </HelpContext.Provider>;

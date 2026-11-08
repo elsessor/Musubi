@@ -1,5 +1,5 @@
 import type { UserRole } from "../types/auth";
-import { getWorkflowTours, WORKFLOW_IDS, type WorkflowId } from "./tutorialWorkflows";
+import { compactWorkflowSteps, getWorkflowTours, WORKFLOW_IDS, type WorkflowId } from "./tutorialWorkflows";
 
 export const TUTORIAL_VERSION = 1;
 export type TourKind = "quick" | "features" | "controls" | WorkflowId;
@@ -12,12 +12,12 @@ export type TutorialStatus = {
   updatedAt: string;
   acknowledged?: boolean;
 };
-export type TourStep = { id: string; title: string; description: string; route: string; target: string; interaction?: "click"; openOnNext?: string; reveal?: string[]; selector?: string; prepare?: "events" | "ai" | "members" | "committees" | "announcements" };
+export type TourStep = { id: string; title: string; description: string; route: string; target: string; highlightTargets?: string[]; details?: { title: string; description: string }[]; interaction?: "click"; openOnNext?: string; reveal?: string[]; selector?: string; prepare?: "events" | "ai" | "members" | "committees" | "announcements" };
 
 const page = (id: string, title: string, description: string, route: string, target = "workspace"): TourStep => ({ id, title, description, route, target });
 
 export function getTourSteps(role: UserRole, kind: TourKind): TourStep[] {
-  if (kind !== "quick" && kind !== "features") return getWorkflowTours(role).find((tour) => tour.id === kind)?.steps ?? [];
+  if (kind !== "quick" && kind !== "features") return compactWorkflowSteps(getWorkflowTours(role).find((tour) => tour.id === kind)?.steps ?? []);
   const admin = role === "Admin";
   const leader = role === "Student Leader";
   const home = admin ? "/admin" : "/dashboard";
@@ -43,21 +43,19 @@ export function getTourSteps(role: UserRole, kind: TourKind): TourStep[] {
     page("members", "User management", "Review accounts and use the existing controls to manage roles, positions, and organization assignments.", "/admin/members"),
     page("audit", "Audit logs", "Review administrative records and platform activity. Use the available filters to find relevant actions.", "/admin/audit-logs"),
     page("settings", "Administrator settings", "Review your available administrative settings. Your profile is accessible from the sidebar or account menu.", "/admin/settings"), finish];
-  return [dashboard, events,
+  return [dashboard,
+    { ...events, description: leader
+      ? "Open an event to see its tasks. When creating work, describe the outcome, choose an owner, and set a deadline. Use filters and views to monitor progress."
+      : "Open an assigned task to read its instructions, check the deadline and prerequisites, update progress, and attach your work." },
     ...(leader ? [
-      page("delegation", "AI-assisted task delegation", "Use the AI Task Atomizer to break a goal into suggested subtasks and assignments. Review the generated plan before publishing. Recommendations support your judgment and can be changed.", "/dashboard/events", "ai-tab"),
-      page("explanations", "Assignment explanations and workload", "When reviewing generated subtasks, edit a subtask to inspect its recommended member match and explanation. Skills, availability, and workload help inform recommendations. Review and change assignments before publishing the plan.", "/dashboard/events", "ai-tab")
-    ] : [page("progress", "Task details and progress", "Open one of your tasks to check its instructions and dependencies, update its permitted status, and add any required work attachments. Blocked tasks may need a prerequisite completed first.", "/dashboard/events")]),
-    organization,
-    ...(leader ? [
-      page("membership", "Members and join requests", "Open Members to review your roster and pending join requests. Review each request before accepting or rejecting it; the tutorial does not make membership changes.", "/dashboard/organization", "members-tab"),
-      page("committees", "Committees", "Use committees to organize responsibilities. Open a committee to inspect its members; authorized leaders can create committees and manage membership.", "/dashboard/organization", "committees-tab")
+      page("delegation", "Plan with AI, then review", "Describe your goal to generate a draft plan. Check suggested tasks, member matches, skills, availability, and workload; edit assignments before publishing.", "/dashboard/events", "ai-tab")
     ] : []),
-    page("announcements", "Organization announcements", leader ? "Open the Announcements tab to read updates or post an announcement to the appropriate audience using the available controls." : "Open the Announcements tab to read updates shared with you and your committee.", "/dashboard/organization", "announcements-tab"),
+    { ...organization, description: leader
+      ? "Manage your roster and join requests in Members, organize teams in Committees, and share updates in Announcements. Choose a detailed guide from Help when you need one."
+      : "Find your teammates in Members, see your groups in Committees, and read updates in Announcements." },
     ...(leader ? [page("analytics", "Organization analytics", "Review available task and organization performance information to understand progress and workload.", "/dashboard/analytics")] : []),
     notifications,
-    page("settings", "Settings and availability", leader ? "Review your available preferences and reminder settings. Organization configuration is available through the Organization page to authorized leaders." : "Review your preferences and use your profile to keep your skills and availability up to date for task planning.", "/dashboard/settings"),
-    page("profile", "Your profile", "Open your profile from the account menu or sidebar to review your information and available performance indicators.", home, "profile"), finish];
+    page("settings", "Settings and your profile", "Adjust your preferences in Settings. Open your profile from the account menu or sidebar to review your information, skills, availability, and performance.", "/dashboard/settings"), finish];
 }
 
 export function tutorialKey(uid: string, role: UserRole) {

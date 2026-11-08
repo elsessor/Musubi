@@ -26,6 +26,7 @@ test("all tours use existing routes and isolate role permissions", () => {
     }
     if (role === "Organization Member") assert.ok(!steps.some((s) => ["delegation", "analytics", "members", "requests"].includes(s.id)));
     if (kind === "quick") assert.ok(steps.length <= 5);
+    if (kind === "features") assert.ok(steps.length <= 8, `${role} walkthrough is too long`);
   }
 });
 

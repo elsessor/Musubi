@@ -180,3 +180,49 @@ export function getWorkflowTours(role: UserRole): WorkflowTour[] {
     : role === "Organization Member" && tour.id === "membership" ? { ...tour, steps: tour.steps.slice(0, 3) }
     : role === "Organization Member" && tour.id === "event-browse" ? { ...tour, steps: tour.steps.filter((step) => step.target !== "event-custom-status") } : tour);
 }
+
+const sectionSummaries: Record<string, [string, string]> = {
+  "event-title": ["Describe and schedule the event", "Add a name and purpose, choose the committee, and set the start and end dates. You can reuse tasks from a previous event. Review everything before creating the event."],
+  "event-committee-filter": ["Find and monitor events", "Combine committee and status filters to find work, then choose a view that suits you. Leaders can also configure event statuses."],
+  "new-task-title": ["Plan the task", "Describe the deliverable, choose an assignee and committee, and set priority, prerequisites, and dates. Check the details before saving."],
+  "task-title": ["Review and update your work", "Read the instructions, check the owner and priority, and review prerequisites. Update the permitted status and attach your work before saving."],
+  "ai-target": ["Describe the plan you need", "Choose an event or start from a new description. Add the date, participating members, and goal, then generate a draft when ready."],
+  "ai-match": ["Check the suggested assignment", "Compare the match explanation with the task. Review skills, availability, and workload before choosing an assignee."],
+  "ai-warnings": ["Review before publishing", "Resolve missing details and assignment warnings, then check the whole plan before publishing it to your organization."],
+  "committee-name": ["Set up the team", "Name the committee, explain its purpose, and choose a head and members. Review the team before creating it."],
+  "member-search": ["Find people and review membership", "Search the roster and open a profile to learn about a member. Leaders can also review join requests and manage membership."],
+  "announcement-title": ["Write and target your update", "Add a title and message, choose who should see it, and optionally pin it. Check the audience before posting."],
+  "request-card": ["Review the request", "Read the organization and requester details before deciding. Approving changes the real request immediately."],
+  "request-reason": ["Explain your decision", "A rejection needs a clear reason for the requester. Confirm only after reviewing the decision."],
+  "admin-org-name": ["Add organization details", "Enter the official name, category, and purpose. Review the details before creating the organization."],
+  "admin-member-search": ["Find the right account", "Search by name, email, or position. Combine role, organization, committee, and status filters to narrow the results."],
+  "admin-member-edit-role": ["Review account access", "Check the intended role and organization position before saving. Role changes affect the account's permissions."],
+  "audit-search": ["Find an activity record", "Combine search, category, and date filters, then open a matching record for details. Use pagination to see more results."],
+  "notifications-announcements": ["Read updates and reminders", "Switch between announcements, nudges, and ratings to find relevant updates. Mark notifications as read after reviewing them."],
+  "settings-profile": ["Manage your preferences", "Review your profile, preferences, and calendar connection. Check changes before saving or connecting an external calendar."]
+};
+
+// Keep safe opening/closing controls in order; explain related fields together.
+// The original instructions remain available as an optional field reference.
+export function compactWorkflowSteps(steps: TourStep[]): TourStep[] {
+  const result: TourStep[] = [];
+  for (let index = 0; index < steps.length;) {
+    const first = steps[index];
+    if (first.openOnNext || first.interaction) {
+      result.push(first); index++; continue;
+    }
+    let end = index + 1;
+    while (end < steps.length && !steps[end].openOnNext && !steps[end].interaction) end++;
+    const group = steps.slice(index, end);
+    const summary = sectionSummaries[first.target];
+    if (group.length > 1 && summary) {
+      const memberOnly = first.target === "member-search" && !group.some((step) => step.target === "join-requests");
+      result.push({ ...first, title: summary[0],
+        description: memberOnly ? "Search the roster and open a profile to learn about a teammate and their available performance information." : summary[1],
+        highlightTargets: group.map((step) => step.target),
+        details: group.map(({ title, description }) => ({ title, description })) });
+    } else result.push(...group);
+    index = end;
+  }
+  return result;
+}

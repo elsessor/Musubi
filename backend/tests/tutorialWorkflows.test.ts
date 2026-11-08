@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getTourSteps, isTutorialStatus, TOUR_IDS } from "../../frontend/src/config/tutorial.js";
 import { getWorkflowTours } from "../../frontend/src/config/tutorialWorkflows.js";
-import { canInteractWithTourTarget, findTourTarget, openTutorialControl } from "../../frontend/src/components/onboarding/tourTargets.js";
+import { canInteractWithTourTarget, findTourHighlightTargets, findTourTarget, getTourHighlightRect, openTutorialControl } from "../../frontend/src/components/onboarding/tourTargets.js";
 import { controlDetails, describeControl } from "../../frontend/src/components/onboarding/controlGuide.js";
 import { tutorialStatusSchema } from "../src/utils/tutorialStatus.js";
 
@@ -50,6 +50,25 @@ test("only safe opening and navigation steps can run automatically", () => {
     assert.ok((step.reveal ?? []).every((target) => safe.has(target)));
     if (/submit|approve|confirm|publish|generate|auto-assign|remove|read-all/.test(step.target)) assert.equal(step.openOnNext, undefined, step.target);
   }
+});
+
+test("short workflow guides preserve every instruction and safe opening sequence", () => {
+  for (const role of roles) for (const tour of getWorkflowTours(role)) {
+    const steps = getTourSteps(role, tour.id);
+    assert.deepEqual(steps.flatMap((step) => step.details ?? [{ title: step.title, description: step.description }]),
+      tour.steps.map(({ title, description }) => ({ title, description })), `${role}: ${tour.id} lost instructions`);
+    assert.deepEqual(steps.filter((step) => step.openOnNext).map((step) => step.openOnNext),
+      tour.steps.filter((step) => step.openOnNext).map((step) => step.openOnNext));
+    assert.ok(steps.length <= tour.steps.length);
+    for (const step of steps.filter((step) => step.details)) {
+      assert.equal(step.openOnNext, undefined);
+      assert.deepEqual(step.reveal, tour.steps.find((original) => original.id === step.id)?.reveal);
+      const start = tour.steps.findIndex((original) => original.id === step.id);
+      assert.deepEqual(step.highlightTargets, tour.steps.slice(start, start + step.details!.length).map((original) => original.target));
+    }
+  }
+  assert.ok(getTourSteps("Student Leader", "task-create").length <= 5);
+  assert.ok(getTourSteps("Student Leader", "event-create").length <= 4);
 });
 
 test("Help is centralized and New Event expands into its real modal controls", () => {
@@ -98,6 +117,41 @@ test("visible target lookup handles duplicate responsive controls and hidden con
   assert.equal(findTourTarget(step), visible);
   doc.querySelectorAll = () => [];
   assert.equal(findTourTarget(step), null);
+});
+
+test("group highlights include every available field when another field is missing or hidden", (t) => {
+  const hidden = { getBoundingClientRect: () => ({ width: 0, height: 0, right: 0, left: 0 }) };
+  const description = { getBoundingClientRect: () => ({ width: 100, height: 40, right: 140, left: 40 }) };
+  const deadline = { getBoundingClientRect: () => ({ width: 100, height: 40, right: 280, left: 180 }) };
+  const values = { window: { innerWidth: 375 }, document: { querySelectorAll: (selector: string) => selector.includes('event-description') ? [hidden, description] : selector.includes('event-end') ? [deadline] : [] }, getComputedStyle: () => ({ visibility: "visible" }) };
+  for (const [key, value] of Object.entries(values)) {
+    const old = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { value, configurable: true });
+    t.after(() => old ? Object.defineProperty(globalThis, key, old) : Reflect.deleteProperty(globalThis, key));
+  }
+  const step = { id: "group", target: "event-title", title: "Event", description: "Details", route: "/dashboard/events", highlightTargets: ["event-title", "event-description", "event-end"] };
+  assert.deepEqual(findTourHighlightTargets(step), [description, deadline]);
+  assert.deepEqual(findTourHighlightTargets({ ...step, target: "event-end", highlightTargets: undefined }), [deadline]);
+});
+
+test("group highlight bounds enclose the fields and stay inside mobile viewports and scrolling forms", (t) => {
+  const viewport = { innerWidth: 800, innerHeight: 600 };
+  const values = { window: viewport, getComputedStyle: () => ({ overflowX: "visible", overflowY: "auto" }) };
+  for (const [key, value] of Object.entries(values)) {
+    const old = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { value, configurable: true });
+    t.after(() => old ? Object.defineProperty(globalThis, key, old) : Reflect.deleteProperty(globalThis, key));
+  }
+  const first = { parentElement: null as unknown, getBoundingClientRect: () => ({ left: 20, top: 100, right: 480, bottom: 140 }) };
+  const last = { parentElement: null as unknown, getBoundingClientRect: () => ({ left: 20, top: 200, right: 480, bottom: 260 }) };
+  const fields = [first, last] as unknown as HTMLElement[];
+  assert.deepEqual(getTourHighlightRect(fields), { x: 15, y: 95, width: 470, height: 170 });
+  viewport.innerWidth = 320; viewport.innerHeight = 240;
+  assert.deepEqual(getTourHighlightRect(fields), { x: 15, y: 95, width: 301, height: 141 });
+  const scrollArea = { parentElement: null, clientLeft: 0, clientTop: 0, clientWidth: 490, clientHeight: 100, getBoundingClientRect: () => ({ left: 10, top: 120, right: 500, bottom: 220 }) };
+  first.parentElement = scrollArea; last.parentElement = scrollArea;
+  assert.deepEqual(getTourHighlightRect(fields), { x: 15, y: 120, width: 301, height: 100 });
+  assert.equal(getTourHighlightRect([]), null);
 });
 
 test("missing, disabled, and explanatory targets cannot receive tutorial interactions", () => {
