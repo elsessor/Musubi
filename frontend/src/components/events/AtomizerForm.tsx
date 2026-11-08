@@ -19,11 +19,13 @@ import { DEFAULT_ATOMIZER_STATUSES, EMPTY_ATOMIZER_DRAFT, useAtomizerDraftStore,
 const DEFAULT_STATUS_LIST = DEFAULT_ATOMIZER_STATUSES;
 
 function ModernStatusDropdown({
+  tourId,
   value,
   onChange,
   options,
   customStatuses
 }: {
+  tourId?: string;
   value: string;
   onChange: (val: TaskStatus) => void;
   options: string[];
@@ -50,7 +52,7 @@ function ModernStatusDropdown({
   const activeBadge = getStatusBadge(value);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div data-tour={tourId} ref={containerRef} className="relative w-full">
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
@@ -107,11 +109,13 @@ function ModernStatusDropdown({
 }
 
 function ModernEventDropdown({
+  tourId,
   events,
   value,
   onChange
 }: {
   events: Event[];
+  tourId?: string;
   value: string;
   onChange: (id: string) => void;
 }) {
@@ -131,7 +135,7 @@ function ModernEventDropdown({
   const selectedEvent = events.find((e) => e.id === value);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div data-tour={tourId} ref={containerRef} className="relative w-full">
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
@@ -501,7 +505,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               <label className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
                 Target Event <span className="text-rose-500">*</span>
               </label>
-              <button
+              <button data-tour="ai-create-description"
                 type="button"
                 onClick={() => setIsCreateFromDescription((prev) => !prev)}
                 className="min-h-11 text-left text-xs font-medium text-blue-600 hover:underline sm:min-h-0"
@@ -518,7 +522,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
                 className="flex h-11 w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 text-sm font-semibold text-slate-800 shadow-xs transition-all placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
             ) : (
-              <ModernEventDropdown
+              <ModernEventDropdown tourId="ai-target"
                 events={events.filter((event) => event.status !== "Archived")}
                 value={selectedEventId}
                 onChange={setSelectedEventId}
@@ -541,7 +545,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
                 Manage
               </button>
             </div>
-            <ModernStatusDropdown
+            <ModernStatusDropdown tourId="ai-status"
               value={defaultStatus}
               onChange={setDefaultStatus}
               options={statusOrder}
@@ -556,7 +560,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
             <label htmlFor="atomizer-event-date" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
               Event Date <span className="text-rose-400">*</span>
             </label>
-            <MiniCalendarPicker
+            <MiniCalendarPicker tourId="ai-date"
               id="atomizer-event-date"
               value={eventDate}
               format="iso"
@@ -570,7 +574,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
             <label htmlFor="atomizer-participating-members" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
               Participating Members <span className="text-rose-400">*</span>
             </label>
-            <input
+            <input data-tour="ai-members"
               id="atomizer-participating-members"
               type="number"
               required
@@ -590,7 +594,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           <label htmlFor="atomizer-event-description" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
             Event Description
           </label>
-          <textarea
+          <textarea data-tour="ai-description"
             id="atomizer-event-description"
             value={goalDescription}
             onChange={(e) => setGoalDescription(e.target.value)}
@@ -667,7 +671,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
         {/* Action Controls */}
         <div className="mt-5 flex min-w-0 items-center gap-3">
-          <button
+          <button data-tour="ai-generate"
             type="button"
             onClick={handleAtomize}
             disabled={isAtomizingActive || !goalDescription.trim()}

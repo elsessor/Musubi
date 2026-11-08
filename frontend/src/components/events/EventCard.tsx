@@ -18,7 +18,7 @@ export function EventCard({ event, onClick, customStatuses, compact = false }: E
   const taskCount = event.tasks.filter((task) => !isTaskArchived(task)).length;
 
   return (
-    <button
+    <button data-tour="event-card"
       type="button"
       onClick={() => onClick(event)}
       className={`group flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-3 ${compact ? "sm:p-4" : "sm:p-5"} text-left shadow-sm ring-1 ring-slate-100 transition-all hover:-translate-y-0.5 hover:shadow-md hover:ring-blue-200 focus-visible:outline-2 focus-visible:outline-blue-500`}

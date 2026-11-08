@@ -153,7 +153,7 @@ export function TaskTableView({ readOnly = false, tasks, onUpdateStatus, onUpdat
               const isPriorityOpen = openPriorityDropdownId === task.id;
 
               return (
-                <tr
+                <tr data-tour="task-card"
                   key={task.id}
                   onClick={() => onSelectTask?.(task)}
                   className="transition-colors hover:bg-slate-50/80 cursor-pointer"

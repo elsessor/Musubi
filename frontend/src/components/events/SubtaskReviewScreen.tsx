@@ -400,7 +400,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, existin
             </button>
           )}
 
-          <button
+          <button data-tour="ai-auto-assign"
             type="button"
             onClick={handleAutoAssignHeuristics}
             className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-2.5 text-xs font-bold text-indigo-700 shadow-xs transition hover:bg-indigo-100 xl:px-4"
@@ -419,7 +419,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, existin
             <span className="xl:hidden">Add subtask</span><span className="hidden xl:inline">Add Subtask Manually</span>
           </button>
 
-          <button
+          <button data-tour="ai-publish"
             type="button"
             disabled={activeSubtasks.length === 0 || isPublished}
             onClick={() => setShowPublishModal(true)}
@@ -479,7 +479,7 @@ export function SubtaskReviewScreen({ goalDraft, onDraftChange, members, existin
                 <span className="hidden lg:inline">{showOnlyWarnings ? "Show All Tasks" : `Filter Warnings (${subtasksWithWarnings.length})`}</span>
               </button>
 
-              <button
+              <button data-tour="ai-warnings"
                 type="button"
                 onClick={handleAutoFixSafeguards}
                 className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-2 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-amber-600 lg:px-3"
@@ -776,7 +776,7 @@ function OldTaskCard({
               <AlertTriangle size={14} className="text-amber-600 shrink-0" />
               <span>Validation warnings ({warnings.length})</span>
             </div>
-            <button
+            <button data-tour="ai-edit-task"
               type="button"
               onClick={onEdit}
               className="min-h-11 text-xs font-extrabold text-blue-700 underline hover:text-blue-900"
@@ -885,7 +885,7 @@ function OldTaskCard({
 
       {/* Main Bottom Buttons (Exact Old UI Style from Screenshot 1) */}
       <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
-        <button
+        <button data-tour="ai-edit-task"
           type="button"
           onClick={onEdit}
           className="min-h-11 rounded-xl border border-[#cbd5e1] bg-white px-2 py-2.5 text-xs font-bold text-[#334155] shadow-2xs transition hover:bg-slate-50 sm:text-sm"

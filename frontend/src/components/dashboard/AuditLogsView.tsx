@@ -313,7 +313,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
             {/* Search Input */}
             <label className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 focus-within:border-brand focus-within:bg-white focus-within:ring-2 focus-within:ring-brand/10 transition">
               <Search className="size-4 text-slate-400 shrink-0" />
-              <input
+              <input data-tour="audit-search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
@@ -332,7 +332,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
 
             {/* Category & Date Filters */}
             <div className="flex flex-wrap items-center gap-2">
-              <select
+              <select data-tour="audit-category"
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-brand"
@@ -344,7 +344,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
                 ))}
               </select>
 
-              <select
+              <select data-tour="audit-date"
                 value={dateRangeFilter}
                 onChange={(e) => setDateRangeFilter(e.target.value)}
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-brand"
@@ -382,6 +382,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
                     <button
                       type="button"
                       onClick={() => toggleExpand(log.id)}
+                      data-tour="audit-record"
                       className="grid w-full gap-4 px-5 py-4 text-left md:grid-cols-[auto_minmax(0,1.5fr)_minmax(140px,.8fr)_minmax(140px,.8fr)_auto] md:items-center"
                     >
                       <CategoryIcon category={log.actionCategory} />
@@ -560,6 +561,7 @@ export function AuditLogsView({ requiredRole }: AuditLogsViewProps) {
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                  data-tour="audit-pagination"
                   className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Previous

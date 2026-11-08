@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState } from "react";
 import { ChevronRight, Megaphone, Pin, Plus, X } from "lucide-react";
 import type { Announcement } from "@/services/announcements.service";
@@ -23,7 +24,7 @@ export function AnnouncementsView({
   }
 
   return (
-    <div className="mt-6 space-y-4 max-w-full">
+    <div data-tour="announcement-feed" className="mt-6 space-y-4 max-w-full">
       {/* Header bar below tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-xs font-semibold text-slate-400">
@@ -31,7 +32,7 @@ export function AnnouncementsView({
         </p>
 
         {isLeader && (
-          <button
+          <button data-tour="announcement-create"
             type="button"
             onClick={onPostAnnouncement}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1e3a5f] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-[#152a45] active:scale-[0.98] self-start sm:self-auto"
@@ -229,7 +230,7 @@ export function PostAnnouncementModal({
               </p>
             </div>
           </div>
-          <button
+          <button data-tour="announcement-cancel"
             type="button"
             onClick={onClose}
             className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
@@ -240,12 +241,13 @@ export function PostAnnouncementModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+
           {/* TITLE Input */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
               TITLE <span className="text-rose-500">*</span>
             </label>
-            <input
+            <input data-tour="announcement-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -260,7 +262,7 @@ export function PostAnnouncementModal({
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
               MESSAGE <span className="text-rose-500">*</span>
             </label>
-            <textarea
+            <textarea data-tour="announcement-content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={4}
@@ -277,7 +279,7 @@ export function PostAnnouncementModal({
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                 TARGET AUDIENCE
               </label>
-              <div className="space-y-2" role="group" aria-label="Target audience">
+              <div data-tour="announcement-audience" className="space-y-2" role="group" aria-label="Target audience">
                 {["All Members", "Leaders Only"].map((audience) => (
                   <button key={audience} type="button" disabled={submitting} aria-pressed={audienceChoice === audience} onClick={() => setAudienceChoice(audience)} className={`w-full rounded-xl px-3 py-2.5 text-center text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60 ${audienceChoice === audience ? "bg-[#1e3a5f] text-white shadow-xs" : "bg-[#f1f4f8] text-slate-600 hover:bg-slate-200/60"}`}>
                     {audience}
@@ -303,7 +305,7 @@ export function PostAnnouncementModal({
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                 OPTIONS
               </label>
-              <div
+              <div data-tour="announcement-pin"
                 onClick={() => setIsPinned(!isPinned)}
                 className="rounded-2xl bg-[#f1f4f8] p-3 flex items-start gap-3 cursor-pointer hover:bg-slate-200/60 transition select-none h-[88px]"
               >
@@ -327,14 +329,14 @@ export function PostAnnouncementModal({
           {/* Action Buttons */}
           {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
           <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
-            <button
+            <button data-tour="announcement-cancel"
               type="button"
               onClick={onClose}
               className="w-full rounded-2xl border border-slate-200 bg-white py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
             >
               Cancel
             </button>
-            <button
+            <button data-tour="announcement-submit"
               type="submit"
               disabled={submitting || !isValid}
               className={`w-full rounded-2xl py-3 text-xs font-bold transition ${

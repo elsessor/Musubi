@@ -81,7 +81,7 @@ export function TaskExpandedView({ readOnly = false, tasks, onUpdateStatus, onSe
                 </button>
                 <div className="min-w-0 flex-1 space-y-2">
                   <h3 className="break-words [overflow-wrap:anywhere] text-sm font-semibold leading-5 text-slate-900">
-                    {onSelectTask ? <button type="button" onClick={() => onSelectTask(task)} className="w-full text-left transition-colors hover:text-blue-600">{task.title || task.description}</button> : task.title || task.description}
+                    {onSelectTask ? <button data-tour="task-card" type="button" onClick={() => onSelectTask(task)} className="w-full text-left transition-colors hover:text-blue-600">{task.title || task.description}</button> : task.title || task.description}
                   </h3>
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${pCfg.classes}`}><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />{pCfg.label}</span>

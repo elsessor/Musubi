@@ -797,7 +797,7 @@ function Members({ search, members: visibleMembers, onSearch, joinRequests, isLe
       </div>
       <label className="mt-5 flex h-10 items-center gap-3 rounded-xl border border-[#dce3ed] bg-white px-3">
         <Search className="size-4 text-slate-500" />
-        <input className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} />
+        <input data-tour="member-search" className="w-full bg-transparent text-[13px] outline-none placeholder:text-slate-500" onChange={(event) => onSearch(event.target.value)} placeholder="Search by name, role, or skill..." value={search} />
       </label>
       <OrganizationMemberTable members={visibleMembers} onViewProfile={onViewProfile} onRemoveMember={onRemoveMember} isLeader={isLeader} currentUserId={currentUserId} currentUserName={currentUserName} />
     </div>
@@ -815,7 +815,7 @@ function Committees({ committees, members, canCreate, onCreate, currentUserId, c
     <div className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="text-sm text-slate-500">Sub-groups within the organization. Each committee has a designated head and a set of members.</p>
-        {canCreate ? <button type="button" onClick={onCreate} className="flex h-9 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4" />New Committee</button> : null}
+        {canCreate ? <button data-tour="committee-create" type="button" onClick={onCreate} className="flex h-9 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4" />New Committee</button> : null}
       </div>
       {committees.length ? (
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -826,7 +826,7 @@ function Committees({ committees, members, canCreate, onCreate, currentUserId, c
           <ClipboardList className="size-7 text-slate-400" />
           <h2 className="mt-3 text-lg font-bold">No committees yet</h2>
           <p className="mt-1 text-sm text-slate-500">Create a committee to organize members around a shared responsibility.</p>
-          {canCreate ? <button onClick={onCreate} className="mt-4 rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white" type="button">Create committee</button> : null}
+          {canCreate ? <button data-tour="committee-create" onClick={onCreate} className="mt-4 rounded-xl bg-[#213f68] px-4 py-2 text-sm font-semibold text-white" type="button">Create committee</button> : null}
         </div>
       )}
     </div>

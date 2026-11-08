@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@/components/ui/utils";
 
 type MiniCalendarPickerProps = {
+  tourId?: string;
   id?: string;
   disabled?: boolean;
   value: string;
@@ -27,6 +28,7 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 export function MiniCalendarPicker({
+  tourId,
   id,
   disabled = false,
   value,
@@ -315,6 +317,7 @@ export function MiniCalendarPicker({
     <div className={`relative inline-block w-full ${className}`}>
       {/* Trigger Button */}
       <button
+        data-tour={tourId}
         id={id}
         disabled={disabled}
         aria-haspopup="dialog"

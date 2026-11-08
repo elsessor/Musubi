@@ -364,7 +364,7 @@ export default function AdminMembersPage() {
             {/* Search Input */}
             <label className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 focus-within:border-brand focus-within:bg-white focus-within:ring-2 focus-within:ring-brand/10 transition">
               <Search className="size-4 text-slate-400 shrink-0" />
-              <input
+              <input data-tour="admin-member-search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
@@ -383,7 +383,7 @@ export default function AdminMembersPage() {
 
             {/* Filter Dropdowns */}
             <div className="flex flex-wrap items-center gap-2">
-              <select
+              <select data-tour="admin-member-role-filter"
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
@@ -394,7 +394,7 @@ export default function AdminMembersPage() {
                 <option value="Organization Member">Organization Member</option>
               </select>
 
-              <select
+              <select data-tour="admin-member-org-filter"
                 value={orgFilter}
                 onChange={(e) => setOrgFilter(e.target.value)}
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
@@ -407,7 +407,7 @@ export default function AdminMembersPage() {
                 ))}
               </select>
 
-              <select
+              <select data-tour="admin-member-committee-filter"
                 value={committeeFilter}
                 onChange={(e) => setCommitteeFilter(e.target.value)}
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
@@ -420,7 +420,7 @@ export default function AdminMembersPage() {
                 ))}
               </select>
 
-              <select
+              <select data-tour="admin-member-status-filter"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-brand"
@@ -570,6 +570,7 @@ export default function AdminMembersPage() {
                             <button
                               type="button"
                               onClick={() => setRoleModalMember(member)}
+                              data-tour="admin-member-edit"
                               className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
                             >
                               Change Role
@@ -706,6 +707,7 @@ function ChangeRoleModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 animate-in fade-in">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-5">
+
         <div className="flex items-start justify-between border-b border-slate-100 pb-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Member Role Management</p>
@@ -724,6 +726,7 @@ function ChangeRoleModal({
             </label>
             <select
               value={role}
+              data-tour="admin-member-edit-role"
               onChange={(e) => setRole(e.target.value as UserRole)}
               className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
             >
@@ -742,6 +745,7 @@ function ChangeRoleModal({
             <input
               type="text"
               value={position}
+              data-tour="admin-member-edit-position"
               onChange={(e) => setPosition(e.target.value)}
               className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
               placeholder="e.g. President, Vice President, Member"
@@ -754,6 +758,7 @@ function ChangeRoleModal({
             type="button"
             onClick={onClose}
             disabled={submitting}
+            data-tour="admin-member-edit-cancel"
             className="h-11 flex-1 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
           >
             Cancel
@@ -766,6 +771,7 @@ function ChangeRoleModal({
               await onSave(member.id, role, position.trim() || member.position);
               setSubmitting(false);
             }}
+            data-tour="admin-member-edit-save"
             className="h-11 flex-1 rounded-xl bg-[#213f68] text-sm font-extrabold text-white hover:bg-blue-900 transition disabled:opacity-50"
           >
             {submitting ? "Saving..." : "Save Role Changes"}

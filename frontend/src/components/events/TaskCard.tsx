@@ -35,7 +35,7 @@ export function TaskCard({
   const pCfg = priorityConfig[task.priority || "Medium"];
 
   return (
-    <div
+    <div data-tour="task-card"
       draggable={canDrag}
       onDragStart={(event) => {
         if (canDrag) {

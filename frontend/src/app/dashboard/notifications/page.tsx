@@ -146,7 +146,7 @@ export default function NotificationsPage() {
             ) : null}
           </div>
 
-          <button
+          <button data-tour="notifications-read-all"
             type="button"
             onClick={handleMarkAllAsRead}
             className="shrink-0 text-[11px] font-bold text-[#2563eb] transition hover:text-blue-700 sm:text-xs"
@@ -157,7 +157,7 @@ export default function NotificationsPage() {
 
         {/* Filter Tabs Pill Bar (Student Leader vs Member View) */}
         <div className="mt-3 flex flex-wrap items-center gap-1.5 sm:mt-5 sm:gap-2">
-          <button
+          <button data-tour="notifications-all"
             type="button"
             onClick={() => setActiveTab("all")}
             className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
@@ -183,7 +183,7 @@ export default function NotificationsPage() {
                 Activity <span className="ml-1 opacity-80">{activityCount}</span>
               </button>
 
-              <button
+              <button data-tour="notifications-announcements"
                 type="button"
                 onClick={() => setActiveTab("announcements")}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
@@ -197,7 +197,7 @@ export default function NotificationsPage() {
             </>
           ) : (
             <>
-              <button
+              <button data-tour="notifications-announcements"
                 type="button"
                 onClick={() => setActiveTab("announcements")}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
@@ -209,7 +209,7 @@ export default function NotificationsPage() {
                 Announcements <span className="ml-1 opacity-80">{announcementsCount}</span>
               </button>
 
-              <button
+              <button data-tour="notifications-nudges"
                 type="button"
                 onClick={() => setActiveTab("nudges")}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
@@ -221,7 +221,7 @@ export default function NotificationsPage() {
                 Nudges <span className="ml-1 opacity-80">{nudgesCount}</span>
               </button>
 
-              <button
+              <button data-tour="notifications-ratings"
                 type="button"
                 onClick={() => setActiveTab("ratings")}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${

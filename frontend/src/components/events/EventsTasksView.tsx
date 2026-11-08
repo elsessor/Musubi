@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CustomSelect } from "@/components/ui/CustomSelect";
@@ -57,6 +58,11 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
 
   const [activeTab, setActiveTab] = useState<Tab>("events");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  useEffect(() => {
+    const prepare = () => { setActiveTab("events"); setSelectedEvent(null); };
+    window.addEventListener("musubi:tutorial:prepare-events", prepare);
+    return () => window.removeEventListener("musubi:tutorial:prepare-events", prepare);
+  }, []);
   const [events, setEvents] = useState<Event[]>([]);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [committees, setCommittees] = useState<{ id: string; name: string }[]>([]);
@@ -326,7 +332,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                   <p className="text-xs text-slate-400">Add an organizational event with tasks</p>
                 </div>
               </div>
-              <button
+              <button data-tour="event-cancel"
                 type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
@@ -336,12 +342,13 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
             </div>
 
             <form onSubmit={handleCreateEventSubmit} className="space-y-4">
+
               {/* EVENT NAME */}
               <div>
                 <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
                   EVENT NAME <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <input data-tour="event-title"
                   type="text"
                   required
                   value={title}
@@ -356,7 +363,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                 <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
                   DESCRIPTION
                 </label>
-                <textarea
+                <textarea data-tour="event-description"
                   rows={3}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -367,7 +374,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
 
               <div className="min-w-0">
                 <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">COORDINATING COMMITTEE <span className="font-medium normal-case tracking-normal">(optional)</span></label>
-                <CustomSelect value={committee} onChange={setCommittee} options={[{ value: "", label: "No lead committee (cross-committee)" }, ...committees.map((item) => ({ value: item.name, label: item.name }))]} multiline buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
+                <CustomSelect tourId="event-committee" value={committee} onChange={setCommittee} options={[{ value: "", label: "No lead committee (cross-committee)" }, ...committees.map((item) => ({ value: item.name, label: item.name }))]} multiline buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
               </div>
 
               {/* REUSE TASKS FROM PREVIOUS EVENT */}
@@ -376,7 +383,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                   <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
                     REUSE TASKS FROM PREVIOUS EVENT <span className="font-medium normal-case tracking-normal">(optional)</span>
                   </label>
-                  <CustomSelect
+                  <CustomSelect tourId="event-reuse"
                     value={seedEventId}
                     onChange={setSeedEventId}
                     options={[
@@ -406,7 +413,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                   <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
                     START DATE &amp; TIME <span className="text-rose-500">*</span>
                   </label>
-                  <MiniCalendarPicker
+                  <MiniCalendarPicker tourId="event-start"
                     value={startDate}
                     onChange={(value) => { setStartDate(value); setDateError(""); }}
                     minDate={new Date()}
@@ -419,7 +426,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                   <label className="mb-1.5 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
                     END DATE &amp; TIME <span className="text-rose-500">*</span>
                   </label>
-                  <MiniCalendarPicker
+                  <MiniCalendarPicker tourId="event-end"
                     value={endDate}
                     onChange={(value) => { setEndDate(value); setDateError(""); }}
                     minDate={parseScheduleDate(startDate) || new Date()}
@@ -433,14 +440,14 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
               {/* BUTTONS */}
               {(dateError || getDateRangeError(startDate, endDate)) && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{getDateRangeError(startDate, endDate) || dateError}</p>}
               <div className="grid grid-cols-2 gap-3 pt-2">
-                <button
+                <button data-tour="event-cancel"
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="w-full rounded-xl border border-slate-200/80 bg-white py-2.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-tour="event-submit"
                   type="submit"
                   disabled={creating || !title.trim()}
                   className={`w-full rounded-xl py-2.5 text-xs font-bold transition-all shadow-xs ${

@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useEffect, useMemo, useState } from "react";
 import { User, X } from "lucide-react";
 
@@ -233,7 +234,7 @@ export function AdminOrgRequestsView() {
         ) : (
           <div className="space-y-4">
             {pendingRequests.map((req) => (
-              <div
+              <div data-tour="request-card"
                 key={req.id}
                 className="rounded-2xl bg-white p-6 shadow-sm border border-amber-200/80"
               >
@@ -270,14 +271,14 @@ export function AdminOrgRequestsView() {
 
                 {/* Action Buttons Row */}
                 <div className="mt-4 flex flex-col sm:flex-row items-center gap-4">
-                  <button
+                  <button data-tour="request-approve"
                     onClick={() => void handleApprove(req)}
                     disabled={submitting}
                     className="flex-1 w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-emerald-500 hover:bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-colors cursor-pointer disabled:opacity-50"
                   >
                     Approve
                   </button>
-                  <button
+                  <button data-tour="request-reject"
                     onClick={() => {
                       setRejectingItem(req);
                       setRejectionInput("");
@@ -304,7 +305,7 @@ export function AdminOrgRequestsView() {
           {reviewedRequests.map((req) => {
             const isApproved = req.status === "approved";
             return (
-              <div key={req.id} className="py-4 first:pt-0 last:pb-0">
+              <div data-tour="request-card" key={req.id} className="py-4 first:pt-0 last:pb-0">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-sm sm:text-base font-bold text-slate-900">
@@ -341,7 +342,7 @@ export function AdminOrgRequestsView() {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl ring-1 ring-slate-200">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900">Reject Request</h3>
-              <button
+              <button data-tour="request-cancel"
                 onClick={() => setRejectingItem(null)}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
@@ -350,10 +351,11 @@ export function AdminOrgRequestsView() {
             </div>
 
             <form onSubmit={handleConfirmReject} className="mt-4 space-y-4">
+
               <p className="text-xs font-medium text-slate-600">
                 Please provide a rejection reason for <strong>{rejectingItem.orgName}</strong>:
               </p>
-              <textarea
+              <textarea data-tour="request-reason"
                 rows={3}
                 required
                 value={rejectionInput}
@@ -363,14 +365,14 @@ export function AdminOrgRequestsView() {
               />
 
               <div className="flex justify-end gap-3 pt-2">
-                <button
+                <button data-tour="request-cancel"
                   type="button"
                   onClick={() => setRejectingItem(null)}
                   className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-tour="request-confirm"
                   type="submit"
                   disabled={submitting || !rejectionInput.trim()}
                   className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"

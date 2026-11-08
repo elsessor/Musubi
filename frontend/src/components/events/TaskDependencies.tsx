@@ -36,6 +36,7 @@ export function TaskDependencyBadge({ task, compact = false }: {
 }
 
 type TaskDependencySelectorProps = {
+  tourId?: string;
   taskId: string;
   tasks: DependencyTask[];
   value: string[];
@@ -43,7 +44,7 @@ type TaskDependencySelectorProps = {
   readOnly?: boolean;
 };
 
-export function TaskDependencySelector({ taskId, tasks, value, onChange, readOnly = false }: TaskDependencySelectorProps) {
+export function TaskDependencySelector({ taskId, tasks, value, onChange, readOnly = false, tourId }: TaskDependencySelectorProps) {
   const fieldId = useId();
   const [search, setSearch] = useState("");
   const blockers = getBlockingDependencies({ id: taskId, dependsOnTaskIds: value }, tasks);
@@ -62,7 +63,7 @@ export function TaskDependencySelector({ taskId, tasks, value, onChange, readOnl
   const options = [...available, ...missing].filter((task) => (!readOnly || value.includes(task.id)) && (task.title || "").toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <fieldset className="min-w-0 space-y-2.5 rounded-xl border border-slate-200 bg-white p-3">
+    <fieldset data-tour={tourId} className="min-w-0 space-y-2.5 rounded-xl border border-slate-200 bg-white p-3">
       <legend className="px-1.5 text-xs font-semibold text-slate-700">
         <span className="inline-flex items-center gap-1.5"><Link2 size={13} className="text-slate-400" />Depends on</span>
       </legend>

@@ -1,5 +1,6 @@
 "use client";
 
+
 import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 
 import {
@@ -276,13 +277,14 @@ export function TaskDetailModal({
               <p className="mt-1 break-words text-xs leading-5 text-slate-500 line-clamp-2">{isLeader ? task.title : canEdit ? "Update status or add attachments to your assigned subtask." : "View task details and attachments."}</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close task panel" className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
+          <button data-tour="task-close" type="button" onClick={onClose} aria-label="Close task panel" className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
             <X size={18} />
           </button>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
           {archived ? <p className="rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">This subtask is archived. Restore it to make changes.</p> : null}
           <section aria-label="Task details" className="space-y-4">
@@ -292,7 +294,7 @@ export function TaskDetailModal({
             <label className="mb-1.5 block text-xs font-semibold text-slate-600">
               Task Title <span className="text-rose-500">*</span>
             </label>
-            <input
+            <input data-tour="task-title"
               type="text"
               required
               value={title}
@@ -328,7 +330,7 @@ export function TaskDetailModal({
           <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">Status</label>
-              {canEdit ? <CustomSelect
+              {canEdit ? <CustomSelect tourId="task-status"
                 value={status}
                 onChange={(value) => setStatus(value as TaskStatus)}
                 options={statusOptions}
@@ -342,7 +344,7 @@ export function TaskDetailModal({
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">Priority</label>
               {isLeader ? (
-                <CustomSelect value={priority} onChange={(value) => setPriority(value as TaskPriority)} options={priorityOptions} buttonClassName="py-2 text-xs" disabled={!canEdit} />
+                <CustomSelect tourId="task-priority" value={priority} onChange={(value) => setPriority(value as TaskPriority)} options={priorityOptions} buttonClassName="py-2 text-xs" disabled={!canEdit} />
               ) : (
                 <p className={`flex h-9 items-center rounded-xl border px-3 text-xs font-semibold ${PRIORITY_CONFIG[task.priority || "Medium"].classes}`}>{task.priority || "Medium"}</p>
               )}
@@ -353,7 +355,7 @@ export function TaskDetailModal({
           {isLeader ? <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">Assignee</label>
-              <CustomSelect
+              <CustomSelect tourId="task-assignee"
                 value={selectedMemberId}
                 onChange={setSelectedMemberId}
                 options={assigneeOptions}
@@ -464,7 +466,7 @@ export function TaskDetailModal({
           </div>
         </div>
       ) : null}
-          <TaskAttachments eventId={eventId} task={task} canAdd={canEdit} onTaskUpdated={onAttachmentsUpdated} />
+          <div data-tour="task-attachments"><TaskAttachments eventId={eventId} task={task} canAdd={canEdit} onTaskUpdated={onAttachmentsUpdated} /></div>
           </div>
           <div className="flex shrink-0 items-center gap-2 border-t border-slate-200 bg-white p-3 sm:flex-wrap sm:justify-between sm:gap-3 sm:px-6 sm:py-4">
             {canArchiveTask || canSendNudge ? (
@@ -516,7 +518,7 @@ export function TaskDetailModal({
               )}
             </div> : null}
             <div className={`grid min-w-0 flex-1 gap-2 ${canEdit ? "grid-cols-2" : "grid-cols-1"} sm:ml-auto sm:flex sm:flex-none sm:items-center sm:justify-end`}>
-              <button
+              <button data-tour="task-close"
                 type="button"
                 onClick={onClose}
                 className="min-h-11 rounded-xl border border-slate-200 px-2 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 sm:min-h-9 sm:px-4"
@@ -524,7 +526,7 @@ export function TaskDetailModal({
                 {canEdit ? "Cancel" : "Close"}
               </button>
               {canEdit ? (
-                <button
+                <button data-tour="task-submit"
                   type="submit"
                   disabled={saving || (isLeader && Boolean(scheduleError))}
                   className="min-h-11 rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700 disabled:opacity-50 sm:min-h-9 sm:px-4"

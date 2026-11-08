@@ -421,17 +421,17 @@ export function EventsDashboard({
         <>
           <p className="text-sm font-semibold text-slate-600">{events.length} events · {activeCount} active</p>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setFiltersOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold">
+            <button data-tour="event-filter-panel" type="button" onClick={() => setFiltersOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold">
               <SlidersHorizontal size={16} /> Filters{filter !== "All" || selectedCommittee !== "All" ? ` (${Number(filter !== "All") + Number(selectedCommittee !== "All")})` : ""}
             </button>
             <div className="min-w-0 flex-1">
-              <CustomSelect value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[
+              <CustomSelect tourId="event-view" value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[
                 { value: "grid", label: "Grid" }, { value: "table", label: "Table" },
                 { value: "expanded", label: "Expanded" }, { value: "kanban", label: "Kanban" },
                 { value: "calendar", label: "Calendar" }
               ]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
             </div>
-            {isLeader && <button type="button" onClick={() => onNewEvent()} className="flex min-h-11 items-center gap-1 rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white"><Plus size={16} /> New</button>}
+            {isLeader && <button data-tour="create-event" type="button" onClick={() => onNewEvent()} className="flex min-h-11 items-center gap-1 rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white"><Plus size={16} /> New</button>}
           </div>
         </>
       )}
@@ -472,7 +472,7 @@ export function EventsDashboard({
       <div className={`${compactMobile ? "hidden" : "flex"} flex-wrap items-center justify-between gap-2`}>
         <div className="flex flex-wrap items-center gap-2">
           {/* Committee filter */}
-          <CustomSelect
+          <CustomSelect tourId="event-committee-filter"
             value={selectedCommittee}
             onChange={setSelectedCommittee}
             options={[
@@ -500,7 +500,7 @@ export function EventsDashboard({
               const isDragOverThis = dragOverStatusPill === key;
 
               return (
-                <button
+                <button data-tour="event-status-filter"
                   key={key}
                   type="button"
                   draggable={isPillDraggable}
@@ -552,7 +552,7 @@ export function EventsDashboard({
 
             {/* + Add / Manage Custom Status Button for Leaders */}
             {isLeader && (
-              <button
+              <button data-tour="event-custom-status"
                 type="button"
                 disabled={!settingsReady}
                 onClick={() => setIsAddStatusModalOpen(true)}
@@ -569,7 +569,7 @@ export function EventsDashboard({
         {/* 5 View Mode Toggles */}
         <div className="flex items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
           {VIEW_MODES.map(({ mode, title, icon: Icon }) => (
-            <button
+            <button data-tour="event-view"
               key={mode}
               type="button"
               title={title}
@@ -956,7 +956,7 @@ export function EventsDashboard({
           {/* End of Board: + Add Custom Status Column (Trello "+ Add another list") */}
           {isLeader && (
             <div className={compactMobile ? "w-full min-w-0" : "w-[280px] min-w-[280px] shrink-0"}>
-              <button
+              <button data-tour="event-custom-status"
                 type="button"
                 onClick={() => setIsAddStatusModalOpen(true)}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 px-4 py-4 text-xs font-bold text-slate-600 hover:border-blue-400 hover:bg-blue-50/60 hover:text-blue-700 transition-all shadow-2xs"
@@ -1014,11 +1014,11 @@ export function EventsDashboard({
         <dialog ref={filtersDialogRef} onCancel={() => setFiltersOpen(false)} aria-labelledby="mobile-event-filters-title" className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40">
           <div className="mb-5 flex items-center justify-between">
             <h2 id="mobile-event-filters-title" className="text-lg font-bold">Filter events</h2>
-            <button type="button" onClick={() => setFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
+            <button data-tour="event-filter-done" type="button" onClick={() => setFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
           </div>
           <div className="space-y-4">
             <div className="space-y-2 text-sm font-semibold text-slate-600"><p>Committee</p>
-              <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" />
+              <CustomSelect tourId="event-committee-filter" value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" />
             </div>
             <div className="space-y-2 text-sm font-semibold text-slate-600"><p>Status</p>
               <CustomSelect value={filter} onChange={setFilter} options={allStatusFilters.map(({ key, label }) => ({ value: key, label, indicatorClass: key === "All" ? undefined : getStatusTheme(key, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" />

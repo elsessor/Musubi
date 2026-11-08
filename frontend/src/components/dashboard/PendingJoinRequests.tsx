@@ -23,6 +23,7 @@ export function PendingJoinRequests({ requests, reviewingRequestId, onReview }: 
     <Dialog>
       <DialogTrigger asChild>
         <button
+          data-tour="join-requests"
           type="button"
           className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:w-auto"
         >

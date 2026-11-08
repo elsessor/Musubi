@@ -109,6 +109,7 @@ export function DashboardLayout({
         />
 
         <main data-tour="workspace" data-tutorial-ready={!navigating && tutorialReady} data-tutorial-role={user.role} className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+
           {navigating ? <DashboardContentSkeleton /> : children ?? <>
           {kpis.length > 0 ? (
             <section className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">

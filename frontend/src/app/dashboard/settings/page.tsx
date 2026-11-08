@@ -530,7 +530,7 @@ export default function DashboardSettingsPage() {
         </h1>
 
         {/* Card 1: User & Organization Details */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8">
+        <div data-tour="settings-profile" className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8">
           {/* ORGANIZATION NAME */}
           <div className="flex items-center justify-between py-3">
             <div>
@@ -615,7 +615,7 @@ export default function DashboardSettingsPage() {
         </div>
 
         {/* Card 2: Preferences */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8 space-y-6">
+        <div data-tour="settings-calendar" className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8 space-y-6">
           <h2 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
             PREFERENCES
           </h2>
@@ -849,6 +849,7 @@ export default function DashboardSettingsPage() {
                 <button
                   type="button"
                   onClick={handleSaveEdit}
+                  data-tour="settings-save"
                   disabled={saving || !editValue.trim()}
                   className="flex items-center gap-1.5 rounded-xl bg-[#2563eb] px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
                 >

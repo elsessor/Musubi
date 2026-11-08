@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search, X } from "lucide-react";
@@ -122,7 +123,7 @@ export function AdminOrganizationsView() {
       {/* Top Header Row */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-extrabold text-slate-900">Organizations</h1>
-        <button
+        <button data-tour="admin-org-add"
           onClick={() => setIsAddModalOpen(true)}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1e293b] hover:bg-[#0f172a] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors cursor-pointer"
         >
@@ -134,7 +135,7 @@ export function AdminOrganizationsView() {
       {/* Search Input Bar */}
       <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/80">
         <Search className="size-5 text-slate-400 shrink-0" />
-        <input
+        <input data-tour="admin-org-search"
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -155,7 +156,7 @@ export function AdminOrganizationsView() {
       ) : (
         <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {displayOrganizations.map((org) => (
-            <div
+            <div data-tour="admin-org-card"
               key={org.id}
               onClick={() => {
                 setSelectedOrgId(org.id);
@@ -204,7 +205,7 @@ export function AdminOrganizationsView() {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl ring-1 ring-slate-200">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900">Add New Organization</h3>
-              <button
+              <button data-tour="admin-org-cancel"
                 onClick={() => setIsAddModalOpen(false)}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
@@ -215,11 +216,12 @@ export function AdminOrganizationsView() {
             {error ? <p className="mt-3 rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{error}</p> : null}
 
             <form onSubmit={handleCreateOrg} className="mt-4 space-y-4">
+
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Organization Name
                 </label>
-                <input
+                <input data-tour="admin-org-name"
                   type="text"
                   required
                   value={newOrgName}
@@ -233,7 +235,7 @@ export function AdminOrganizationsView() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Category / Type
                 </label>
-                <select
+                <select data-tour="admin-org-type"
                   value={newOrgType}
                   onChange={(e) => setNewOrgType(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-600 bg-white"
@@ -250,7 +252,7 @@ export function AdminOrganizationsView() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Description
                 </label>
-                <textarea
+                <textarea data-tour="admin-org-description"
                   rows={3}
                   value={newOrgDescription}
                   onChange={(e) => setNewOrgDescription(e.target.value)}
@@ -260,14 +262,14 @@ export function AdminOrganizationsView() {
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
-                <button
+                <button data-tour="admin-org-cancel"
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
                   className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-tour="admin-org-submit"
                   type="submit"
                   disabled={submitting}
                   className="rounded-xl bg-[#1e293b] hover:bg-[#0f172a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"

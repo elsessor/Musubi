@@ -21,6 +21,7 @@ export type CustomSelectOption = {
 };
 
 export type CustomSelectProps = {
+  tourId?: string;
   value: string;
   onChange: (value: string) => void;
   options: CustomSelectOption[];
@@ -36,6 +37,7 @@ export type CustomSelectProps = {
 };
 
 export function CustomSelect({
+  tourId,
   value,
   onChange,
   options,
@@ -146,6 +148,7 @@ export function CustomSelect({
   return (
     <div ref={containerRef} className={cn("relative w-full", containerClassName)}>
       <button
+        data-tour={tourId}
         type="button"
         onClick={handleToggle}
         disabled={disabled}

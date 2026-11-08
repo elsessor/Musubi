@@ -152,12 +152,13 @@ export function AtomizedTaskEditModal({ subtask, subtasks = [subtask], members, 
             </span>
             <h3 id={`${panelId}-title`} className="text-lg font-bold text-slate-900">Edit AI Task</h3>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close task editor" className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+          <button data-tour="ai-review-cancel" type="button" onClick={onClose} aria-label="Close task editor" className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-600">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+
           {/* Title */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
@@ -191,7 +192,7 @@ export function AtomizedTaskEditModal({ subtask, subtasks = [subtask], members, 
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
               Assignee
             </label>
-            <CustomSelect
+            <CustomSelect tourId="ai-review-assignee"
               value={selectedMemberId}
               onChange={setSelectedMemberId}
               options={[
@@ -226,7 +227,7 @@ export function AtomizedTaskEditModal({ subtask, subtasks = [subtask], members, 
                   </p>
                 </div>
                 {bestMatch.explanation && (
-                  <p className="text-[11px] font-medium text-slate-600">
+                  <p data-tour="ai-match" className="text-[11px] font-medium text-slate-600">
                     {bestMatch.explanation}
                   </p>
                 )}
@@ -374,7 +375,7 @@ export function AtomizedTaskEditModal({ subtask, subtasks = [subtask], members, 
 
           {/* Modal Action Buttons (Exact Screenshot 2 Design) */}
           <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
-            <button
+            <button data-tour="ai-review-cancel"
               type="button"
               onClick={onClose}
               className="rounded-2xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition"

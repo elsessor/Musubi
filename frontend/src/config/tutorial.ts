@@ -1,7 +1,9 @@
 import type { UserRole } from "../types/auth";
+import { getWorkflowTours, WORKFLOW_IDS, type WorkflowId } from "./tutorialWorkflows";
 
 export const TUTORIAL_VERSION = 1;
-export type TourKind = "quick" | "features";
+export type TourKind = "quick" | "features" | "controls" | WorkflowId;
+export const TOUR_IDS = ["quick", "features", "controls", ...WORKFLOW_IDS] as const;
 export type TutorialStatus = {
   version: number;
   status: "in_progress" | "completed" | "dismissed";
@@ -10,11 +12,12 @@ export type TutorialStatus = {
   updatedAt: string;
   acknowledged?: boolean;
 };
-export type TourStep = { id: string; title: string; description: string; route: string; target: string };
+export type TourStep = { id: string; title: string; description: string; route: string; target: string; interaction?: "click"; openOnNext?: string; reveal?: string[]; selector?: string; prepare?: "events" | "ai" | "members" | "committees" | "announcements" };
 
 const page = (id: string, title: string, description: string, route: string, target = "workspace"): TourStep => ({ id, title, description, route, target });
 
 export function getTourSteps(role: UserRole, kind: TourKind): TourStep[] {
+  if (kind !== "quick" && kind !== "features") return getWorkflowTours(role).find((tour) => tour.id === kind)?.steps ?? [];
   const admin = role === "Admin";
   const leader = role === "Student Leader";
   const home = admin ? "/admin" : "/dashboard";
@@ -76,7 +79,7 @@ export function isTutorialStatus(value: unknown): value is TutorialStatus {
   if (!value || typeof value !== "object") return false;
   const s = value as TutorialStatus;
   return s.version === TUTORIAL_VERSION && ["in_progress", "completed", "dismissed"].includes(s.status)
-    && Number.isInteger(s.step) && s.step >= 0 && s.step <= 50
-    && (s.tour === "quick" || s.tour === "features") && typeof s.updatedAt === "string"
+    && Number.isInteger(s.step) && s.step >= 0 && s.step <= 500
+    && TOUR_IDS.includes(s.tour) && typeof s.updatedAt === "string"
     && (s.acknowledged === undefined || typeof s.acknowledged === "boolean");
 }

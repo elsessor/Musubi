@@ -53,7 +53,7 @@ test("status validation rejects malformed, obsolete, and excessive progress", ()
   for (const bad of [null, {}, { ...progress(), version: 0 }, { ...progress(), step: -1 }, { ...progress(), step: 0.5 }, { ...progress(), tour: "admin" }, { ...progress(), status: "done" }]) assert.equal(isTutorialStatus(bad), false);
   const valid = { version: 1, role: "Admin", tour: "quick", step: 2, status: "dismissed" };
   assert.ok(tutorialStatusSchema.safeParse(valid).success);
-  for (const bad of [{ ...valid, uid: "other-user" }, { ...valid, role: "Owner" }, { ...valid, step: 51 }, { ...valid, version: 2 }, { ...valid, status: "done" }]) assert.equal(tutorialStatusSchema.safeParse(bad).success, false);
+  for (const bad of [{ ...valid, uid: "other-user" }, { ...valid, role: "Owner" }, { ...valid, step: 501 }, { ...valid, version: 2 }, { ...valid, status: "done" }]) assert.equal(tutorialStatusSchema.safeParse(bad).success, false);
 });
 
 test("account completion loads from the API and is cached only for that user and role", async (t) => {

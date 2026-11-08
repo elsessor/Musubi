@@ -52,7 +52,7 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
         const isPriorityOpen = openPriorityDropdownId === task.id;
 
         return (
-          <div
+          <div data-tour="task-card"
             key={task.id}
             onClick={() => onSelectTask?.(task)}
             className="group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border border-slate-200 bg-white p-[clamp(0.5rem,2.4vw,0.75rem)] shadow-xs transition-all hover:border-blue-300 hover:shadow-md sm:p-4"

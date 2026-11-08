@@ -672,7 +672,7 @@ export function KanbanBoard({
                 <Repeat size={13} className="text-blue-600" />
                 <span>Reuse</span>
               </button>
-              <button type="button" onClick={() => setShowAddTaskModal(true)} className="flex min-h-11 items-center gap-1 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white">
+              <button data-tour="add-task" type="button" onClick={() => setShowAddTaskModal(true)} className="flex min-h-11 items-center gap-1 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white">
                 <Plus size={16} /> Task
               </button>
             </div>
@@ -822,7 +822,7 @@ export function KanbanBoard({
                 <Repeat size={13} className="text-blue-600" />
                 <span>Reuse Tasks</span>
               </button>
-              <button
+              <button data-tour="add-task"
                 type="button"
                 onClick={() => setShowAddTaskModal(true)}
                 className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition-colors"

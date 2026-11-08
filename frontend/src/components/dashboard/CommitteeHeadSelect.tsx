@@ -7,6 +7,7 @@ import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
 import type { OrganizationMember } from "@/services/auth.service";
 
 type CommitteeHeadSelectProps = {
+  tourId?: string;
   members: OrganizationMember[];
   value: string | null;
   placeholder: string;
@@ -14,7 +15,7 @@ type CommitteeHeadSelectProps = {
   disabled?: boolean;
 };
 
-export function CommitteeHeadSelect({ members, value, placeholder, onChange, disabled = false }: CommitteeHeadSelectProps) {
+export function CommitteeHeadSelect({ members, value, placeholder, onChange, disabled = false, tourId }: CommitteeHeadSelectProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0, width: 0, maxHeight: 224 });
   const rootRef = useRef<HTMLDivElement>(null);
@@ -78,6 +79,7 @@ export function CommitteeHeadSelect({ members, value, placeholder, onChange, dis
   return (
     <div ref={rootRef} className="relative mt-1.5">
       <button
+        data-tour={tourId}
         ref={buttonRef}
         type="button"
         disabled={disabled}

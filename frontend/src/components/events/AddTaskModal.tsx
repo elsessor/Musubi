@@ -1,5 +1,6 @@
 "use client";
 
+
 import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 
 import { Plus, Shield, X } from "lucide-react";
@@ -213,18 +214,19 @@ export function AddTaskModal({
               <p className="text-xs text-slate-500 font-medium">Adding to &quot;{eventName}&quot;</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button data-tour="new-task-cancel" type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X size={18} />
           </button>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
               Task Title <span className="text-rose-500">*</span>
             </label>
-            <input
+            <input data-tour="new-task-title"
               type="text"
               required
               value={title}
@@ -238,7 +240,7 @@ export function AddTaskModal({
             <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
               Description
             </label>
-            <textarea
+            <textarea data-tour="new-task-description"
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -247,12 +249,12 @@ export function AddTaskModal({
             />
           </div>
 
-          <TaskDependencySelector taskId={taskId} tasks={tasks} value={dependsOnTaskIds} onChange={setDependsOnTaskIds} />
+          <TaskDependencySelector tourId="new-task-dependencies" taskId={taskId} tasks={tasks} value={dependsOnTaskIds} onChange={setDependsOnTaskIds} />
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Status</label>
-              <CustomSelect
+              <CustomSelect tourId="new-task-status"
                 value={status}
                 onChange={(val) => setStatus(val as TaskStatus)}
                 options={statusOptions}
@@ -261,7 +263,7 @@ export function AddTaskModal({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Priority</label>
-              <CustomSelect
+              <CustomSelect tourId="new-task-priority"
                 value={priority}
                 onChange={(val) => setPriority(val as TaskPriority)}
                 options={priorityOptions}
@@ -272,7 +274,7 @@ export function AddTaskModal({
           <div className="grid min-w-0 grid-cols-1 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Assignee</label>
-              <CustomSelect
+              <CustomSelect tourId="new-task-assignee"
                 value={assigneeId}
                 onChange={(val) => setAssigneeId(val)}
                 options={assigneeOptions}
@@ -285,7 +287,7 @@ export function AddTaskModal({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Committee</label>
-              <CustomSelect value={committee} onChange={setCommittee} disabled={committeeOptions.length === 0} placeholder="No committees available" options={committeeOptions.map((name) => ({ value: name, label: name.endsWith("Committee") ? name : `${name} Committee` }))} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
+              <CustomSelect tourId="new-task-committee" value={committee} onChange={setCommittee} disabled={committeeOptions.length === 0} placeholder="No committees available" options={committeeOptions.map((name) => ({ value: name, label: name.endsWith("Committee") ? name : `${name} Committee` }))} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" portal />
             </div>
           </div>
 
@@ -295,7 +297,7 @@ export function AddTaskModal({
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                 Start Date &amp; Time
               </label>
-              <MiniCalendarPicker
+              <MiniCalendarPicker tourId="new-task-start"
                 value={startDate}
                 onChange={(value) => { setStartDate(value); setDateError(""); }}
                 minDate={new Date()}
@@ -308,7 +310,7 @@ export function AddTaskModal({
               <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                 Due Date &amp; Time
               </label>
-              <MiniCalendarPicker
+              <MiniCalendarPicker tourId="new-task-due"
                 value={dueDate}
                 onChange={(value) => { setDueDate(value); setDateError(""); }}
                 minDate={parseScheduleDate(startDate) || new Date()}
@@ -334,14 +336,14 @@ export function AddTaskModal({
           </div>
 
           <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
-            <button
+            <button data-tour="new-task-cancel"
               type="button"
               onClick={onClose}
               className="rounded-2xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
             >
               Cancel
             </button>
-            <button
+            <button data-tour="new-task-submit"
               type="submit"
               disabled={saving || Boolean(scheduleError)}
               className="rounded-2xl bg-[#2563eb] py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md disabled:opacity-60"
