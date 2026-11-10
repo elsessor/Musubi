@@ -1,7 +1,7 @@
 "use client";
 
 import { Calendar as CalendarIcon, ChevronDown, ChevronLeft, ChevronRight, Clock, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/components/ui/utils";
 
@@ -26,39 +26,16 @@ const MONTH_NAMES = [
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-export function MiniCalendarPicker({
-  id,
-  disabled = false,
-  value,
-  onChange,
-  placeholder = "Select date",
-  className = "",
-  buttonClassName = "",
-  format = "medium",
-  includeTime = false,
-  minDate,
-  maxDate
-}: MiniCalendarPickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
-
-  const now = new Date();
-  const earliestDate = minDate ? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()) : null;
-  const latestDate = maxDate ? new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate()) : null;
-  const isOutsideRange = (date: Date) => Boolean((earliestDate && date < earliestDate) || (latestDate && date > latestDate));
-
   // Helper to parse string into Date & Time components
   const parseDate = (val: string): { date: Date; hour: number; minute: number; ampm: "AM" | "PM" } => {
+    const now = new Date();
     let dt = new Date();
     let hour = 9;
     let minute = 0;
     let ampm: "AM" | "PM" = "AM";
 
     if (!val || !val.trim()) {
-      return { date: now, hour, minute, ampm };
+      return { date: new Date(), hour, minute, ampm };
     }
 
     // Extract time if present (e.g. "9:30 AM" or "14:30")
@@ -108,8 +85,34 @@ export function MiniCalendarPicker({
       }
     }
 
-    return { date: now, hour, minute, ampm };
+    return { date: new Date(), hour, minute, ampm };
   };
+
+
+export function MiniCalendarPicker({
+  id,
+  disabled = false,
+  value,
+  onChange,
+  placeholder = "Select date",
+  className = "",
+  buttonClassName = "",
+  format = "medium",
+  includeTime = false,
+  minDate,
+  maxDate
+}: MiniCalendarPickerProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
+
+  const now = new Date();
+  const earliestDate = minDate ? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()) : null;
+  const latestDate = maxDate ? new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate()) : null;
+  const isOutsideRange = (date: Date) => Boolean((earliestDate && date < earliestDate) || (latestDate && date > latestDate));
+
 
   const parsedInfo = parseDate(value);
   const [viewYear, setViewYear] = useState(parsedInfo.date.getFullYear());
@@ -163,7 +166,7 @@ export function MiniCalendarPicker({
   }, [openTimeMenu]);
 
   // Recalculate floating position
-  const updatePosition = () => {
+  const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const popoverHeight = includeTime ? 380 : 300;
@@ -180,7 +183,7 @@ export function MiniCalendarPicker({
     }
 
     setPopoverPos({ top, left });
-  };
+  }, [includeTime]);
 
   const handleToggleOpen = () => {
     if (!isOpen) {
@@ -222,7 +225,7 @@ export function MiniCalendarPicker({
       window.removeEventListener("scroll", handleScrollOrResize, true);
       window.removeEventListener("resize", handleScrollOrResize);
     };
-  }, [isOpen, includeTime]);
+  }, [isOpen, updatePosition]);
 
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();

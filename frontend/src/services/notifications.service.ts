@@ -204,14 +204,6 @@ export function subscribeNotificationsFirestore(
       map.set(item.id, { ...item, unread: !isRead });
     });
 
-    // 3. Event Nudges & Subtasks
-    eventNotifs.forEach((item) => {
-      if (!map.has(item.id)) {
-        const isRead = checkIsRead(item.id, item.createdAt, !item.unread);
-        map.set(item.id, { ...item, unread: !isRead });
-      }
-    });
-
     // 4. Audit Logs
     auditNotifs.forEach((item) => {
       if (!map.has(item.id)) {
@@ -336,15 +328,6 @@ export function subscribeNotificationsFirestore(
     }
   );
 
-  const handleUpdate = () => {
-    emitMerged();
-  };
-
-  if (typeof window !== "undefined") {
-    window.addEventListener(NOTIFS_READ_EVENT, handleUpdate);
-    window.addEventListener("storage", handleUpdate);
-  }
-
   return () => {
     subscribers.delete(emitMerged);
     if (typeof window !== "undefined") {
@@ -367,8 +350,7 @@ export async function markNotificationAsRead(user: User | null, notificationId: 
     const db = getFirebaseDb();
     const docRef = doc(db, "notifications", notificationId);
     await updateDoc(docRef, {
-      readBy: arrayUnion(authUser.uid),
-      read: true
+      readBy: arrayUnion(authUser.uid)
     });
   } catch (err) {
     console.warn("Failed to mark notification as read in Firestore:", err);
@@ -392,8 +374,7 @@ export async function markAllNotificationsAsRead(user: User | null, notification
           const db = getFirebaseDb();
           const docRef = doc(db, "notifications", id);
           await updateDoc(docRef, {
-            readBy: arrayUnion(authUser.uid),
-            read: true
+            readBy: arrayUnion(authUser.uid)
           });
         } catch (err) {
           console.warn("Failed to mark notification as read in Firestore:", err);

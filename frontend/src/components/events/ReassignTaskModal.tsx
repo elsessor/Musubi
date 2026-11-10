@@ -58,7 +58,7 @@ export function ReassignTaskModal({
       firebaseUser
     );
     return () => unsub();
-  }, [members, profile?.organizationId, firebaseUser, task.assignedMemberUID, task.assignedMemberName, task.assignee?.name]);
+  }, [members, profile?.organizationId, firebaseUser, task]);
 
   const orgMembers: OrgMemberItem[] = liveMembers.map(memberToOrgItem);
 

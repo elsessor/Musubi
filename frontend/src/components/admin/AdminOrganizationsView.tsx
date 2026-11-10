@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search, X } from "lucide-react";
 
@@ -40,7 +40,7 @@ export function AdminOrganizationsView() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     if (!firebaseUser) return;
     try {
       setLoading(true);
@@ -51,11 +51,11 @@ export function AdminOrganizationsView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [firebaseUser]);
 
   useEffect(() => {
     void loadOrganizations();
-  }, [firebaseUser]);
+  }, [loadOrganizations]);
 
   const displayOrganizations = useMemo(() => {
     const source = organizations.map((org, idx) => ({

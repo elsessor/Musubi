@@ -103,5 +103,6 @@ export function MemberActiveSubtasks({ subtasks }: MemberActiveSubtasksProps) {
           </div>
         )}
       </div>
-      );
+    </div>
+  );
 }

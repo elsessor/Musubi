@@ -17,6 +17,7 @@ import {
   Zap
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 import type { DashboardNavItem } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
@@ -58,7 +59,7 @@ function AvatarFallback({ name, role, profilePicture }: { name: string; role: Si
       role === "Admin" ? "bg-[#ef2360]" : "bg-[#385779]"
     )}>
       {initial || "?"}
-      {profilePicture ? <img src={profilePicture} alt="" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 size-full rounded-full object-cover" /> : null}
+      {profilePicture ? <Image unoptimized width={40} height={40} src={profilePicture} alt="" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 size-full rounded-full object-cover" /> : null}
     </div>
   );
 }

@@ -268,7 +268,7 @@ export function TopHeader({
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
     };
-  }, [firebaseUser?.uid, liveUser.organizationId, profile?.organizationId]);
+  }, [firebaseUser, liveUser.organizationId, profile?.organizationId]);
 
   const bellCount = liveUnreadCount !== null ? notifications.filter((item) => item.unread).length : (notificationCount || 0);
 

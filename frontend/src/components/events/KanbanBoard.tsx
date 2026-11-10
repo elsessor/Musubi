@@ -127,6 +127,16 @@ export function KanbanBoard({
   const [showTaskReuseModal, setShowTaskReuseModal] = useState(false);
   const [reassignTaskTarget, setReassignTaskTarget] = useState<Task | null>(null);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
+  const [claimTaskTarget, setClaimTaskTarget] = useState<Task | null>(null);
+  const [claimingTask, setClaimingTask] = useState(false);
+  const [claimError, setClaimError] = useState("");
+  const claimInFlight = useRef(false);
+  const pendingClaimTask = claimTaskTarget
+    ? tasks.find((task) => task.id === claimTaskTarget.id) || claimTaskTarget : null;
+  const claimEligibilityError = pendingClaimTask
+    ? getTaskClaimError(pendingClaimTask, {
+      uid: firebaseUser?.uid ?? profile?.uid, role: profile?.role, organizationId: profile?.organizationId
+    }, currentEvent) : null;
   const [ratingTaskTarget, setRatingTaskTarget] = useState<Task | null>(null);
   const [confirmArchiveEvent, setConfirmArchiveEvent] = useState(false);
   const [isArchivingEvent, setIsArchivingEvent] = useState(false);

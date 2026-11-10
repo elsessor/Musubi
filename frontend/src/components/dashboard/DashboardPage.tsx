@@ -314,8 +314,8 @@ export function DashboardPage() {
   const isMemberView = dashboardUser.role === "Organization Member";
 
   const memberSubtasks = useMemo(() => {
-    const matched: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
-    const allInOrg: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+    const matched: (Task & { eventId: string; eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+    const allInOrg: (Task & { eventId: string; eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
 
     const userNameLower = (dashboardUser.name || "").toLowerCase().trim();
     const userId = dashboardUser.id;
@@ -323,7 +323,7 @@ export function DashboardPage() {
     realtimeEventsList.forEach((event) => {
       if (Array.isArray(event.tasks)) {
         event.tasks.forEach((task) => {
-          const item = { ...task, eventTitle: event.title, customStatuses: event.customStatuses };
+          const item = { ...task, eventId: event.id, eventTitle: event.title, customStatuses: event.customStatuses };
           allInOrg.push(item);
 
           const assignedNameLower = (task.assignedMemberName || task.assignee?.name || "").toLowerCase().trim();
@@ -343,6 +343,10 @@ export function DashboardPage() {
 
     return matched.length > 0 ? matched : allInOrg;
   }, [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
+
+  const memberAverageMatchScore = useMemo(() =>
+    getAverageMatchScore(getMemberDashboardTasks(realtimeEventsList, dashboardUser.id, dashboardUser.name)),
+    [realtimeEventsList, dashboardUser.id, dashboardUser.name]);
 
   const activeMemberSubtasks = useMemo(() => {
     return memberSubtasks.filter((t) => {

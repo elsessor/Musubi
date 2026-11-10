@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { User, X } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
@@ -98,7 +98,7 @@ export function AdminOrgRequestsView() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     if (!firebaseUser) return;
     try {
       setLoading(true);
@@ -124,7 +124,7 @@ export function AdminOrgRequestsView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [firebaseUser]);
 
   useEffect(() => {
     void fetchRequests();
@@ -133,7 +133,7 @@ export function AdminOrgRequestsView() {
       void fetchRequests();
     }, 60000);
     return () => clearInterval(interval);
-  }, [firebaseUser]);
+  }, [fetchRequests]);
 
   const pendingRequests = useMemo(() => {
     if (requests.length > 0) {

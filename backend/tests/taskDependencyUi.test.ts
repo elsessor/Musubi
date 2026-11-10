@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import ts from "typescript";
+import * as statusUtils from "../../frontend/src/components/events/statusUtils.js";
 import * as dependencies from "../../frontend/src/utils/taskDependencies.js";
 import * as assignment from "../../frontend/src/utils/taskAssignment.js";
 import * as dates from "../../frontend/src/utils/dateRange.js";
@@ -42,7 +43,7 @@ function ui(file: string, role = "Student Leader", extraMocks: Record<string, an
     "@/utils/taskClaims": claims,
     "@/store/authStore": { useAuthStore }, "@/store/toastStore": { useToastStore },
     "./priorityUtils": { ALL_PRIORITIES: ["Low", "Medium", "High", "Critical"], PRIORITY_CONFIG: new Proxy({}, { get: (_target, name) => ({ label: name, classes: "", dot: "" }) }) },
-    "./statusUtils": { getStatusTheme: () => ({ badge: "", dot: "", border: "" }), getOrderedTaskStatuses: () => ["To Do", "In Progress", "In Review", "Completed"] }
+    "./statusUtils": { ...statusUtils, getStatusTheme: () => ({ badge: "", dot: "", border: "" }), getOrderedTaskStatuses: () => ["To Do", "In Progress", "In Review", "Completed"] }
   };
   const filename = resolve(__dirname, "../../frontend/src/components/events", file);
   const code = ts.transpileModule(readFileSync(filename, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
