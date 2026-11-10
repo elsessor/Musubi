@@ -10,6 +10,7 @@ type Props = {
   hasOrganization: boolean;
   onClose: () => void;
   onContinue?: () => void;
+  onExploreOwn?: () => void;
   onWalkthrough: () => void;
   onPageGuide?: () => void;
   onHelp: () => void;
@@ -24,7 +25,7 @@ const sections = [
 const action = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:text-sm";
 const card = "rounded-xl border border-slate-200 bg-white p-3 sm:p-4";
 
-export function GetStarted({ role, hasOrganization, onClose, onContinue, onWalkthrough, onPageGuide, onHelp, onOrganization }: Props) {
+export function GetStarted({ role, hasOrganization, onClose, onContinue, onExploreOwn, onWalkthrough, onPageGuide, onHelp, onOrganization }: Props) {
   const [section, setSection] = useState<typeof sections[number]["id"]>("welcome");
   const admin = role === "Admin", leader = role === "Student Leader";
   const preview = !admin && !hasOrganization;
@@ -51,7 +52,7 @@ export function GetStarted({ role, hasOrganization, onClose, onContinue, onWalkt
                 { icon: Users, title: admin ? "Organizations" : "Your organization", description: admin ? "Browse registered organizations and their membership." : "Find members, committees, and announcements in Organization." }
               ].map(({ icon: Icon, title, description }) => <div key={title} className="flex gap-2.5 p-3 sm:gap-3 sm:p-4"><Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-blue-600 sm:size-5" /><div className="min-w-0"><h3 className="text-xs font-semibold sm:text-sm">{title}</h3><p className="mt-1 text-xs leading-5 text-slate-600">{description}</p></div></div>)}
             </div>
-            {preview && <p role="note" className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">You can explore page layouts and follow instructions before joining an organization. Placeholders show where your organization&apos;s information will appear.</p>}
+            {preview && <p role="note" className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">You can follow page tours before joining an organization. Sample cards explain each layout during the tour, then disappear when you finish or skip it.</p>}
             <button type="button" onClick={onWalkthrough} className={`${action} bg-blue-600 text-white hover:bg-blue-700`}>Start walkthrough<ArrowRight aria-hidden="true" className="size-4" /></button>
           </>}
           {section === "access" && <>
@@ -64,7 +65,7 @@ export function GetStarted({ role, hasOrganization, onClose, onContinue, onWalkt
             </>}
           </>}
           {section === "workflow" && <>
-            <div><h2 className="text-lg font-bold">How work moves through Musubi</h2><p className="mt-2 text-xs leading-5 text-slate-600 sm:text-sm">{preview ? "Use this overview to understand the process while your pages display preview layouts." : "Follow this sequence to understand where each feature fits."}</p></div>
+            <div><h2 className="text-lg font-bold">How work moves through Musubi</h2><p className="mt-2 text-xs leading-5 text-slate-600 sm:text-sm">{preview ? "Review the process here, then start a page tour to explore its layout." : "Follow this sequence to understand where each feature fits."}</p></div>
             <ol className="space-y-3">
               {(admin ? [
                 ["Review registration", "Check the organization and requester details before approving or rejecting an application."],
@@ -87,7 +88,7 @@ export function GetStarted({ role, hasOrganization, onClose, onContinue, onWalkt
             </div>
           </>}
         </section>
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-6"><p className="text-[11px] leading-4 text-slate-500">Reopen from Help / User Guide → Get Started.</p><button type="button" onClick={onContinue ?? onClose} className={`${action} shrink-0 bg-[#17365c] text-white hover:bg-[#213f68]`}><Check aria-hidden="true" className="size-4" />I understand</button></footer>
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-6"><p className="w-full text-[11px] leading-4 text-slate-500 sm:w-auto">Reopen from Help / User Guide → Get Started.</p><div className="flex min-w-0 flex-wrap items-center gap-2">{onExploreOwn && <button type="button" onClick={onExploreOwn} className={`${action} text-slate-600 hover:bg-slate-100`}>Explore on my own</button>}<button type="button" onClick={onContinue ?? onClose} className={`${action} shrink-0 bg-[#17365c] text-white hover:bg-[#213f68]`}><Check aria-hidden="true" className="size-4" />{onContinue ? "Continue to tour" : "I understand"}</button></div></footer>
       </div>
     </DialogContent>
   </Dialog>;

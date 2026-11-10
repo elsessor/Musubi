@@ -36,6 +36,7 @@ function ui(file: string, role = "Student Leader", extraMocks: Record<string, an
   const useToastStore = Object.assign((selector: (value: any) => any) => selector(toast), { getState: () => toast });
   const components = new Proxy({}, { get: (_target, name) => String(name) });
   const mocks: Record<string, any> = {
+    "@/components/onboarding/TutorialPreviewContext": { useTutorialPlaceholders: () => true },
     "@/hooks/useTutorialView": { useTutorialView: () => ({ current: null }) },
     react, "react/jsx-runtime": { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }), Fragment: "Fragment" },
     "react-dom": { createPortal: (node: any) => node }, "lucide-react": components,
@@ -58,6 +59,53 @@ const allTasks = () => dependencies.withTaskDependencyState([
   { id: "b", title: "Purchase materials", status: "To Do", assignee: { initials: "M", color: "bg-blue-600" }, priority: "Medium", dueDate: "", assignedMemberUID: "member", dependsOnTaskIds: ["a"] }
 ]);
 const find = (tree: Node, predicate: (node: Node) => boolean) => children(tree).find(predicate)!;
+
+test("teaching examples disappear when a guide closes, return on replay, and never replace real events", () => {
+  let teaching = true;
+  let selectView = (_mode: string) => {};
+  const mocks = {
+    "@/components/onboarding/TutorialPreviewContext": { useTutorialPlaceholders: () => teaching },
+    "@/hooks/useTutorialView": { useTutorialView: (select: (mode: string) => void) => { selectView = select; return { current: null }; } }
+  };
+  for (const isLeader of [false, true]) {
+    const app = ui("EventsDashboard.tsx", "Student Leader", mocks);
+    const props = { events: [], isLeader, onSelectEvent: () => {}, onNewEvent: () => {}, onPreviewEvent: () => {} };
+    teaching = true;
+    let tree = app.render("EventsDashboard", props);
+    assert.ok(find(tree, (node) => node.type === "EventPlaceholderCard"));
+    for (const view of ["grid", "table", "expanded", "kanban", "calendar"]) {
+      selectView(view); teaching = false;
+      tree = app.render("EventsDashboard", props);
+      assert.equal(find(tree, (node) => node.type === "EmptyState").props.title, "No events to display yet");
+      assert.equal(children(tree).some((node) => ["EventPlaceholderCard", "CalendarView", "CreateEventCard", "table"].includes(node.type)), false);
+      assert.ok(find(tree, (node) => node.props["data-tour"] === "event-view-content"));
+    }
+    selectView("grid"); teaching = true;
+    assert.ok(find(app.render("EventsDashboard", props), (node) => node.type === "EventPlaceholderCard"));
+    teaching = false;
+    const event = { id: "real-event", title: "Recorded organization event", status: "Planning", tasks: [], progress: 0 };
+    tree = app.render("EventsDashboard", { ...props, organizationId: "org", events: [event] });
+    assert.equal(find(tree, (node) => node.type === "EventCard").props.event.id, "real-event");
+    tree = app.render("EventsDashboard", { ...props, organizationId: "org" });
+    assert.equal(find(tree, (node) => node.type === "EmptyState").props.title, "No events created yet");
+  }
+});
+
+test("task preview stays in the same context when samples are hidden and can be replayed", () => {
+  let teaching = true;
+  const app = ui("EventWorkspacePreview.tsx", "Student Leader", { "@/components/onboarding/TutorialPreviewContext": { useTutorialPlaceholders: () => teaching } });
+  const props = { isLeader: true, onBack: () => {} };
+  let tree = app.render("EventWorkspacePreview", props);
+  assert.ok(find(tree, (node) => node.props["data-tour"] === "event-summary"));
+  teaching = false;
+  tree = app.render("EventWorkspacePreview", props);
+  assert.equal(tree.props["data-event-id"], "workspace-preview");
+  assert.equal(find(tree, (node) => node.type === "EmptyState").props.title, "No tasks to display yet");
+  assert.equal(find(tree, (node) => node.props["data-tour"] === "event-summary"), undefined);
+  teaching = true;
+  tree = app.render("EventWorkspacePreview", props);
+  assert.ok(find(tree, (node) => node.props["data-tour"] === "event-summary"));
+});
 
 test("opening an event exposes its identity and role-appropriate guide targets", () => {
   const event = { id: "opened-event", orgId: "org", title: "Campus event", status: "Planning", tasks: [], memberCount: 0, progress: 0 };

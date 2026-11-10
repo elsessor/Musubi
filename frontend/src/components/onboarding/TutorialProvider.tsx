@@ -15,10 +15,10 @@ import { collectPageControls } from "./controlGuide";
 import { findTourHighlightTargets } from "./tourTargets";
 import { GetStarted } from "./GetStarted";
 import { HelpCenter } from "./HelpCenter";
-import { WelcomeOnboarding } from "./WelcomeOnboarding";
+import { TutorialPreviewContext } from "./TutorialPreviewContext";
 
 const HelpContext = createContext<(view?: "guide" | "started", tour?: TourKind) => void>(() => {});
-type Run = { section?: OnboardingSection; context?: string; automatic: boolean; restart?: boolean };
+type Run = { section?: OnboardingSection; context?: string; automatic: boolean; introduction?: boolean };
 
 export function TutorialHelpButton() {
   const open = useContext(HelpContext);
@@ -38,7 +38,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const loading = useAuthStore((s) => s.loading);
   const pathname = usePathname();
   const router = useRouter();
-  const [mode, setMode] = useState<"welcome" | "started" | "guide" | "tour" | null>(null);
+  const [mode, setMode] = useState<"started" | "guide" | "tour" | null>(null);
   const [kind, setKind] = useState<TourKind>("quick");
   const [index, setIndex] = useState(0);
   const [run, setRun] = useState<Run | null>(null);
@@ -107,14 +107,16 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     const progress = onboardingProgress(savedRef.current);
     if (!progress.preference) {
       persist("in_progress", 0, "quick", "welcome");
-      setRun({ context: contextKey, automatic: true }); setMode("welcome");
+      setRun({ context: contextKey, automatic: true, introduction: true }); setMode("started");
       return;
     }
     if (progress.preference.mode !== "guided") return;
     if (!isFinished(progress.sidebar)) { startSidebar(true, true); return; }
     const page = getPageTourForRoute(profile.role, pathname, pageContext);
     if (!page || isFinished(progress.modules?.[page.id])) return;
-    const available = getTourSteps(profile.role, page.id, preview).filter((step) => step.reveal?.length || findTourHighlightTargets(step).length);
+    // These controls mount with the active guide, after the empty state is replaced.
+    const previewLayout = preview && (page.id === "page-event-details" || page.id === "page-organization");
+    const available = getTourSteps(profile.role, page.id, preview).filter((step) => previewLayout || step.reveal?.length || findTourHighlightTargets(step).length);
     if (!available.length) return;
     const first = Math.min(progress.modules?.[page.id]?.step ?? 0, available.length - 1);
     setAutomaticSteps(available); setKind(page.id); setIndex(first); setRun({ section: page.id, context: contextKey, automatic: true });
@@ -165,7 +167,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     write(next);
   }
   function close(complete = false) {
-    if (mode === "welcome") { dismissWelcome(); return; }
+    if (mode === "started" && run?.introduction) { dismissIntroduction(); return; }
     if (mode === "tour") persist(complete ? "completed" : "dismissed", index, kind, run?.section);
     quietContext.current = complete && run?.section === "sidebar" && savedRef.current?.onboarding?.restartedAt ? null : contextKey;
     controlCleanup.current(); controlCleanup.current = () => {};
@@ -178,11 +180,11 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     setAutomaticSteps(null); setSidebarRoute(pathname); setKind("sidebar"); setIndex(first); setRun({ section: "sidebar", context: contextKey, automatic });
     persist("in_progress", first, "sidebar", "sidebar", progress); setMode("tour");
   }
-  function acceptWelcome() {
+  function beginOnboarding() {
     const progress = updateSection(onboardingProgress(savedRef.current), "welcome", "completed");
     startSidebar(true, false, { ...progress, preference: { mode: "guided", source: "user", updatedAt: new Date().toISOString() } });
   }
-  function dismissWelcome() {
+  function dismissIntroduction() {
     const progress = updateSection(onboardingProgress(savedRef.current), "welcome", "dismissed");
     persist("dismissed", 0, "quick", undefined, { ...progress, preference: { mode: "independent", source: "user", updatedAt: new Date().toISOString() } });
     quietContext.current = contextKey; setMode(null); setRun(null);
@@ -191,10 +193,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     controlCleanup.current(); controlCleanup.current = () => {};
     write(restartedTutorialStatus(savedRef.current));
     quietContext.current = null; setKind("quick"); setIndex(0); setInspectRoute(null);
-    setAutomaticSteps(null); setRun({ context: contextKey, automatic: false, restart: true }); setMode("started");
-  }
-  function continueRestart() {
-    setRun({ context: contextKey, automatic: false }); setMode("welcome");
+    setAutomaticSteps(null); setRun({ context: contextKey, automatic: false, introduction: true }); setMode("started");
   }
   function inspectPage(route: string) {
     if (!profile || ![...getDashboardNavItems(profile.role).map((item) => item.href), "/dashboard/profile"].includes(route)) return;
@@ -218,11 +217,12 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     controlCleanup.current(); controlCleanup.current = () => {};
     setInitialHelpTour(tour ?? null); setRun(null); setAutomaticSteps(null); setMode(view);
   }}>
-    {children}
+    <TutorialPreviewContext.Provider value={visible && (mode === "tour" || (mode === "started" && Boolean(run?.introduction)))}>
+      {children}
+    </TutorialPreviewContext.Provider>
     {visible && inspectRoute && <div role="status" className="fixed bottom-4 right-4 z-[201] rounded-xl bg-white p-4 text-sm text-slate-700 shadow-xl">Opening page guide…</div>}
-    {visible && mode === "welcome" && (!run?.context || run.context === contextKey) && <WelcomeOnboarding name={profile!.fullName} admin={profile!.role === "Admin"} onStart={acceptWelcome} onDismiss={dismissWelcome} />}
     {visible && mode === "tour" && (!run?.context || run.context === contextKey) && steps.length > 0 && <GuidedTour steps={steps} index={Math.min(index, steps.length - 1)} skipUnavailable={run?.automatic} onStep={(step) => { setIndex(step); persist("in_progress", step, kind, run?.section); }} onExit={close} />}
-    {visible && mode === "started" && <GetStarted role={profile!.role} hasOrganization={!preview} onClose={close} onContinue={run?.restart ? continueRestart : undefined} onWalkthrough={run?.restart ? continueRestart : () => start("features")} onPageGuide={currentPageTour ? () => start(currentPageTour.id) : undefined} onHelp={() => { setRun(null); setInitialHelpTour(null); setMode("guide"); }} onOrganization={() => { close(); router.push("/dashboard/organization"); }} />}
+    {visible && mode === "started" && <GetStarted role={profile!.role} hasOrganization={!preview} onClose={close} onContinue={run?.introduction ? beginOnboarding : undefined} onExploreOwn={run?.introduction ? dismissIntroduction : undefined} onWalkthrough={run?.introduction ? beginOnboarding : () => start("features")} onPageGuide={currentPageTour ? () => start(currentPageTour.id) : undefined} onHelp={() => { setRun(null); setInitialHelpTour(null); setMode("guide"); }} onOrganization={() => { close(); router.push("/dashboard/organization"); }} />}
     {visible && mode === "guide" && <HelpCenter key={initialHelpTour ?? "home"} role={profile!.role} preview={preview} eventOpen={pageContext === "event"} memberProfileOpen={memberProfileOpen} initialTour={initialHelpTour} currentPageTour={currentPageTour?.id} resumeTour={canResume && saved ? saved.tour : undefined} localOnly={localOnly} onClose={close} onStart={start} onInspect={inspectPage} onGetStarted={() => { setRun(null); setMode("started"); }} onSidebar={() => startSidebar()} onRestart={restartOnboarding} />}
   </HelpContext.Provider>;
 }

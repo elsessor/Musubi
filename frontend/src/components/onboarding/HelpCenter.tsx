@@ -87,17 +87,19 @@ export function HelpCenter({ role, preview, eventOpen, memberProfileOpen = false
           <input id={searchId} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search help topics..." autoComplete="off" className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 [&::-webkit-search-cancel-button]:appearance-none" />
           {query && <button type="button" aria-label="Clear search" onClick={() => { setQuery(""); document.getElementById(searchId)?.focus(); }} className={`absolute right-0 top-0 flex size-11 items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 ${focus}`}><X aria-hidden="true" className="size-4" /></button>}
         </div>}
-        {view.type === "home" && <div className="mt-3 flex items-center gap-2">
-          <button type="button" onClick={() => onStart("quick")} className={`${primary} flex-1`}><Play aria-hidden="true" className="size-4" />Start Quick Tour</button>
+        {view.type === "home" && <div className="mt-3 space-y-2">
+          <button type="button" onClick={onRestart} className={`${primary} w-full`}><Route aria-hidden="true" className="size-4" />Full Walkthrough</button>
+          <div className="flex items-center gap-2">
+          <button type="button" onClick={() => onStart("quick")} className={`inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 ${focus}`}><Play aria-hidden="true" className="size-4" />Start Quick Tour</button>
           <DropdownMenu modal={false}><DropdownMenuTrigger asChild><button type="button" aria-label="More help options" className={`flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 ${focus}`}><MoreHorizontal aria-hidden="true" className="size-5" /></button></DropdownMenuTrigger><DropdownMenuContent align="end" className="z-[220] max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-[calc(100vw-2rem)] rounded-xl border-slate-200 bg-white p-1.5 text-slate-700 shadow-lg">
             <DropdownMenuItem onSelect={onGetStarted} className="min-h-11 rounded-lg"><Compass aria-hidden="true" className={menuIcon} />Get Started</DropdownMenuItem>
             <DropdownMenuItem onSelect={onSidebar} className="min-h-11 rounded-lg"><PanelLeft aria-hidden="true" className={menuIcon} />Replay sidebar introduction</DropdownMenuItem>
             <DropdownMenuItem onSelect={onRestart} className="min-h-11 rounded-lg"><RotateCcw aria-hidden="true" className={menuIcon} />Restart onboarding</DropdownMenuItem>
             {currentPageTour && <DropdownMenuItem onSelect={() => onStart(currentPageTour)} className="min-h-11 rounded-lg"><FileText aria-hidden="true" className={menuIcon} />Replay this page guide</DropdownMenuItem>}
-            <DropdownMenuItem onSelect={() => onStart("features")} className="min-h-11 rounded-lg"><Route aria-hidden="true" className={menuIcon} />Full Walkthrough</DropdownMenuItem>
             {resumeTour && <DropdownMenuItem onSelect={() => onStart(resumeTour, true)} className="min-h-11 rounded-lg"><Play aria-hidden="true" className={menuIcon} />{resumeTour === "quick" || resumeTour === "features" ? "Resume walkthrough" : "Reopen last guide"}</DropdownMenuItem>}
             <DropdownMenuItem onSelect={() => setView({ type: "reference" })} className="min-h-11 rounded-lg"><BookOpen aria-hidden="true" className={menuIcon} />Read the user guide</DropdownMenuItem>
           </DropdownMenuContent></DropdownMenu>
+          </div>
         </div>}
       </header>
       <div ref={content} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">

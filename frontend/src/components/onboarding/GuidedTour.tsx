@@ -181,11 +181,10 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
     return () => {
       detach(); observer.disconnect(); window.clearTimeout(mutationTimer); window.clearTimeout(advanceTimer); window.clearInterval(timer); window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); document.removeEventListener("transitionend", measure, true);
       if (step.closeOnLeave) {
-        const opened = openedControls.current.find((control) => control.target === step.closeOnLeave);
-        if (opened && !opened.dirty) {
-          openTutorialControl(opened.target);
-          openedControls.current = openedControls.current.filter((control) => control !== opened);
-        }
+        // Status dialogs keep their local draft while closed. Always dismiss the
+        // demonstration when leaving its step, including after a pointer interaction.
+        openTutorialControl(step.closeOnLeave);
+        openedControls.current = openedControls.current.filter((control) => control.target !== step.closeOnLeave);
       }
     };
   }, [step, pathname, index, openControl, skipUnavailable]);
@@ -206,6 +205,10 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
         // Use the edge that covers the least of the highlighted form.
         const overlap = (y: number) => rect ? Math.max(0, Math.min(y + height, rect.y + rect.height) - Math.max(y, rect.y)) : 0;
         top = rect && overlap(minTop) < overlap(maxTop) ? minTop : maxTop;
+      }
+      else if (rect && step.target === "custom-status-dialog") {
+        left = rect.x + rect.width + 16;
+        top = originY + (vh - height) / 2;
       }
       else if (rect) {
         if (rect.x + rect.width + width + 16 <= originX + vw - margin) { left = rect.x + rect.width + 16; top = rect.y; }
@@ -241,7 +244,7 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
         <div className="pointer-events-auto absolute left-0" style={{ top: rect.y, width: rect.x, height: rect.height }} />
         <div className="pointer-events-auto absolute right-0" style={{ top: rect.y, left: rect.x + rect.width, height: rect.height }} />
       </div> : <div aria-hidden="true" className="fixed inset-0 z-[200]" />}
-      <div data-tour-dialog role="dialog" aria-modal={!interactive} aria-labelledby={`${maskId}-title`} aria-describedby={`${maskId}-description`} tabIndex={-1} ref={panel} style={position} className="fixed z-[201] flex max-h-[48dvh] w-[min(20rem,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white p-3 text-slate-900 shadow-2xl outline-none [overflow-wrap:anywhere] motion-safe:transition-[left,top] motion-safe:duration-150 sm:max-h-[calc(100dvh-48px)] sm:w-[min(28rem,calc(100vw-48px))] sm:p-5">
+      <div data-tour-dialog data-tour-target={step.target} role="dialog" aria-modal={!interactive} aria-labelledby={`${maskId}-title`} aria-describedby={`${maskId}-description`} tabIndex={-1} ref={panel} style={position} className="fixed z-[201] flex max-h-[48dvh] w-[min(20rem,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white p-3 text-slate-900 shadow-2xl outline-none [overflow-wrap:anywhere] motion-safe:transition-[left,top] motion-safe:duration-150 sm:max-h-[calc(100dvh-48px)] sm:w-[min(28rem,calc(100vw-48px))] sm:p-5">
         <div aria-live="polite" aria-atomic="true" className="shrink-0 pb-2 pr-8 sm:pb-3">
           <p className="mb-1 text-[11px] font-bold text-blue-700 sm:mb-2 sm:text-xs">Step {index + 1} of {steps.length}</p>
           <h2 id={`${maskId}-title`} className="text-[15px] font-bold leading-snug sm:text-lg">{step.title}</h2>

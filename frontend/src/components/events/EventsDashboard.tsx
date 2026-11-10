@@ -29,6 +29,8 @@ import { CustomSelect } from "@/components/ui/CustomSelect";
 import { CalendarView } from "./CalendarView";
 import { EventPlaceholderCard } from "./EventPlaceholderCard";
 import { useTutorialView } from "@/hooks/useTutorialView";
+import { useTutorialPlaceholders } from "@/components/onboarding/TutorialPreviewContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
@@ -70,6 +72,7 @@ export function EventsDashboard({
   committees = []
 }: EventsDashboardProps) {
   const preview = !organizationId?.trim();
+  const teaching = useTutorialPlaceholders();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const showToast = useToastStore((state) => state.showToast);
   const [settingsError, setSettingsError] = useState("");
@@ -421,6 +424,7 @@ export function EventsDashboard({
       (e.committee || "").toLowerCase() === selectedCommittee.toLowerCase();
     return matchesStatus && matchesCommittee;
   });
+  const showViewContent = visible.length > 0 || teaching || (viewMode === "calendar" && googleEvents.length > 0);
 
   return (
     <div ref={tutorialViewRef} data-tour-view-scope="events" data-tour-view={viewMode} className="flex min-w-0 flex-col gap-4">
@@ -597,19 +601,19 @@ export function EventsDashboard({
 
       {/* 1. Grid View */}
       <div data-tour="event-view-content" className="flex min-w-0 flex-col gap-4">
-      {preview && onPreviewEvent && viewMode !== "grid" && viewMode !== "expanded" && <button type="button" onClick={onPreviewEvent} className="mb-4 min-h-11 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Explore event workspace</button>}
-      {viewMode === "grid" && (
+      {preview && teaching && onPreviewEvent && viewMode !== "grid" && viewMode !== "expanded" && <button type="button" onClick={onPreviewEvent} className="mb-4 min-h-11 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Explore event workspace</button>}
+      {showViewContent && viewMode === "grid" && (
         <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-3">
           {visible.map((event) => (
             <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} />
           ))}
-          {preview && visible.length === 0 && <><EventPlaceholderCard onPreview={onPreviewEvent} /><EventPlaceholderCard onPreview={onPreviewEvent} /></>}
-          {isLeader && !compactMobile && <CreateEventCard onClick={() => onNewEvent()} />}
+          {preview && teaching && visible.length === 0 && <><EventPlaceholderCard onPreview={onPreviewEvent} /><EventPlaceholderCard onPreview={onPreviewEvent} /></>}
+          {isLeader && !compactMobile && (!preview || teaching) && <CreateEventCard onClick={() => onNewEvent()} />}
         </div>
       )}
 
       {/* 2. Table View */}
-      {viewMode === "table" && (
+      {showViewContent && viewMode === "table" && (
         <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className={`${compactMobile ? "min-w-[760px]" : ""} w-full border-collapse text-left text-xs`}>
             <thead>
@@ -678,9 +682,9 @@ export function EventsDashboard({
       )}
 
       {/* 3. Expanded View */}
-      {viewMode === "expanded" && (
+      {showViewContent && viewMode === "expanded" && (
         <div className="space-y-4">
-          {preview && visible.length === 0 && <EventPlaceholderCard onPreview={onPreviewEvent} />}
+          {preview && teaching && visible.length === 0 && <EventPlaceholderCard onPreview={onPreviewEvent} />}
           {visible.map((event) => {
             const theme = getStatusTheme(event.status, customStatuses);
             return (
@@ -737,13 +741,13 @@ export function EventsDashboard({
       )}
 
       {/* 4. Kanban View */}
-      {viewMode === "kanban" && compactMobile && (
+      {showViewContent && viewMode === "kanban" && compactMobile && (
         <div className="space-y-2 text-sm font-semibold text-slate-600">
           <p>Column</p>
           <CustomSelect value={filter !== "All" ? filter : statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]} onChange={(status) => { setKanbanStatus(status); setFilter(status); }} options={statusOrder.map((status) => ({ value: status, label: `${status} (${events.filter((event) => event.status === status).length})`, indicatorClass: getStatusTheme(status, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
         </div>
       )}
-      {viewMode === "kanban" && (
+      {showViewContent && viewMode === "kanban" && (
         <div className={compactMobile ? "grid grid-cols-1 gap-4" : "flex gap-4 overflow-x-auto pb-6 pt-1 items-start min-h-[580px] scrollbar-thin"}>
           {(compactMobile ? [filter !== "All" ? filter : statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]].filter(Boolean) : statusOrder).map((status) => {
             const statusEvents = visible.filter((e) => e.status === status);
@@ -984,7 +988,7 @@ export function EventsDashboard({
       )}
 
       {/* Calendar view is available to leaders and organization members. */}
-      {viewMode === "calendar" && (
+      {showViewContent && viewMode === "calendar" && (
         <CalendarView
           items={[...visible, ...googleEvents]}
           itemLabel="events"
@@ -1009,18 +1013,14 @@ export function EventsDashboard({
         />
       )}
 
-      {visible.length === 0 && viewMode !== "calendar" && (
-        <div className="col-span-full flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center">
-          <Calendar size={32} className="text-slate-300" />
-          <p className="text-sm font-medium text-slate-500">No events match this filter</p>
-          <button
-            type="button"
-            onClick={() => setFilter("All")}
-            className="text-xs font-medium text-blue-600 hover:underline"
-          >
-            Clear filter
-          </button>
-        </div>
+      {visible.length === 0 && !teaching && !(viewMode === "calendar" && googleEvents.length > 0) && (
+        <EmptyState
+          icon={Calendar}
+          title={events.length ? "No events match these filters" : preview ? "No events to display yet" : "No events created yet"}
+          description={events.length ? "Try clearing the status and committee filters to find your events." : preview ? "Join an organization to see its events and assigned tasks." : isLeader ? "Create your first event to start planning work with your organization." : "Your organization's events will appear here once they are created."}
+        >
+          {events.length > 0 && <button type="button" onClick={() => { setFilter("All"); setSelectedCommittee("All"); }} className="min-h-11 rounded-lg px-3 text-xs font-semibold text-blue-600 hover:underline">Clear filters</button>}
+        </EmptyState>
       )}
 
       </div>

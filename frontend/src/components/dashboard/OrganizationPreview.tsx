@@ -1,5 +1,7 @@
 import { BriefcaseBusiness, CirclePlus, ClipboardList, UsersRound } from "lucide-react";
 import { OrganizationMemberTable } from "./OrganizationMemberTable";
+import { useTutorialPlaceholders } from "@/components/onboarding/TutorialPreviewContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type Props = {
   tab: "overview" | "members" | "committees" | "announcements";
@@ -12,6 +14,19 @@ const heading = "border-b border-slate-100 px-4 py-3 text-xs font-semibold text-
 const action = "inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50";
 
 export function OrganizationPreview({ tab, isLeader, pendingOrganizationName, onShowMembers }: Props) {
+  const teaching = useTutorialPlaceholders();
+  if (!teaching) {
+    const content = {
+      overview: { title: "No organization joined", description: "Join an organization to see its details, members, and events.", icon: BriefcaseBusiness },
+      members: { title: "No members to display yet", description: "Organization members will appear here after your membership is approved.", icon: UsersRound },
+      committees: { title: "No committees to display yet", description: "Join an organization to view its committees and their responsibilities.", icon: ClipboardList },
+      announcements: { title: "No announcements to display yet", description: "Organization and committee updates will appear here after you join.", icon: ClipboardList }
+    }[tab];
+    return <div className="mt-4 min-w-0 space-y-4">
+      {pendingOrganizationName && <p className="text-xs leading-5 text-slate-500">Your request to join {pendingOrganizationName} is pending approval.</p>}
+      <div data-tour={tab === "announcements" ? "announcement-feed" : undefined}><EmptyState {...content} /></div>
+    </div>;
+  }
   return <div className="mt-4 min-w-0 space-y-4">
     <p className="text-xs leading-5 text-slate-500">{pendingOrganizationName
       ? `Your request to join ${pendingOrganizationName} is pending. You can explore each tab's layout while awaiting approval.`

@@ -23,6 +23,7 @@ import { createEventFirestore, subscribeEventsFirestore, updateEventFirestore } 
 import { getOrganizationCommittees, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 import { prepareTasksForReuse } from "@/utils/taskReuse";
 import { TutorialContextualHelp } from "@/components/onboarding/TutorialProvider";
+import { useTutorialPlaceholders } from "@/components/onboarding/TutorialPreviewContext";
 
 type Tab = "events" | "atomizer";
 
@@ -37,6 +38,7 @@ export function EventsTasksView() {
 }
 
 function OrganizationEventsTasksView({ organizationId }: { organizationId?: string }) {
+  const teaching = useTutorialPlaceholders();
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const showToast = useToastStore((state) => state.showToast);
@@ -259,7 +261,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId?: stri
   return (
     <TaskAssigneeMembersContext.Provider value={members}>
     <div className="flex min-h-full min-w-0 flex-col">
-      {!effectiveOrgId && <p className="mb-3 text-xs leading-5 text-slate-500">Explore the tabs, views, and form fields below. <Link href="/dashboard/organization" className="font-semibold text-blue-600 underline underline-offset-2">Join an organization</Link> to save events and publish tasks.</p>}
+      {!effectiveOrgId && <p className="mb-3 text-xs leading-5 text-slate-500">{teaching ? "Explore the tabs, views, and form fields below. " : ""}<Link href="/dashboard/organization" className="font-semibold text-blue-600 underline underline-offset-2">Join an organization</Link> to view events and work on tasks.</p>}
       {/* Tab navigation */}
       <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
         <TabButton
@@ -308,7 +310,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId?: stri
             events={events}
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}
-            onPreviewEvent={!effectiveOrgId ? () => setPreviewEventOpen(true) : undefined}
+            onPreviewEvent={!effectiveOrgId && teaching ? () => setPreviewEventOpen(true) : undefined}
             onNewEvent={handleNewEvent}
             onUpdateEvent={handleUpdateEvent}
           />

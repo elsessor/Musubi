@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { OrganizationPreview } from "../src/components/dashboard/OrganizationPreview";
 import { EventPlaceholderCard } from "../src/components/events/EventPlaceholderCard";
@@ -10,6 +10,11 @@ import { AtomizerForm } from "../src/components/events/AtomizerForm";
 import { useAuthStore } from "../src/store/authStore";
 import { useAtomizerDraftStore } from "../src/store/atomizerDraftStore";
 import type { AuthUserProfile } from "../src/types/auth";
+import { TutorialPreviewContext } from "../src/components/onboarding/TutorialPreviewContext";
+
+function renderTeaching(element: ReactNode) {
+  return renderToStaticMarkup(createElement(TutorialPreviewContext.Provider, { value: true }, element));
+}
 
 function profile(role: AuthUserProfile["role"], organizationId: string | null = null): AuthUserProfile {
   return { uid: "preview-user", fullName: "New User", email: "new@example.test", role, organizationId, onboardingCompleted: true, position: null, profilePicture: null, skills: [] };
@@ -27,7 +32,7 @@ test("unaffiliated accounts see event views and placeholders, with role-appropri
   const setProfile = serverProfile(t);
   for (const role of ["Organization Member", "Student Leader"] as const) {
     setProfile(profile(role));
-    const html = renderToStaticMarkup(createElement(EventsTasksView));
+    const html = renderTeaching(createElement(EventsTasksView));
     assert.match(html, /Events &amp; Tasks/);
     assert.match(html, /Event layout placeholder/);
     assert.match(html, /event-view/);
@@ -51,7 +56,7 @@ test("event placeholders provide a preview action without becoming business reco
 
 test("event workspace previews expose guide targets without enabling organization writes", () => {
   for (const isLeader of [false, true]) {
-    const html = renderToStaticMarkup(createElement(EventWorkspacePreview, { isLeader, onBack: () => {} }));
+    const html = renderTeaching(createElement(EventWorkspacePreview, { isLeader, onBack: () => {} }));
     for (const target of ["event-workspace", "event-summary", "task-view", "task-committee-filter", "task-status-filter", "task-search", "event-task-workspace"]) assert.ok(html.includes(`data-tour="${target}"`), target);
     assert.match(html, /data-event-id="workspace-preview"/);
     assert.match(html, /Task title/);
@@ -70,7 +75,7 @@ test("event workspace previews expose guide targets without enabling organizatio
 test("every Organization tab retains its layout while a join request is pending", () => {
   const expected = { overview: ["Organization Details", "Organization Settings", "Members Preview", "Events"], members: ["Member Management", "Member Name", "Committee", "Skills", "Availability"], committees: ["Committee name", "Committee head", "Members"], announcements: ["Target audience", "Announcement title", "Posted by"] };
   for (const tab of ["overview", "members", "committees", "announcements"] as const) {
-    const html = renderToStaticMarkup(createElement(OrganizationPreview, { tab, isLeader: true, pendingOrganizationName: "Campus Club", onShowMembers: () => {} }));
+    const html = renderTeaching(createElement(OrganizationPreview, { tab, isLeader: true, pendingOrganizationName: "Campus Club", onShowMembers: () => {} }));
     assert.match(html, /Campus Club/);
     for (const label of expected[tab]) assert.ok(html.includes(label), `${tab}: ${label}`);
     if (tab !== "overview") assert.match(html, /disabled=""/);
@@ -79,9 +84,40 @@ test("every Organization tab retains its layout while a join request is pending"
 
 test("member previews do not expose leader creation controls", () => {
   for (const tab of ["committees", "announcements"] as const) {
-    const html = renderToStaticMarkup(createElement(OrganizationPreview, { tab, isLeader: false, onShowMembers: () => {} }));
+    const html = renderTeaching(createElement(OrganizationPreview, { tab, isLeader: false, onShowMembers: () => {} }));
     assert.doesNotMatch(html, /New Committee|Post Announcement/);
     assert.match(html, /layout placeholder/);
+  }
+});
+
+test("normal browsing uses empty Organization states and preserves pending membership notices", () => {
+  const titles = { overview: "No organization joined", members: "No members to display yet", committees: "No committees to display yet", announcements: "No announcements to display yet" };
+  for (const tab of ["overview", "members", "committees", "announcements"] as const) {
+    const html = renderToStaticMarkup(createElement(OrganizationPreview, { tab, isLeader: true, pendingOrganizationName: "Campus Club", onShowMembers: () => {} }));
+    assert.ok(html.includes(titles[tab]), tab);
+    assert.match(html, /Campus Club.*pending approval/);
+    assert.doesNotMatch(html, /layout placeholder|Committee name|Announcement title|Member name|Organization name/);
+  }
+});
+
+test("normal event browsing is clean for unaffiliated members and leaders", (t) => {
+  const setProfile = serverProfile(t);
+  for (const role of ["Organization Member", "Student Leader"] as const) {
+    setProfile(profile(role));
+    const html = renderToStaticMarkup(createElement(EventsTasksView));
+    assert.match(html, /No events to display yet/);
+    assert.match(html, /data-tour="event-view-content"/);
+    assert.doesNotMatch(html, /Event layout placeholder|Explore event workspace|No events match this filter/);
+  }
+});
+
+test("leaving the instructions removes task samples while keeping a route back to events", () => {
+  for (const isLeader of [false, true]) {
+    const html = renderToStaticMarkup(createElement(EventWorkspacePreview, { isLeader, onBack: () => {} }));
+    assert.match(html, /No tasks to display yet/);
+    assert.match(html, /Back to events/);
+    assert.match(html, /data-event-id="workspace-preview"/);
+    assert.doesNotMatch(html, /Task title|Task card layout placeholder|data-tour="event-summary"|Add Task/);
   }
 });
 

@@ -108,22 +108,25 @@ test("detailed controls use the existing inspector only after launching the guid
   assert.match(text(tree), /Create and manage committees/);
 });
 
-test("Quick Tour and secondary actions preserve launch, resume, Get Started, reference, and close behavior", () => {
+test("Full Walkthrough is above Quick Tour and resets onboarding while other Help actions retain their behavior", () => {
   const app = center({ currentPageTour: "page-events", resumeTour: "event-browse" });
   let tree = app.render();
+  const buttons = nodes(tree).filter((node) => node.type === "button");
+  assert.equal(buttons.filter((node) => text(node) === "Full Walkthrough").length, 1);
+  assert.ok(buttons.findIndex((node) => text(node) === "Full Walkthrough") < buttons.findIndex((node) => text(node) === "Start Quick Tour"));
+  app.click(tree, "Full Walkthrough");
   app.click(tree, "Start Quick Tour");
   app.menu(tree, "Get Started");
   app.menu(tree, "Replay sidebar introduction");
   app.menu(tree, "Restart onboarding");
   app.menu(tree, "Replay this page guide");
-  app.menu(tree, "Full Walkthrough");
   app.menu(tree, "Reopen last guide");
   app.menu(tree, "Read the user guide"); tree = app.render();
   assert.match(text(tree), /Your Dashboard/);
   assert.doesNotMatch(text(tree), /Start Quick Tour/);
   app.back(tree); tree = app.render();
   app.find(tree, (node) => node.type === "Dialog").props.onOpenChange(false);
-  assert.deepEqual(app.calls, [["start", "quick"], ["started"], ["sidebar"], ["restart"], ["start", "page-events"], ["start", "features"], ["start", "event-browse", true], ["close"]]);
+  assert.deepEqual(app.calls, [["restart"], ["start", "quick"], ["started"], ["sidebar"], ["restart"], ["start", "page-events"], ["start", "event-browse", true], ["close"]]);
 });
 
 test("contextual help opens the permitted guide details and launches the same walkthrough", () => {

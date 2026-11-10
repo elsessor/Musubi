@@ -27,7 +27,7 @@ function guide(role: string, hasOrganization: boolean, restarting = false) {
   const exports: any = {};
   new Function("exports", "require", code)(exports, (name: string) => name === "react" ? { useState: () => [section, (next: string) => { section = next; }] } : name === "react/jsx-runtime" ? runtime : components);
   const action = (name: string) => () => calls.push(name);
-  const props = { role, hasOrganization, onClose: action("close"), onContinue: restarting ? action("continue") : undefined, onWalkthrough: action("walkthrough"), onPageGuide: action("page"), onHelp: action("help"), onOrganization: action("organization") };
+  const props = { role, hasOrganization, onClose: action("close"), onContinue: restarting ? action("continue") : undefined, onExploreOwn: restarting ? action("independent") : undefined, onWalkthrough: action("walkthrough"), onPageGuide: action("page"), onHelp: action("help"), onOrganization: action("organization") };
   return {
     calls, render: () => exports.GetStarted(props),
     click(tree: Node, label: string) {
@@ -57,12 +57,13 @@ test("Get Started offers all sections and connects walkthrough, page guide, Help
   assert.deepEqual(app.calls, ["walkthrough", "organization", "page", "help", "close"]);
 });
 
-test("restart acknowledgement continues onboarding while dismissing the dialog only closes it", () => {
+test("the introduction starts the tour directly and offers independent exploration", () => {
   const app = guide("Student Leader", false, true);
   const tree = app.render();
-  app.click(tree, "I understand");
+  app.click(tree, "Continue to tour");
+  app.click(tree, "Explore on my own");
   nodes(tree).find((node) => node.type === "Dialog")!.props.onOpenChange(false);
-  assert.deepEqual(app.calls, ["continue", "close"]);
+  assert.deepEqual(app.calls, ["continue", "independent", "close"]);
 });
 
 test("access instructions distinguish pending leaders, joined members, and administrators", () => {

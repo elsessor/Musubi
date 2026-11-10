@@ -86,6 +86,7 @@ function provider(t: TestContext, role: "Admin" | "Student Leader" | "Organizati
   }
   const components = new Proxy({}, { get: (_target, name) => String(name) });
   const mocks: Record<string, unknown> = {
+    "./TutorialPreviewContext": { TutorialPreviewContext: { Provider: "TutorialPreviewProvider" } },
     react, "react/jsx-runtime": { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }) },
     "next/navigation": { usePathname: () => pathname, useRouter: () => ({ push: () => assert.fail("An introduction must not navigate away without a selected action") }) },
     "@/store/authStore": { useAuthStore }, "@/config/tutorial": tutorial, "@/config/tutorialPages": pages,
@@ -170,16 +171,19 @@ test("an acknowledged event introduction can be replayed through Help for the cu
   assert.equal(replay.props.index, 0);
 });
 
-test("a new account receives a personalized welcome and an opt-in sidebar tour without navigating pages", async (t) => {
+test("a new account opens Get Started and can begin the sidebar tour directly", async (t) => {
   const app = provider(t, "Organization Member", { pathname: "/dashboard", organizationId: null, onboardingCompleted: false, saved: null });
   let tree = await app.settle();
-  const welcome = find(tree, (node) => node.type === "WelcomeOnboarding")!;
+  const welcome = find(tree, (node) => node.type === "GetStarted")!;
   assert.ok(welcome);
-  assert.equal(welcome.props.name, "Alex Santos");
+  assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, true);
+  assert.equal(welcome.props.role, "Organization Member");
+  assert.equal(welcome.props.hasOrganization, false);
+  assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding"), undefined);
   assert.equal(find(tree, (node) => node.type === "GuidedTour"), undefined);
   assert.equal(app.writes.length, 1);
   assert.equal(app.writes[0].seenPages, undefined); // Welcome must not suppress the page introduction.
-  welcome.props.onStart();
+  welcome.props.onWalkthrough();
   tree = await app.settle();
   const guide = find(tree, (node) => node.type === "GuidedTour")!;
   assert.equal(guide.props.steps[0].id, "sidebar-dashboard");
@@ -188,6 +192,7 @@ test("a new account receives a personalized welcome and an opt-in sidebar tour w
   guide.props.onExit(true);
   tree = await app.settle();
   assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding" || node.type === "GuidedTour"), undefined);
+  assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, false);
   tree.props.value("started");
   assert.ok(find(await app.settle(), (node) => node.type === "GetStarted"));
 });
@@ -256,7 +261,7 @@ test("a member cannot open a leader-only guide through contextual Help", async (
 
 test("Explore on My Own suppresses all automatic module tours across navigation and reload", async (t) => {
   const app = provider(t, "Organization Member", { pathname: "/dashboard", saved: null });
-  find(await app.settle(), (node) => node.type === "WelcomeOnboarding")!.props.onDismiss();
+  find(await app.settle(), (node) => node.type === "GetStarted")!.props.onExploreOwn();
   let tree = await app.settle();
   assert.equal(find(tree, (node) => node.type === "GuidedTour" || node.type === "WelcomeOnboarding"), undefined);
   assert.equal(app.writes.at(-1)?.onboarding?.preference?.mode, "independent");
@@ -317,11 +322,7 @@ test("sidebar progress resumes without welcome and Help Center can replay or res
   assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding" || node.type === "GuidedTour"), undefined);
   started.props.onWalkthrough();
   tree = await app.settle();
-  const welcome = find(tree, (node) => node.type === "WelcomeOnboarding")!;
-  assert.ok(welcome);
-  assert.equal(find(tree, (node) => node.type === "GuidedTour" || node.type === "GetStarted"), undefined);
-  welcome.props.onStart();
-  tree = await app.settle();
+  assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding" || node.type === "GetStarted"), undefined);
   guide = find(tree, (node) => node.type === "GuidedTour")!;
   assert.equal(guide.props.index, 0);
   assert.deepEqual(guide.props.steps, sidebar.getSidebarTourSteps("Student Leader", "/dashboard/organization"));
@@ -330,19 +331,24 @@ test("sidebar progress resumes without welcome and Help Center can replay or res
   assert.equal(find(await app.settle(), (node) => node.type === "WelcomeOnboarding" || node.type === "GuidedTour"), undefined);
 });
 
-test("restart acknowledgement continues to the welcome choice while closing or reopening Get Started stays separate", async (t) => {
+test("restarted Get Started supports opting out while reopening the reference keeps progress", async (t) => {
   const stamp = "2026-11-10T00:00:00Z";
   const app = provider(t, "Organization Member", { organizationId: null, saved: { version: 1, tour: "quick", status: "dismissed", step: 0, updatedAt: stamp, onboarding: { version: 1, preference: { mode: "independent", source: "user", updatedAt: stamp } } } });
   let tree = await app.settle();
+  const teaching = (tree: Node) => find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value;
+  assert.equal(teaching(tree), false);
   tree.props.value(); tree = await app.settle();
   find(tree, (node) => node.type === "HelpCenter")!.props.onRestart();
   tree = await app.settle();
   let started = find(tree, (node) => node.type === "GetStarted")!;
+  assert.equal(teaching(tree), true);
   assert.equal(started.props.hasOrganization, false);
   started.props.onClose();
   tree = await app.settle();
   assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding" || node.type === "GuidedTour"), undefined);
-  assert.equal(app.writes.length, 1);
+  assert.equal(teaching(tree), false);
+  assert.equal(app.writes.length, 2);
+  assert.equal(app.writes.at(-1)?.onboarding?.preference?.mode, "independent");
   assert.equal(app.writes[0].acknowledged, false);
   assert.deepEqual(app.writes[0].seenPages, []);
   assert.ok(app.writes[0].onboarding?.restartedAt);
@@ -350,17 +356,43 @@ test("restart acknowledgement continues to the welcome choice while closing or r
   find(tree, (node) => node.type === "HelpCenter")!.props.onGetStarted();
   tree = await app.settle();
   started = find(tree, (node) => node.type === "GetStarted")!;
+  assert.equal(teaching(tree), false);
   assert.equal(started.props.onContinue, undefined);
   started.props.onClose(); tree = await app.settle();
   tree.props.value(); tree = await app.settle();
   find(tree, (node) => node.type === "HelpCenter")!.props.onRestart();
   tree = await app.settle();
-  find(tree, (node) => node.type === "GetStarted")!.props.onContinue();
-  tree = await app.settle();
-  find(tree, (node) => node.type === "WelcomeOnboarding")!.props.onDismiss();
+  assert.equal(teaching(tree), true);
+  find(tree, (node) => node.type === "GetStarted")!.props.onExploreOwn();
   tree = await app.settle();
   assert.equal(find(tree, (node) => node.type === "GuidedTour" || node.type === "WelcomeOnboarding"), undefined);
   assert.equal(app.writes.at(-1)?.onboarding?.preference?.mode, "independent");
+  assert.equal(teaching(tree), false);
+});
+
+test("automatic previews retain controls that mount only after the guide starts and hide samples on exit", async (t) => {
+  const app = provider(t, "Organization Member", { organizationId: null });
+  let tree = await app.settle();
+  assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, false);
+  app.setHiddenTargets(["event-summary", "task-view", "task-filter-panel", "task-committee-filter", "task-status-filter", "task-search", "task-create-actions"]);
+  app.setEvent("workspace-preview");
+  tree = await app.settle();
+  let guide = find(tree, (node) => node.type === "GuidedTour")!;
+  assert.equal(guide.props.steps[0].id, "event-details-summary");
+  assert.ok(guide.props.steps.some((step: tutorial.TourStep) => step.id === "event-details-tools"));
+  assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, true);
+  guide.props.onExit(true);
+  tree = await app.settle();
+  assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, false);
+  tree.props.value(); tree = await app.settle();
+  const help = find(tree, (node) => node.type === "HelpCenter")!;
+  help.props.onStart(help.props.currentPageTour);
+  tree = await app.settle();
+  guide = find(tree, (node) => node.type === "GuidedTour")!;
+  assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, true);
+  guide.props.onExit(false);
+  tree = await app.settle();
+  assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, false);
 });
 
 test("restarting a completed account restores automatic page and event introductions and resumes the new attempt", async (t) => {
@@ -380,8 +412,7 @@ test("restarting a completed account restores automatic page and event introduct
   assert.equal(reset.onboarding?.modules, undefined);
   find(tree, (node) => node.type === "GetStarted")!.props.onContinue();
   tree = await app.settle();
-  find(tree, (node) => node.type === "WelcomeOnboarding")!.props.onStart();
-  tree = await app.settle();
+  assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding"), undefined);
   find(tree, (node) => node.type === "GuidedTour")!.props.onExit(true);
   tree = await app.settle();
   let guide = find(tree, (node) => node.type === "GuidedTour")!;
@@ -429,12 +460,29 @@ test("automatic tours wait for late targets and omit unavailable controls from t
   assert.ok(guide.props.steps.every((step: tutorial.TourStep) => step.target !== "dashboard-updates"));
 });
 
-test("welcome waits until authentication and account progress have loaded", async (t) => {
+test("Get Started waits until authentication and account progress have loaded", async (t) => {
   const app = provider(t, "Organization Member", { pathname: "/dashboard", saved: null, loading: true });
-  assert.equal(find(await app.settle(), (node) => node.type === "WelcomeOnboarding"), undefined);
+  assert.equal(find(await app.settle(), (node) => node.type === "GetStarted"), undefined);
   assert.equal(app.writes.length, 0);
   app.setLoading(false);
-  assert.ok(find(await app.settle(), (node) => node.type === "WelcomeOnboarding"));
+  assert.ok(find(await app.settle(), (node) => node.type === "GetStarted"));
+});
+
+test("Get Started replaces the small welcome dialog for every role and closing it preserves opt-out on reload", async (t) => {
+  for (const role of ["Admin", "Student Leader", "Organization Member"] as const) await t.test(role, async (t) => {
+    const pathname = role === "Admin" ? "/admin" : "/dashboard";
+    const app = provider(t, role, { pathname, organizationId: null, saved: null });
+    let tree = await app.settle();
+    const introduction = find(tree, (node) => node.type === "GetStarted")!;
+    assert.ok(introduction);
+    assert.equal(introduction.props.role, role);
+    assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding"), undefined);
+    introduction.props.onClose(); tree = await app.settle();
+    assert.equal(find(tree, (node) => node.type === "GetStarted" || node.type === "GuidedTour"), undefined);
+    const refreshed = provider(t, role, { pathname, saved: app.writes.at(-1) });
+    tree = await refreshed.settle();
+    assert.equal(find(tree, (node) => node.type === "GetStarted" || node.type === "WelcomeOnboarding" || node.type === "GuidedTour"), undefined);
+  });
 });
 
 test("visiting a member receives a separate profile guide with only permitted metric explanations", async (t) => {

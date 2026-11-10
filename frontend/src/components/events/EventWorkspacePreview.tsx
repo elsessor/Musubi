@@ -7,6 +7,8 @@ import { useTutorialView } from "@/hooks/useTutorialView";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { CalendarView } from "./CalendarView";
 import { getStatusTheme } from "./statusUtils";
+import { useTutorialPlaceholders } from "@/components/onboarding/TutorialPreviewContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const views = [
   { value: "grid", label: "Grid", icon: LayoutGrid },
@@ -24,6 +26,7 @@ const card = "min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs
 
 // Preview controls only change local presentation; no Event or Task record is created.
 export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean; onBack: () => void }) {
+  const teaching = useTutorialPlaceholders();
   const [view, setView] = useState("grid");
   const tutorialViewRef = useTutorialView(setView);
   const [status, setStatus] = useState("All");
@@ -35,6 +38,10 @@ export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean;
   const filtersRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
+    if (!teaching) { setFiltersOpen(false); setStatusModalOpen(false); }
+  }, [teaching]);
+
+  useEffect(() => {
     if (!filtersOpen) return;
     const media = window.matchMedia("(max-width: 639px)");
     if (!media.matches) { setFiltersOpen(false); return; }
@@ -44,6 +51,11 @@ export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean;
     media.addEventListener("change", closeOnDesktop);
     return () => { media.removeEventListener("change", closeOnDesktop); dialog?.close(); };
   }, [filtersOpen]);
+
+  if (!teaching) return <div ref={tutorialViewRef} data-tour-view-scope="tasks" data-tour-view={view} data-tour="event-workspace" data-event-id="workspace-preview" className="min-w-0 space-y-4">
+    <button type="button" onClick={onBack} className={`inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-slate-600 ${focus}`}><ChevronLeft aria-hidden="true" className="size-4" />Back to events</button>
+    <div data-tour="event-task-workspace"><EmptyState title="No tasks to display yet" description="Join an organization and open an event to see its assigned tasks." icon={Calendar} /></div>
+  </div>;
 
   function searchInput(mobile = false) {
     return <div className={`relative ${mobile ? "w-full" : "w-44 max-w-full"}`}>
