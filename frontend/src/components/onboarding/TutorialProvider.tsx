@@ -63,7 +63,10 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const contextKey = pageContext ? `${pathname}:event:${eventId}` : memberProfileOpen && memberProfileId ? `${pathname}:member:${memberProfileId}` : pathname;
   const preview = Boolean(profile && profile.role !== "Admin" && !profile.organizationId?.trim());
   const allowed = Boolean(profile && (profile.role === "Admin" ? pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/dashboard/profile" || memberProfileOpen : pathname === "/dashboard" || pathname.startsWith("/dashboard/")));
-  const visible = Boolean(identity && !loading && allowed && statusLoaded === identity);
+  // Opening Help is a local action and must not wait for progress synchronization.
+  // Automatic prompts still wait for saved progress to avoid replaying completed guides.
+  const manualHelpOpen = mode !== null && run?.automatic !== true;
+  const visible = Boolean(identity && !loading && allowed && (statusLoaded === identity || manualHelpOpen));
   const role = profile?.role;
   const steps = useMemo(() => automaticSteps ?? (kind === "controls" ? controlSteps : kind === "sidebar" && role ? getSidebarTourSteps(role, sidebarRoute) : role ? getTourSteps(role, kind, preview) : []), [automaticSteps, kind, controlSteps, role, sidebarRoute, preview]);
 

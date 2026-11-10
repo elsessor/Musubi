@@ -35,14 +35,31 @@ function mergeTutorialProgress(remote: TutorialStatus | null, local: TutorialSta
 }
 
 async function request(user: User, role: UserRole, method: "GET" | "PUT", status?: TutorialStatus) {
-  const token = await user.getIdToken();
-  const response = await fetch(`${API_BASE_URL}/auth/tutorial`, {
-    method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    ...(status ? { body: JSON.stringify({ role, version: status.version, status: status.status, step: status.step, tour: status.tour, acknowledged: status.acknowledged, seenPages: status.seenPages, onboarding: status.onboarding }) } : {}),
-    signal: AbortSignal.timeout(8000)
-  });
-  if (!response.ok) throw new Error("Tutorial sync unavailable");
-  return response.json() as Promise<{ role: UserRole; tutorial: unknown }>;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      (async () => {
+        const token = await user.getIdToken();
+        if (controller.signal.aborted) throw new Error("Tutorial sync timed out");
+        const response = await fetch(`${API_BASE_URL}/auth/tutorial`, {
+          method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          ...(status ? { body: JSON.stringify({ role, version: status.version, status: status.status, step: status.step, tour: status.tour, acknowledged: status.acknowledged, seenPages: status.seenPages, onboarding: status.onboarding }) } : {}),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error("Tutorial sync unavailable");
+        return response.json() as Promise<{ role: UserRole; tutorial: unknown }>;
+      })(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Tutorial sync timed out"));
+        }, 8000);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function loadTutorial(user: User, role: UserRole): Promise<{ status: TutorialStatus | null; localOnly: boolean }> {

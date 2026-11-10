@@ -121,3 +121,13 @@ test("role mismatches and invalid remote records are never accepted", async (t) 
   t.mock.method(globalThis, "fetch", async () => response({ status: "completed" }));
   assert.equal((await loadTutorial(user("malformed"), "Organization Member")).status, null);
 });
+
+test("a stalled sign-in token cannot prevent the local guide from loading", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const stalled = { uid: "stalled-guide-token", getIdToken: () => new Promise(() => {}) } as unknown as User;
+  const loading = loadTutorial(stalled, "Organization Member");
+  await Promise.resolve();
+  await Promise.resolve();
+  t.mock.timers.tick(8000);
+  assert.deepEqual(await loading, { status: null, localOnly: true });
+});
