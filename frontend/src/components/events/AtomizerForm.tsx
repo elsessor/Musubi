@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, ChevronDown, Loader2, SlidersHorizontal, Zap } from "lucide-react";
+import { Check, ChevronDown, Clock, Hourglass, Loader2, SlidersHorizontal, Sparkles, Zap } from "lucide-react";
 import { useEffect, useRef, useState, type SetStateAction } from "react";
+import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
-import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { getStatusTheme, getTaskStatusDescription, getEventStatusDescription, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 import { atomizeGoal } from "@/services/auth.service";
 import { delegateSubtasksHeuristically, inferSkillsFromTask } from "@/utils/heuristicDelegation";
 import type { OrganizationMember } from "@/services/auth.service";
@@ -65,9 +66,10 @@ function ModernStatusDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all">
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all divide-y divide-slate-100/80">
           {options.map((status) => {
             const badge = getStatusBadge(status);
+            const statusInfo = getTaskStatusDescription(status, customStatuses);
             const isSelected = value === status;
             return (
               <button
@@ -77,19 +79,24 @@ function ModernStatusDropdown({
                   onChange(status as TaskStatus);
                   setIsOpen(false);
                 }}
-                className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm font-semibold transition ${
+                className={`flex w-full items-start justify-between px-3.5 py-2.5 text-left text-sm font-semibold transition ${
                   isSelected
-                    ? `${getStatusTheme(status, customStatuses).badge} font-bold`
+                    ? "bg-blue-50/80 text-blue-900"
                     : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold ${badge.bg}`}>
-                    <span className={`size-1.5 rounded-full ${badge.dot}`} />
-                    {status}
-                  </span>
+                <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold ${badge.bg}`}>
+                      <span className={`size-1.5 rounded-full ${badge.dot}`} />
+                      {status}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-normal text-slate-500 leading-tight">
+                    {statusInfo.description}
+                  </p>
                 </div>
-                {isSelected && <Check className="size-4 text-blue-600" />}
+                {isSelected && <Check className="size-4 shrink-0 text-blue-600 mt-1" />}
               </button>
             );
           })}
@@ -137,7 +144,7 @@ function ModernEventDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all">
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all divide-y divide-slate-100/80">
           <button
             type="button"
             onClick={() => {
@@ -153,6 +160,8 @@ function ModernEventDropdown({
           </button>
           {events.map((ev) => {
             const isSelected = value === ev.id;
+            const evStatus = ev.status || "Planning";
+            const evDesc = getEventStatusDescription(evStatus);
             return (
               <button
                 key={ev.id}
@@ -161,19 +170,24 @@ function ModernEventDropdown({
                   onChange(ev.id);
                   setIsOpen(false);
                 }}
-                className={`flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm transition ${
+                className={`flex w-full items-start justify-between px-3.5 py-2.5 text-left text-sm transition ${
                   isSelected
                     ? "bg-blue-50/80 font-bold text-blue-900"
                     : "text-slate-700 font-semibold hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="truncate">{ev.title}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${getStatusTheme(ev.status, ev.eventCustomStatuses).badge}`}>
-                    {ev.status || "Planning"}
-                  </span>
+                <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="truncate">{ev.title}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${getStatusTheme(evStatus, ev.eventCustomStatuses).badge}`}>
+                      {evStatus}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-normal text-slate-500 leading-tight">
+                    <span className="font-semibold text-slate-600">{evStatus}:</span> {evDesc.description}
+                  </p>
                 </div>
-                {isSelected && <Check className="size-4 shrink-0 text-blue-600" />}
+                {isSelected && <Check className="size-4 shrink-0 text-blue-600 mt-1" />}
               </button>
             );
           })}
@@ -200,7 +214,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   const draftScope = JSON.stringify([firebaseUser?.uid || profile?.uid, profile?.organizationId?.trim()]);
   const draft = useAtomizerDraftStore((state) => state.drafts[draftScope] || EMPTY_ATOMIZER_DRAFT);
   const updateDraft = useAtomizerDraftStore((state) => state.updateDraft);
-  const { selectedEventId, isCreateFromDescription, newEventTitle, defaultStatus, goalDescription,
+  const { eventDate, participatingMembers, selectedEventId, isCreateFromDescription, newEventTitle, defaultStatus, goalDescription,
     isAtomizing, errorMsg, activeGoalDraft, customStatuses, statusOrder, workflowSource } = draft;
 
   function setDraftField<K extends keyof AtomizerDraftState>(field: K, action: SetStateAction<AtomizerDraftState[K]>) {
@@ -221,6 +235,42 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
   // Manage Statuses Modal State
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [isLocalGenerating, setIsLocalGenerating] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  const isAtomizingActive = isLocalGenerating || isAtomizing;
+
+  useEffect(() => {
+    if (!isAtomizingActive) {
+      setElapsedSeconds(0);
+      return;
+    }
+    setElapsedSeconds(0);
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isAtomizingActive]);
+
+  function formatElapsed(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  }
+
+  function getGenerationStep(seconds: number): string {
+    if (seconds < 25) {
+      return "Analyzing event goals and decomposing into operational milestones...";
+    } else if (seconds < 60) {
+      return "Drafting actionable task descriptions and suggested assignees...";
+    } else if (seconds < 100) {
+      return "Evaluating prerequisite dependencies and assigning priority levels...";
+    } else if (seconds < 140) {
+      return "Calculating skill requirements and matching organization members...";
+    } else {
+      return "Finalizing structured task breakdown and review board...";
+    }
+  }
 
   const targetEvent = isCreateFromDescription ? undefined : events.find((event) => event.id === selectedEventId);
   useEffect(() => {
@@ -234,8 +284,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
     });
   }, [draftScope, isCreateFromDescription, selectedEventId, targetEvent, updateDraft, workflowSource]);
 
-  function handleAddStatus(name: string, color: StatusThemeColor, insertIndex?: number) {
-    const newConfig: CustomStatusConfig = { name, color };
+  function handleAddStatus(name: string, color: StatusThemeColor, insertIndex?: number, description?: string) {
+    const newConfig: CustomStatusConfig = { name, color, ...(description ? { description } : {}) };
     setCustomStatuses((prev) => [...prev, newConfig]);
     setStatusOrder((prev) => {
       const idx = typeof insertIndex === "number" ? insertIndex : prev.length;
@@ -255,12 +305,18 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   }
 
   async function handleAtomize() {
-    if (isAtomizing || !goalDescription.trim()) return;
+    if (isAtomizingActive || !goalDescription.trim()) return;
     if (!firebaseUser) {
       setErrorMsg("Your session has expired. Please sign in again.");
       return;
     }
 
+    if (!eventDate || !Number.isSafeInteger(Number(participatingMembers)) || Number(participatingMembers) < 1) {
+      setErrorMsg("Enter an event date and a positive whole number of participating members.");
+      return;
+    }
+
+    setIsLocalGenerating(true);
     setIsAtomizing(true);
     setErrorMsg("");
 
@@ -275,6 +331,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
 
       const data = await atomizeGoal(firebaseUser, {
         eventName,
+        eventDate,
+        participatingMembers: Number(participatingMembers),
         goalDescription: goalDescription.trim(),
         defaultStatus
       });
@@ -308,7 +366,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         ? { ...task, status: "To Do" as TaskStatus } : task);
       // Heuristically delegate subtasks to organization members with matching skills
       const delegatedSubtasks = members && members.length > 0
-        ? delegateSubtasksHeuristically(readySubtasks, members)
+        ? delegateSubtasksHeuristically(readySubtasks, members, Number(participatingMembers))
         : readySubtasks;
 
       const draft: GoalDraft = {
@@ -317,6 +375,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         description: goalDescription.trim(),
         status: "Draft",
         subtasks: delegatedSubtasks,
+        participatingMemberUIDs: [...new Set(delegatedSubtasks.flatMap((task) => task.assignedMemberUID ? [task.assignedMemberUID] : []))],
         generationSource: "ai"
       };
 
@@ -330,6 +389,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         setErrorMsg(rawMsg);
       }
     } finally {
+      setIsLocalGenerating(false);
       setIsAtomizing(false);
     }
   }
@@ -385,6 +445,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               },
               assignedMemberName: memberName,
               assignedMemberUID: st.assignedMemberUID || matchedMember?.id || null,
+              ...(typeof st.aiMetadata?.confidenceScore === "number"
+                ? { matchPercentage: st.aiMetadata.confidenceScore } : {}),
               requiredSkills: st.requiredSkills,
               isLeaderOnly: st.isLeaderOnly,
               isAiGenerated: st.isAiGenerated,
@@ -490,17 +552,54 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           </div>
         </div>
 
+        {/* Event planning parameters */}
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <div>
+            <label htmlFor="atomizer-event-date" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
+              Event Date <span className="text-rose-400">*</span>
+            </label>
+            <MiniCalendarPicker
+              id="atomizer-event-date"
+              value={eventDate}
+              format="iso"
+              disabled={isAtomizingActive}
+              onChange={(value) => setDraftField("eventDate", value)}
+              placeholder="Select event date"
+              buttonClassName="h-11 !bg-[#F0F4F8] !px-4 !text-sm shadow-xs hover:!bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+          <div>
+            <label htmlFor="atomizer-participating-members" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
+              Participating Members <span className="text-rose-400">*</span>
+            </label>
+            <input
+              id="atomizer-participating-members"
+              type="number"
+              required
+              min="1"
+              step="1"
+              value={participatingMembers}
+              disabled={isAtomizingActive}
+              onChange={(e) => setDraftField("participatingMembers", e.target.value)}
+              placeholder="Number of members available"
+              className="h-11 w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 text-sm font-semibold text-slate-800 placeholder:font-normal placeholder:text-slate-400 shadow-xs transition-all hover:border-blue-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </div>
+        </div>
+
         {/* Event description */}
         <div className="mt-5">
-          <label className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
+          <label htmlFor="atomizer-event-description" className="mb-2 block text-[11px] font-bold tracking-wider uppercase text-slate-400">
             Event Description
           </label>
           <textarea
+            id="atomizer-event-description"
             value={goalDescription}
             onChange={(e) => setGoalDescription(e.target.value)}
+            disabled={isAtomizingActive}
             placeholder='e.g. "Organize a campus-wide culture week celebration across all departments"'
             rows={4}
-            className="w-full resize-none rounded-2xl border border-slate-200/60 bg-[#F0F4F8] p-4 text-sm text-slate-700 placeholder:text-slate-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="w-full resize-none rounded-2xl border border-slate-200/60 bg-[#F0F4F8] p-4 text-sm text-slate-700 placeholder:text-slate-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
 
@@ -510,20 +609,80 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           </div>
         )}
 
+        {/* Loading Message & Expectation Banner */}
+        {isAtomizingActive && (
+          <div className="mt-5 rounded-2xl border border-blue-200/90 bg-gradient-to-br from-blue-50/90 via-sky-50/60 to-indigo-50/70 p-4 sm:p-5 shadow-xs animate-in fade-in duration-200">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
+                <Loader2 className="size-5 animate-spin" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-900">
+                      AI Task Atomizer in Progress
+                    </h4>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-100/90 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200/60">
+                      <Sparkles className="size-3" />
+                      Generating Subtasks
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-lg border border-blue-200/80 bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs">
+                    <Clock className="size-3.5 text-blue-600" />
+                    <span>Elapsed: {formatElapsed(elapsedSeconds)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-2.5 rounded-xl border border-blue-100/90 bg-white/80 p-3.5 text-xs leading-relaxed text-slate-700 backdrop-blur-xs">
+                  <p className="font-semibold text-slate-800">
+                    <span className="text-blue-700">Please note:</span> Task generation may take approximately <span className="text-blue-700 font-bold">2–3 minutes</span> to complete.
+                  </p>
+                  <p className="mt-1 text-slate-600 text-[11px] leading-normal">
+                    The AI model is thoroughly decomposing the macro-goal, generating actionable descriptions, calculating prerequisite dependencies, and matching assignees based on committee skillsets. Please keep this page open while processing.
+                  </p>
+                </div>
+
+                {/* Live Progress Bar & Step Tracker */}
+                <div className="mt-3.5 space-y-1.5">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-blue-200/60">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 transition-all duration-700 ease-out"
+                      style={{
+                        width: `${Math.min(96, Math.max(8, Math.round((elapsedSeconds / 160) * 100)))}%`
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-1.5 font-medium text-blue-800 truncate">
+                      <span className="size-1.5 rounded-full bg-blue-500 animate-ping shrink-0" />
+                      <span className="truncate">{getGenerationStep(elapsedSeconds)}</span>
+                    </span>
+                    <span className="shrink-0 font-semibold text-slate-500 ml-2">
+                      Est. ~2–3 mins
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action Controls */}
         <div className="mt-5 flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={handleAtomize}
-            disabled={isAtomizing || !goalDescription.trim()}
+            disabled={isAtomizingActive || !goalDescription.trim()}
             className="flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-blue-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-5"
           >
-            {isAtomizing ? (
+            {isAtomizingActive ? (
               <Loader2 size={16} className="shrink-0 animate-spin" />
             ) : (
               <Zap size={16} className="shrink-0" />
             )}
-            {isAtomizing ? "Atomizing with Genkit..." : "Atomize Event with AI"}
+            {isAtomizingActive
+              ? `Generating Tasks (${formatElapsed(elapsedSeconds)} · Est. 2–3 mins)...`
+              : "Atomize Event with AI"}
           </button>
         </div>
       </div>

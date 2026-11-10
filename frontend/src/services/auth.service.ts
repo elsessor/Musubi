@@ -730,7 +730,7 @@ export function bulkUpdateAdminMembersRole(user: User, memberIds: string[], role
 
 export async function atomizeGoal(
   user: User,
-  payload: { eventName: string; goalDescription: string; defaultStatus?: string }
+  payload: { eventName: string; goalDescription: string; eventDate: string; participatingMembers: number; defaultStatus?: string }
 ) {
   return organizationRequest<{
     tasks: Array<{

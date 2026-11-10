@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, ChevronDown, ChevronUp, GripVertical, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
-import { COLOR_OPTIONS, getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { COLOR_OPTIONS, getStatusTheme, getTaskStatusDescription, getEventStatusDescription, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
 import { CustomSelect } from "@/components/ui/CustomSelect";
 
@@ -13,7 +13,7 @@ export type AddCustomStatusModalProps = {
   customStatuses?: CustomStatusConfig[];
   statusOrder: string[];
   defaultStatuses: string[];
-  onAddStatus: (statusName: string, color: StatusThemeColor, insertIndex?: number) => void;
+  onAddStatus: (statusName: string, color: StatusThemeColor, insertIndex?: number, description?: string) => void;
   onReorderStatusOrder: (newOrder: string[]) => void;
   onDeleteStatus?: (statusName: string) => void;
 };
@@ -30,6 +30,7 @@ export function AddCustomStatusModal({
   onDeleteStatus,
 }: AddCustomStatusModalProps) {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [selectedColor, setSelectedColor] = useState<StatusThemeColor>("purple");
   const [insertAfter, setInsertAfter] = useState<string>("before-completed");
   const [error, setError] = useState("");
@@ -68,8 +69,9 @@ export function AddCustomStatusModal({
       if (targetIdx !== -1) insertIndex = targetIdx + 1;
     }
 
-    onAddStatus(trimmed, selectedColor, insertIndex);
+    onAddStatus(trimmed, selectedColor, insertIndex, description.trim() || undefined);
     setName("");
+    setDescription("");
   }
 
   function handleMoveUp(index: number) {
@@ -172,22 +174,36 @@ export function AddCustomStatusModal({
                       : "border-slate-100 bg-white hover:border-slate-200"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <div
-                      className="cursor-grab text-slate-300 hover:text-slate-600 active:cursor-grabbing"
+                      className="cursor-grab text-slate-300 hover:text-slate-600 active:cursor-grabbing shrink-0"
                       title="Drag to rearrange"
                     >
                       <GripVertical size={16} />
                     </div>
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${theme.dot}`} />
-                    <span className="truncate text-xs font-semibold text-slate-800">
-                      {statusName}
-                    </span>
-                    {isDefault && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
-                        pinned / default
-                      </span>
-                    )}
+                    {(() => {
+                      const descInfo = type === "task"
+                        ? getTaskStatusDescription(statusName, customStatuses)
+                        : getEventStatusDescription(statusName);
+                      return (
+                        <div className="flex flex-col min-w-0 pr-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="truncate text-xs font-semibold text-slate-800">
+                              {statusName}
+                            </span>
+                            {isDefault && (
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+                                default
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-normal text-slate-500 leading-tight line-clamp-1" title={descInfo.description}>
+                            {descInfo.description}
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
@@ -245,6 +261,14 @@ export function AddCustomStatusModal({
             }}
             placeholder="Status name..."
             className="w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+          />
+
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Description or meaning (optional)..."
+            className="w-full rounded-2xl border border-slate-200/80 bg-[#F0F4F8] px-4 py-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
           />
 
           <div>

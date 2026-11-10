@@ -590,3 +590,45 @@ test("archived events expose read-only cards and no add or review actions", () =
   assert.equal(find(tree, (node) => node.type === "TaskGridView").props.readOnly, true);
   assert.equal(children(tree).some((node) => node.type === "button" && Array.isArray(node.props.children) && node.props.children.includes("Add Task")), false);
 });
+
+test("safeguard auto-fix restores all tasks after filtering warnings", () => {
+  const render = ui("SubtaskReviewScreen.tsx", "Student Leader", {
+    "./starterTemplates": { validateSubtaskSafeguards: (task: any) => task.aiMetadata?.confidenceScore < 65 ? ["Low confidence"] : [] },
+    "@/utils/heuristicDelegation": { findBestMemberForSubtask: () => null },
+    "@/utils/subtaskAssignment": { resolveSubtaskAssignee: () => undefined }
+  });
+  const props: any = {
+    goalDraft: { id: "draft", eventName: "Event", status: "Draft", subtasks: allTasks().map((task, index) => ({
+      ...task, description: "Prepare the event materials.", requiredSkills: ["Planning"],
+      estimatedDays: 3, aiMetadata: { confidenceScore: index === 0 ? 50 : 90 }
+    })) },
+    members: [],
+    onDraftChange: (update: any) => { props.goalDraft = update(props.goalDraft); }
+  };
+  const cards = (tree: Node) => children(tree).filter((node) => node.type?.name === "OldTaskCard");
+  const filter = (tree: Node) => find(tree, (node) => node.type === "button" && children(node).some((child) => String(child.props?.children).includes("Filter Warnings")));
+  let tree = render.render("SubtaskReviewScreen", props);
+  assert.equal(cards(tree).length, 2);
+  filter(tree).props.onClick();
+  tree = render.render("SubtaskReviewScreen", props);
+  assert.equal(cards(tree).length, 1);
+  const fix = find(tree, (node) => node.type === "button" && children(node).some((child) => child.props?.children === "Auto-Fix Safeguards"));
+  fix.props.onClick();
+  tree = render.render("SubtaskReviewScreen", props);
+  assert.equal(cards(tree).length, 2);
+  assert.equal(props.goalDraft.subtasks.length, 2);
+});
+
+test("resolving the last warning manually also keeps generated tasks visible", () => {
+  let hasWarnings = true;
+  const render = ui("SubtaskReviewScreen.tsx", "Student Leader", {
+    "./starterTemplates": { validateSubtaskSafeguards: () => hasWarnings ? ["Review needed"] : [] },
+    "@/utils/subtaskAssignment": { resolveSubtaskAssignee: () => undefined }
+  });
+  const props = { goalDraft: { id: "draft", eventName: "Event", status: "Draft", subtasks: allTasks() }, members: [] };
+  let tree = render.render("SubtaskReviewScreen", props);
+  find(tree, (node) => node.type === "button" && children(node).some((child) => String(child.props?.children).includes("Filter Warnings"))).props.onClick();
+  hasWarnings = false;
+  tree = render.render("SubtaskReviewScreen", props);
+  assert.equal(children(tree).filter((node) => node.type?.name === "OldTaskCard").length, 2);
+});

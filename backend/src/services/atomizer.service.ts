@@ -17,6 +17,8 @@ export const AtomizeGoalOutputSchema = z.object({
 });
 
 export type AtomizeInput = {
+  eventDate: string;
+  participatingMembers: number;
   eventName: string;
   goalDescription: string;
   defaultStatus?: string;
@@ -29,13 +31,15 @@ export const atomizeGoalFlow = ai.defineFlow(
   {
     name: "atomizeGoalFlow",
     inputSchema: z.object({
+      eventDate: z.string(),
+      participatingMembers: z.number().int().positive(),
       eventName: z.string(),
       goalDescription: z.string(),
       defaultStatus: z.string().optional()
     }),
     outputSchema: AtomizeGoalOutputSchema
   },
-  async (input: { eventName: string; goalDescription: string; defaultStatus?: string }) => {
+  async (input: { eventName: string; goalDescription: string; eventDate: string; participatingMembers: number; defaultStatus?: string }) => {
     const prompt = `
 You are an expert AI Task Orchestrator for student governance and campus organizations.
 Break down the macro-goal for the campus event "${input.eventName}" into 4 to 8 concrete, actionable tasks.
@@ -43,36 +47,59 @@ Break down the macro-goal for the campus event "${input.eventName}" into 4 to 8 
 Macro-Goal Description:
 "${input.goalDescription}"
 
+Planning requirements:
+Event date: ${input.eventDate}
+Current date (UTC): ${new Date().toISOString().slice(0, 10)}
+Members available to execute tasks: ${input.participatingMembers}
+Treat the available member count as a hard staffing limit across the entire plan.
+Use no more than ${input.participatingMembers} distinct assignee roles in total; reuse roles across tasks.
+Scale workload and parallel assignments to this team size. Use roles rather than invented people.
+Consolidate related work for small teams and sequence work that shares an assignee.
+Do not assume extra volunteers, committees, or staff beyond the available members.
+Plan preparation before the event and clearly identify event-day and follow-up work.
+For a short timeline, prioritize essential work and explicitly describe any infeasible requirements.
+
 Guidelines:
 1. Make tasks realistic, actionable, and tailored specifically to the goal description. Provide unique, detailed 1-2 sentence descriptions for each subtask explaining what steps to take.
 2. Assign appropriate priority levels: Low, Medium, High, or Critical.
-3. Suggest clear assignees (e.g., "Logistics Lead", "Ana Reyes", "Marco Dela Cruz", "Finance Officer").
+3. Suggest clear assignee roles (e.g., "Logistics Lead", "Finance Officer"), respecting the total staffing limit.
 4. Provide sensible deadline offsets (1 to 20 days from today).
 5. Calculate a realistic AI Match Score (between 65% and 98%) reflecting suitability.
 6. Order prerequisites before dependent tasks. For each task, include dependencyIndexes with the zero-based indexes of only the earlier tasks that truly must be completed first. Use [] for independent tasks. Allow parallel work; do not make every task depend on the previous task.
 `;
 
-    const candidateModels = [
+    const primaryModel = process.env.GEMINI_MODEL?.trim() || "googleai/gemini-3.6-flash";
+    const candidateModels = Array.from(new Set([
+      primaryModel,
       "googleai/gemini-3.6-flash",
       "googleai/gemini-3.5-flash",
       "googleai/gemini-3.5-flash-lite",
-      "googleai/gemini-3.7-flash",
-      "googleai/gemini-flash-latest"
-    ];
+      "googleai/gemini-3.8-flash",
+      "googleai/gemini-3.7-flash"
+    ]));
 
     let lastError: unknown = null;
 
     // Helper delay for rate limit / service unavailable retries
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const withTimeout = <T>(promise: Promise<T>, ms: number, errMsg: string): Promise<T> =>
+      Promise.race([
+        promise,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(errMsg)), ms))
+      ]);
 
     for (const model of candidateModels) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          const { output } = await ai.generate({
-            model,
-            prompt,
-            output: { schema: AtomizeGoalOutputSchema }
-          });
+          const { output } = await withTimeout(
+            ai.generate({
+              model,
+              prompt,
+              output: { schema: AtomizeGoalOutputSchema }
+            }),
+            75000,
+            `Model ${model} request timed out after 75s`
+          );
           if (output) return { ...output, tasks: output.tasks.map((task, index) => ({ ...task,
             dependencyIndexes: [...new Set(task.dependencyIndexes || [])].filter((dependency) => dependency >= 0 && dependency < index)
           })) };
@@ -84,7 +111,7 @@ Guidelines:
           if (errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("Quota")) {
             await delay(1500 * attempt);
           } else {
-            // Non-transient error for this model (e.g. 404 or unsupported), skip to next model
+            // Non-transient error or timeout for this model, skip to next candidate model
             break;
           }
         }
@@ -101,6 +128,8 @@ Guidelines:
 
 export async function runAtomizerFlow(input: AtomizeInput) {
   const result = await atomizeGoalFlow({
+    eventDate: input.eventDate,
+    participatingMembers: input.participatingMembers,
     eventName: input.eventName,
     goalDescription: input.goalDescription,
     defaultStatus: input.defaultStatus
@@ -172,25 +201,36 @@ Requirements:
 5. Calculate a realistic AI Match Score between 75% and 98%.
 `;
 
-    const candidateModels = [
+    const primaryModel = process.env.GEMINI_MODEL?.trim() || "googleai/gemini-3.6-flash";
+    const candidateModels = Array.from(new Set([
+      primaryModel,
       "googleai/gemini-3.6-flash",
       "googleai/gemini-3.5-flash",
       "googleai/gemini-3.5-flash-lite",
-      "googleai/gemini-3.7-flash",
-      "googleai/gemini-flash-latest"
-    ];
+      "googleai/gemini-3.8-flash",
+      "googleai/gemini-3.7-flash"
+    ]));
 
     let lastError: unknown = null;
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const withTimeout = <T>(promise: Promise<T>, ms: number, errMsg: string): Promise<T> =>
+      Promise.race([
+        promise,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(errMsg)), ms))
+      ]);
 
     for (const model of candidateModels) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          const { output } = await ai.generate({
-            model,
-            prompt,
-            output: { schema: RerollSubtaskOutputSchema }
-          });
+          const { output } = await withTimeout(
+            ai.generate({
+              model,
+              prompt,
+              output: { schema: RerollSubtaskOutputSchema }
+            }),
+            60000,
+            `Model ${model} re-roll timed out after 60s`
+          );
           if (output) return output;
         } catch (err) {
           lastError = err;

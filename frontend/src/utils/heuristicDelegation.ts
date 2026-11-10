@@ -227,10 +227,13 @@ export function findBestMemberForSubtask(
  */
 export function delegateSubtasksHeuristically(
   subtasks: Subtask[],
-  members: OrganizationMember[]
+  members: OrganizationMember[],
+  maxParticipatingMembers: number = members.length
 ): Subtask[] {
   if (!members || members.length === 0) return subtasks;
 
+  const participantLimit = Math.max(0, Math.floor(maxParticipatingMembers));
+  const selectedMembers = new Map<string, OrganizationMember>();
   const assignedCounts: Record<string, number> = {};
 
   return subtasks.map((st) => {
@@ -241,11 +244,13 @@ export function delegateSubtasksHeuristically(
 
     const match = findBestMemberForSubtask(
       { ...st, requiredSkills: effectiveSkills },
-      members,
+      selectedMembers.size >= participantLimit ? [...selectedMembers.values()] : members,
       assignedCounts
     );
 
-    if (!match) return { ...st, requiredSkills: effectiveSkills };
+    if (!match) return { ...st, assigneeName: "Unassigned", assignedMemberUID: null, requiredSkills: effectiveSkills };
+
+    selectedMembers.set(match.member.id, match.member);
 
     assignedCounts[match.member.name] = (assignedCounts[match.member.name] || 0) + 1;
 

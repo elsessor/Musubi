@@ -41,7 +41,9 @@ export function generateGoogleCalendarAuthUrl(uid: string, returnOrigin?: string
   return oauth2.generateAuthUrl({
     access_type: "offline", // Essential to obtain refresh_token
     prompt: "consent", // Guarantees Google returns refresh_token on every connect
+    include_granted_scopes: true,
     scope: [
+      "https://www.googleapis.com/auth/calendar",
       "https://www.googleapis.com/auth/calendar.events",
       "https://www.googleapis.com/auth/userinfo.email"
     ],
@@ -380,16 +382,25 @@ export async function updateGoogleCalendarTask(
   const summary = getTaskSummary(task.title || "Subtask", eventTitle, task.status);
   const description = getTaskDescription(task, eventTitle);
 
-  await calendar.events.patch({
-    calendarId: "primary",
-    eventId: googleEventId,
-    requestBody: {
-      summary,
-      description,
-      start,
-      end
+  try {
+    await calendar.events.patch({
+      calendarId: "primary",
+      eventId: googleEventId,
+      requestBody: {
+        summary,
+        description,
+        start,
+        end
+      }
+    });
+  } catch (err: any) {
+    if (err?.code === 404 || err?.code === 410 || err?.status === 404 || err?.status === 410) {
+      console.log(`[Calendar Task] Task ${googleEventId} not found, re-inserting...`);
+      await syncTaskToGoogleCalendar(uid, task, eventTitle, fallbackDate);
+      return;
     }
-  });
+    throw err;
+  }
 }
 
 /**
@@ -411,19 +422,28 @@ export async function updateGoogleCalendarEvent(
 
   const { start, end } = normalizeDateRangeForCalendar(event.startDate, event.endDate);
 
-  await calendar.events.patch({
-    calendarId: "primary",
-    eventId: googleEventId,
-    requestBody: {
-      summary: event.title,
-      description:
-        (event.description ? `${event.description}\n\n` : "") +
-        "Synced from Musubi Campus Workflow (https://musubi-1bf94.web.app)",
-      location: event.location || "Campus",
-      start,
-      end
+  try {
+    await calendar.events.patch({
+      calendarId: "primary",
+      eventId: googleEventId,
+      requestBody: {
+        summary: event.title,
+        description:
+          (event.description ? `${event.description}\n\n` : "") +
+          "Synced from Musubi Campus Workflow (https://musubi-1bf94.web.app)",
+        location: event.location || "Campus",
+        start,
+        end
+      }
+    });
+  } catch (err: any) {
+    if (err?.code === 404 || err?.code === 410 || err?.status === 404 || err?.status === 410) {
+      console.log(`[Calendar Event] Event ${googleEventId} not found, re-inserting...`);
+      await syncEventToGoogleCalendar(uid, event);
+      return;
     }
-  });
+    throw err;
+  }
 }
 
 /**
@@ -581,7 +601,19 @@ export async function syncAllUserEventsToCalendar(uid: string): Promise<{ synced
           tasks
         });
       }
-    } catch (err) {
+    } catch (err: any) {
+      const msg = String(err?.message || err?.cause?.message || "");
+      if (
+        err?.code === 403 ||
+        err?.status === 403 ||
+        msg.includes("insufficient authentication scopes") ||
+        msg.includes("PERMISSION_DENIED")
+      ) {
+        throw new AppError(
+          "Your Google Calendar authorization has insufficient permissions. Please click Disconnect and then Reconnect Google Calendar to grant calendar access.",
+          403
+        );
+      }
       console.warn(`[Sync All] Failed syncing event ${doc.id}:`, err);
     }
   }

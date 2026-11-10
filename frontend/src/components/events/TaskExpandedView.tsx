@@ -4,7 +4,7 @@ import { Bell, Calendar, CheckCircle, ChevronDown, ChevronUp, ShieldAlert, Spark
 import { useId, useState } from "react";
 import type { Task, TaskStatus } from "./types";
 import { OverdueBadge } from "./overdue";
-import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
 import { PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
@@ -33,7 +33,14 @@ export function TaskExpandedView({ readOnly = false, tasks, onUpdateStatus, onSe
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, tasks.map((task) => task.status));
   const statusOptions = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
-    return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
+    const descInfo = getTaskStatusDescription(value, customStatuses);
+    return {
+      value,
+      label: value,
+      description: descInfo.description,
+      indicatorClass: theme.dot,
+      selectedClass: theme.badge
+    };
   });
 
   function toggleTask(id: string) {

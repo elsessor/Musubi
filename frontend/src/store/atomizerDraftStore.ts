@@ -7,6 +7,8 @@ import type { CustomStatusConfig } from "@/components/events/statusUtils";
 export const DEFAULT_ATOMIZER_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
 export type AtomizerDraftState = {
+  eventDate: string;
+  participatingMembers: string;
   selectedEventId: string;
   isCreateFromDescription: boolean;
   newEventTitle: string;
@@ -21,6 +23,8 @@ export type AtomizerDraftState = {
 };
 
 export const EMPTY_ATOMIZER_DRAFT: AtomizerDraftState = {
+  eventDate: "",
+  participatingMembers: "",
   selectedEventId: "",
   isCreateFromDescription: false,
   newEventTitle: "",

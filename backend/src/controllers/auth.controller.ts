@@ -571,13 +571,23 @@ export async function atomizeGoalController(request: Request, response: Response
     const decoded = await firebaseAuth.verifyIdToken(token);
     const user = await getCurrentUser(decoded.uid);
 
-    const { eventName, goalDescription, defaultStatus } = request.body as Record<string, unknown>;
+    const { eventName, goalDescription, defaultStatus, eventDate, participatingMembers } = request.body as Record<string, unknown>;
 
     if (typeof goalDescription !== "string" || !goalDescription.trim()) {
       throw new AppError("An event description is required.", 400);
     }
 
+    if (typeof eventDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) ||
+        !Number.isFinite(Date.parse(eventDate)) || new Date(eventDate).toISOString().slice(0, 10) !== eventDate) {
+      throw new AppError("A valid event date is required.", 400);
+    }
+    if (typeof participatingMembers !== "number" || !Number.isSafeInteger(participatingMembers) || participatingMembers < 1) {
+      throw new AppError("Participating members must be a positive whole number.", 400);
+    }
+
     const result = await runAtomizerFlow({
+      eventDate,
+      participatingMembers,
       eventName: typeof eventName === "string" ? eventName.trim() : "Event",
       goalDescription: goalDescription.trim(),
       defaultStatus: typeof defaultStatus === "string" ? defaultStatus : "To Do",

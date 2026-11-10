@@ -153,6 +153,7 @@ export type Subtask = {
 };
 
 export type GoalDraft = {
+  participatingMemberUIDs?: string[];
   id: string;
   eventName: string;
   description: string;

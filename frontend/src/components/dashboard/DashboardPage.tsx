@@ -19,6 +19,7 @@ import { subscribeAuditLogsFirestore, type AuditLogRecord } from "@/services/aud
 import { getOrganization, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import { checkAndDispatchDueNudges } from "@/services/notifications.service";
+import { getMemberDashboardTasks, getAverageMatchScore } from "@/utils/memberDashboard";
 import type { Event, Task } from "@/components/events/types";
 import { getAssignedProfileTasks } from "@/utils/profileMetrics";
 import { getTaskReminder, isTaskInactive } from "@/utils/taskTiming";
@@ -312,7 +313,37 @@ export function DashboardPage() {
   // Member View computations
   const isMemberView = dashboardUser.role === "Organization Member";
 
-  const memberSubtasks = useMemo(() => getAssignedProfileTasks(realtimeEventsList, dashboardUser.id || "", dashboardUser.name), [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
+  const memberSubtasks = useMemo(() => {
+    const matched: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+    const allInOrg: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+
+    const userNameLower = (dashboardUser.name || "").toLowerCase().trim();
+    const userId = dashboardUser.id;
+
+    realtimeEventsList.forEach((event) => {
+      if (Array.isArray(event.tasks)) {
+        event.tasks.forEach((task) => {
+          const item = { ...task, eventTitle: event.title, customStatuses: event.customStatuses };
+          allInOrg.push(item);
+
+          const assignedNameLower = (task.assignedMemberName || task.assignee?.name || "").toLowerCase().trim();
+          const assignedUid = task.assignedMemberUID;
+
+          const isMatch =
+            (userId && assignedUid === userId) ||
+            (userNameLower && assignedNameLower.includes(userNameLower)) ||
+            (userNameLower && userNameLower.includes(assignedNameLower) && assignedNameLower.length > 2);
+
+          if (isMatch) {
+            matched.push(item);
+          }
+        });
+      }
+    });
+
+    return matched.length > 0 ? matched : allInOrg;
+  }, [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
+
   const activeMemberSubtasks = useMemo(() => {
     return memberSubtasks.filter((t) => {
       const st = (t.status || "").toLowerCase();
@@ -328,22 +359,15 @@ export function DashboardPage() {
       return st.includes("completed") || st.includes("done");
     }).length;
 
-    const matchScores = memberSubtasks
-      .map((t) => t.matchPercentage)
-      .filter((score): score is number => typeof score === "number" && score > 0);
-
-    const avgMatch =
-      matchScores.length > 0
-        ? Math.round(matchScores.reduce((a, b) => a + b, 0) / matchScores.length)
-        : 92;
+    const avgMatch = memberAverageMatchScore;
 
     return [
       { id: "subtasks-assigned", label: "Sub-Tasks Assigned", value: totalAssigned, icon: "briefcase", accent: "purple" },
       { id: "in-progress", label: "In Progress", value: inProgress, icon: "clock", accent: "blue" },
       { id: "completed", label: "Completed", value: completed, icon: "check", accent: "green" },
-      { id: "avg-match-score", label: "Avg Match Score", value: `${avgMatch}%`, icon: "award", accent: "amber" }
+      { id: "avg-match-score", label: "Avg Match Score", value: avgMatch === null ? "—" : `${avgMatch}%`, icon: "award", accent: "amber" }
     ];
-  }, [memberSubtasks]);
+  }, [memberSubtasks, memberAverageMatchScore]);
 
   useEffect(() => {
     void checkAndDispatchDueNudges();
@@ -359,9 +383,11 @@ export function DashboardPage() {
     if (!parent || isTaskInactive(parent) || parent.status === "Completed") return [];
     const timing = getTaskReminder(task, deadlineNow);
     if (!timing) return [];
-    return [{ id: `deadline_${task.eventId}_${task.id}`, type: timing.label,
+    return [{
+      id: `deadline_${task.eventId}_${task.id}`, type: timing.label,
       title: `${task.title || "Subtask"}${task.blockedBy ? ` — Waiting for: ${(task.blockedByTaskTitles || []).join(", ")}` : ""}`,
-      date: task.dueDate || task.deadline || "No deadline", eventTitle: task.eventTitle, eventId: task.eventId, taskId: task.id }];
+      date: task.dueDate || task.deadline || "No deadline", eventTitle: task.eventTitle, eventId: task.eventId, taskId: task.id
+    }];
   }).sort((a, b) => Number(b.type.startsWith("Overdue")) - Number(a.type.startsWith("Overdue"))), [memberSubtasks, realtimeEventsList, deadlineNow]);
 
 
@@ -402,7 +428,7 @@ export function DashboardPage() {
           ))}
         </section>
 
-        <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(340px,1fr)]">
+        <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(340px,1fr)] items-stretch">
           <MemberActiveSubtasks subtasks={activeMemberSubtasks} />
           <MemberNudges nudges={memberNudges} />
         </section>

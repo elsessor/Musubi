@@ -5,7 +5,105 @@ export type StatusThemeColor = "blue" | "purple" | "emerald" | "amber" | "rose" 
 export type CustomStatusConfig = {
   name: string;
   color: StatusThemeColor;
+  description?: string;
 };
+
+export interface StatusDescriptionInfo {
+  status: string;
+  description: string;
+  meaning: string;
+}
+
+export const TASK_STATUS_DESCRIPTIONS: Record<string, StatusDescriptionInfo> = {
+  "To Do": {
+    status: "To Do",
+    description: "Task is queued and scheduled to be started.",
+    meaning: "Work has not started yet. Waiting on prerequisites or scheduled kickoff."
+  },
+  "In Progress": {
+    status: "In Progress",
+    description: "Task is actively being worked on by the assignee.",
+    meaning: "Assigned member/committee is actively executing this subtask."
+  },
+  "In Review": {
+    status: "In Review",
+    description: "Work is completed and pending verification or sign-off.",
+    meaning: "Deliverables are submitted for leader, adviser, or quality review."
+  },
+  "Completed": {
+    status: "Completed",
+    description: "Task is finished, approved, and closed.",
+    meaning: "All deliverables and criteria are met and officially completed."
+  }
+};
+
+export const EVENT_STATUS_DESCRIPTIONS: Record<string, StatusDescriptionInfo> = {
+  "Planning": {
+    status: "Planning",
+    description: "Event goals, committees, budget, and tasks are being organized.",
+    meaning: "Initial preparation stage before public announcement or execution."
+  },
+  "Active": {
+    status: "Active",
+    description: "Event is officially launched and operations are underway.",
+    meaning: "Live or ongoing execution phase with active tasks and operations."
+  },
+  "Completed": {
+    status: "Completed",
+    description: "Event has successfully concluded.",
+    meaning: "All event activities have finished and post-event tasks are wrapped up."
+  },
+  "Archived": {
+    status: "Archived",
+    description: "Preserved for organizational records and institutional memory.",
+    meaning: "Event is closed, documented, and stored for historical reference."
+  },
+  "Cancelled": {
+    status: "Cancelled",
+    description: "Event was called off and is no longer being executed.",
+    meaning: "Event activities were discontinued or stopped."
+  }
+};
+
+export function getTaskStatusDescription(
+  status: string,
+  customStatuses?: readonly CustomStatusConfig[]
+): StatusDescriptionInfo {
+  const normalized = status.trim().toLowerCase();
+  for (const [key, val] of Object.entries(TASK_STATUS_DESCRIPTIONS)) {
+    if (key.toLowerCase() === normalized) {
+      return val;
+    }
+  }
+  const custom = customStatuses?.find((c) => c.name.trim().toLowerCase() === normalized);
+  if (custom?.description) {
+    return {
+      status,
+      description: custom.description,
+      meaning: custom.description
+    };
+  }
+  return {
+    status,
+    description: `Custom organization workflow status: "${status}".`,
+    meaning: `Custom status tracked in this event: "${status}".`
+  };
+}
+
+export function getEventStatusDescription(status: string): StatusDescriptionInfo {
+  const normalized = status.trim().toLowerCase();
+  for (const [key, val] of Object.entries(EVENT_STATUS_DESCRIPTIONS)) {
+    if (key.toLowerCase() === normalized) {
+      return val;
+    }
+  }
+  return {
+    status,
+    description: `Event is marked with status "${status}".`,
+    meaning: `Event status: ${status}.`
+  };
+}
+
 
 export function getOrderedTaskStatuses(
   statusOrder: readonly string[] = [],

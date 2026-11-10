@@ -2,7 +2,7 @@
 
 import { Calendar, Plus, Users } from "lucide-react";
 import type { Event } from "./types";
-import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { getStatusTheme, getEventStatusDescription, type CustomStatusConfig } from "./statusUtils";
 import { getEventMemberCount } from "@/utils/eventMembers";
 import { isTaskArchived } from "@/utils/taskDependencies";
 
@@ -37,7 +37,10 @@ export function EventCard({ event, onClick, customStatuses, compact = false }: E
               {event.committee}
             </span>
           )}
-          <span className={`inline-flex max-w-full items-center break-words rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset sm:px-2.5 sm:text-xs ${theme.badge}`}>
+          <span
+            title={`${event.status}: ${getEventStatusDescription(event.status).description}`}
+            className={`inline-flex max-w-full items-center break-words rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset sm:px-2.5 sm:text-xs ${theme.badge}`}
+          >
             {event.status}
           </span>
         </div>

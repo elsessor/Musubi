@@ -104,9 +104,7 @@ export default function OrganizationPage() {
   const [isPostAnnouncementOpen, setIsPostAnnouncementOpen] = useState(false);
 
   useEffect(() => {
-    setAnnouncements([]);
-    const orgId = profile?.organizationId?.trim();
-    if (authLoading || !firebaseUser || !profile || firebaseUser.uid !== profile.uid || !orgId) return;
+    const orgId = profile?.organizationId || "default-org";
     const unsubscribe = subscribeAnnouncementsFirestore(orgId, profile?.role, (data) => {
       setAnnouncements(data);
     });
@@ -137,6 +135,7 @@ export default function OrganizationPage() {
     committeeId?: string;
     isPinned: boolean;
   }) {
+    const orgId = profile?.organizationId || "default-org";
     try {
       const orgId = profile?.organizationId?.trim();
       if (authLoading || !firebaseUser || !profile || firebaseUser.uid !== profile.uid || !orgId) throw new Error("Wait for your organization profile to finish loading before posting.");
