@@ -13,6 +13,7 @@ export type AuthUserProfile = {
   position: string | null;
   organizationId: string | null;
   organizationName?: string | null;
+  committeeId?: string | null;
   profilePicture: string | null;
   skills: string[];
   availability?: string | null;

@@ -40,7 +40,7 @@ export function AdminDashboardView() {
       </div>
 
       {/* Top 4 Stat Cards */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div data-tour="dashboard-summary" className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Organizations */}
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80 transition hover:shadow-md">
           <div className="flex size-11 items-center justify-center rounded-2xl bg-purple-100/70 text-purple-600 mb-4">
@@ -87,7 +87,7 @@ export function AdminDashboardView() {
       </div>
 
       {/* Middle Grid: Organizations & Recent Members */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div data-tour="dashboard-work" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Left Box: ORGANIZATIONS */}
         <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/80">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">

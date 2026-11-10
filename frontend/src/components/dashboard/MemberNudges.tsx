@@ -62,7 +62,7 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm flex flex-col h-full justify-between">
+    <div data-tour="dashboard-updates" className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm flex flex-col h-full justify-between">
       <div>
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
@@ -116,14 +116,14 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
               const cardClasses = isDeadline
                 ? "bg-rose-50/60 border-rose-100 hover:border-rose-200"
                 : isFollowUp
-                ? "bg-amber-50/40 border-amber-100 hover:border-amber-200"
-                : "bg-blue-50/40 border-blue-100 hover:border-blue-200";
+                  ? "bg-amber-50/40 border-amber-100 hover:border-amber-200"
+                  : "bg-blue-50/40 border-blue-100 hover:border-blue-200";
 
               const badgeTextClasses = isDeadline
                 ? "text-rose-600"
                 : isFollowUp
-                ? "text-amber-600"
-                : "text-blue-600";
+                  ? "text-amber-600"
+                  : "text-blue-600";
 
               const Icon = isDeadline ? AlertCircle : Clock;
 
@@ -177,11 +177,10 @@ export function MemberNudges({ nudges }: MemberNudgesProps) {
                 aria-label={`Page ${number}`}
                 aria-current={currentPage === number ? "page" : undefined}
                 onClick={() => setPage(number)}
-                className={`flex size-7 items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  currentPage === number
+                className={`flex size-7 items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer ${currentPage === number
                     ? "bg-blue-600 text-white shadow-xs"
                     : "border border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
+                  }`}
               >
                 {number}
               </button>

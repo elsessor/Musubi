@@ -2,9 +2,7 @@ import type { TourStep } from "@/config/tutorial";
 import { TUTORIAL_ACTIONS } from "../../config/tutorialActions";
 
 export function findTourTarget(step: TourStep): HTMLElement | null {
-  const navId = step.route.split("/").filter(Boolean)[1] ?? "dashboard";
-  const selector = step.selector ?? (step.target === "workspace" && window.innerWidth >= 768
-    ? `[data-tour="nav-${navId}"]` : `[data-tour="${step.target}"]`);
+  const selector = step.selector ?? `[data-tour="${step.target}"]`;
   return Array.from(document.querySelectorAll<HTMLElement>(selector)).find((el) => {
     const rect = el.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0 && getComputedStyle(el).visibility !== "hidden" && rect.right > 0 && rect.left < window.innerWidth;
@@ -14,6 +12,12 @@ export function findTourTarget(step: TourStep): HTMLElement | null {
 export function findTourHighlightTargets(step: TourStep): HTMLElement[] {
   const targets = step.highlightTargets?.length ? step.highlightTargets : [step.target];
   return [...new Set(targets.map((target) => findTourTarget(target === step.target ? step : { ...step, target, selector: undefined })).filter((element): element is HTMLElement => Boolean(element)))];
+}
+
+export function findTourSidebarTarget(step: TourStep): HTMLElement | null {
+  if (!step.sidebarTarget) return null;
+  return findTourTarget({ ...step, target: step.sidebarTarget, selector: undefined })
+    ?? findTourTarget({ ...step, selector: 'button[aria-label="Open navigation"]' });
 }
 
 export function getTourHighlightRect(elements: HTMLElement[]): { x: number; y: number; width: number; height: number } | null {

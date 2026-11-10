@@ -105,16 +105,12 @@ export default function OrganizationPage() {
   const [isPostAnnouncementOpen, setIsPostAnnouncementOpen] = useState(false);
 
   useEffect(() => {
-    if (!profile?.organizationId) {
-      setAnnouncements([]);
-      return;
-    }
-    const orgId = profile.organizationId;
+    const orgId = profile?.organizationId || "default-org";
     const unsubscribe = subscribeAnnouncementsFirestore(orgId, profile?.role, (data) => {
       setAnnouncements(data);
     });
     return () => unsubscribe();
-  }, [profile?.organizationId, profile?.role]);
+  }, [authLoading, firebaseUser?.uid, profile?.uid, profile?.organizationId, profile?.role, profile?.committeeId]);
 
   useEffect(() => {
     function restoreTab() {
@@ -140,9 +136,10 @@ export default function OrganizationPage() {
     committeeId?: string;
     isPinned: boolean;
   }) {
-    if (!profile?.organizationId) return;
-    const orgId = profile.organizationId;
+    const orgId = profile?.organizationId || "default-org";
     try {
+      const orgId = profile?.organizationId?.trim();
+      if (authLoading || !firebaseUser || !profile || firebaseUser.uid !== profile.uid || !orgId) throw new Error("Wait for your organization profile to finish loading before posting.");
       const newAnn = await createAnnouncementFirestore(orgId, {
         ...data,
         authorName: profile?.fullName || "Student Leader",

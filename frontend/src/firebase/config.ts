@@ -1,6 +1,12 @@
 import { getApp, getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore
+} from "firebase/firestore";
 
 const requiredFirebaseEnvKeys = [
   "NEXT_PUBLIC_FIREBASE_API_KEY",
@@ -92,6 +98,20 @@ export function getFirebaseDb(): Firestore {
     return cachedDb;
   }
 
-  cachedDb = getFirestore(getFirebaseApp());
+  const app = getFirebaseApp();
+  if (typeof window !== "undefined") {
+    try {
+      cachedDb = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      });
+      return cachedDb;
+    } catch {
+      // Fallback if initializeFirestore was already called
+    }
+  }
+
+  cachedDb = getFirestore(app);
   return cachedDb;
 }

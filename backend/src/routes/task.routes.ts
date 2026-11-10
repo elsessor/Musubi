@@ -2,10 +2,17 @@ import { Router, raw } from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
-import { addTaskFileForUser, addTaskLinkForUser, downloadTaskFileForUser, rateTaskForUser, updateTaskStatusForUser } from "../services/task.service.js";
+import { addTaskFileForUser, addTaskLinkForUser, claimTaskForUser, downloadTaskFileForUser, rateTaskForUser, updateTaskStatusForUser } from "../services/task.service.js";
 
 export const taskRouter = Router();
 const taskPath = "/events/:eventId/tasks/:taskId";
+
+taskRouter.post(`${taskPath}/claim`, requireAuth, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    // Identity comes from authentication; callers cannot choose an assignee.
+    response.json(await claimTaskForUser(request.authUser!.uid, request.params.eventId, request.params.taskId));
+  } catch (error) { next(error); }
+});
 
 taskRouter.patch(`${taskPath}/status`, requireAuth, async (request: AuthenticatedRequest, response, next) => {
   try {

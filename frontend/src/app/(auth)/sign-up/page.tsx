@@ -3,7 +3,7 @@ import { RegisterForm } from "@/components/auth/RegisterForm";
 
 export default function SignUpPage() {
   return (
-    <AuthLayout marketingPosition="left">
+    <AuthLayout marketingPosition="left" compactMobile>
       <RegisterForm />
     </AuthLayout>
   );

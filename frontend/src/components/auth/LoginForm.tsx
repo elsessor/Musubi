@@ -91,14 +91,15 @@ export function LoginForm() {
 
   return (
     <AuthCard>
-      <div className="mb-9">
-        <h2 className="text-3xl font-extrabold text-slate-950">Welcome back</h2>
-        <p className="mt-3 text-base font-medium text-slate-500">
-          Sign in - your dashboard is determined by your account role
+      <div className="mb-6 sm:mb-9">
+        <h2 className="text-2xl font-extrabold text-slate-950 sm:text-3xl">Welcome back</h2>
+        <p className="mt-2 text-sm font-medium text-slate-500 sm:mt-3 sm:text-base">
+          <span className="sm:hidden">Sign in to your Musubi account.</span>
+          <span className="hidden sm:inline">Sign in - your dashboard is determined by your account role</span>
         </p>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <GoogleButton
           isLoading={googleLoading}
           label="Continue with Google"
@@ -107,9 +108,10 @@ export function LoginForm() {
         <Divider />
       </div>
 
-      <form className="mt-8 space-y-5" noValidate onSubmit={handleSubmit(onSubmit)}>
+      <form className="mt-5 space-y-4 sm:mt-8 sm:space-y-5" noValidate onSubmit={handleSubmit(onSubmit)}>
         <Input
           autoComplete="email"
+          className="text-base sm:text-[15px]"
           error={errors.email?.message}
           id="email"
           label="Email Address"
@@ -129,6 +131,7 @@ export function LoginForm() {
           </div>
           <PasswordField
             autoComplete="current-password"
+            className="text-base sm:text-[15px]"
             error={errors.password?.message}
             id="password"
             placeholder="Password"
@@ -136,9 +139,9 @@ export function LoginForm() {
           />
         </div>
 
-        <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-500">
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium text-slate-500 sm:min-h-0">
           <input
-            className="size-4 rounded border-slate-300 text-brand focus:ring-accent"
+            className="size-5 rounded border-slate-300 text-brand focus:ring-accent sm:size-4"
             type="checkbox"
             {...register("rememberMe")}
           />
@@ -150,9 +153,9 @@ export function LoginForm() {
         </Button>
       </form>
 
-      <p className="mt-9 text-center text-base font-medium text-slate-400">
+      <p className="mt-6 text-center text-sm font-medium text-slate-500 sm:mt-9 sm:text-base sm:text-slate-400">
         No account yet?{" "}
-        <Link className="auth-link text-lg" href="/sign-up">
+        <Link className="auth-link inline-flex min-h-11 items-center text-base sm:inline sm:min-h-0 sm:text-lg" href="/sign-up">
           Create one
         </Link>
       </p>

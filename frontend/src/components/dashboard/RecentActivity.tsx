@@ -50,7 +50,7 @@ export function RecentActivity({ activities, viewAllHref }: RecentActivityProps)
   const remainingCount = Math.max(0, activities.length - 4);
 
   return (
-    <article className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
+    <article data-tour="dashboard-updates" className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600" aria-hidden="true"><Clock3 className="size-4" /></span>

@@ -80,7 +80,7 @@ export function DashboardLayout({
 
   return (
     <div className="h-screen overflow-hidden bg-[#eef1f5] text-slate-900">
-      {mobileSidebarOpen ? <button aria-label="Close navigation" className="fixed inset-0 z-30 bg-slate-950/45 md:hidden" onClick={() => setMobileSidebarOpen(false)} type="button" /> : null}
+      {mobileSidebarOpen ? <button data-tour="navigation-close" aria-label="Close navigation" className="fixed inset-0 z-30 bg-slate-950/45 md:hidden" onClick={() => setMobileSidebarOpen(false)} type="button" /> : null}
       <Sidebar
         activeNavId={activeNavId}
         mobileOpen={mobileSidebarOpen}
@@ -112,7 +112,7 @@ export function DashboardLayout({
 
           {navigating ? <DashboardContentSkeleton /> : children ?? <>
           {kpis.length > 0 ? (
-            <section className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
+            <section data-tour="dashboard-summary" className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
               {kpis.map((kpi) => (
                 <KPICard
                   key={kpi.id}
@@ -124,7 +124,7 @@ export function DashboardLayout({
               ))}
             </section>
           ) : (
-            <section className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm ring-1 ring-slate-200/60">
+            <section data-tour="dashboard-summary" className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm ring-1 ring-slate-200/60">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 KPI Overview
               </p>

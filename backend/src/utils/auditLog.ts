@@ -1,4 +1,5 @@
 import { firebaseAdmin, firestore } from "../config/firebase.js";
+import { appCache } from "./cache.js";
 
 export type AuditCategory =
   | "User Management"
@@ -28,6 +29,8 @@ export type AuditLogData = {
  * user-facing request.
  */
 export function writeAuditLog(data: AuditLogData): void {
+  appCache.deletePrefix("audit_logs:");
+
   const cleanData = Object.fromEntries(
     Object.entries(data).filter(([_, value]) => value !== undefined)
   );

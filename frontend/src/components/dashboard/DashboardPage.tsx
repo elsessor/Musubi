@@ -21,6 +21,8 @@ import { subscribeEventsFirestore } from "@/services/events.service";
 import { checkAndDispatchDueNudges } from "@/services/notifications.service";
 import { getMemberDashboardTasks, getAverageMatchScore } from "@/utils/memberDashboard";
 import type { Event, Task } from "@/components/events/types";
+import { getAssignedProfileTasks } from "@/utils/profileMetrics";
+import { getTaskReminder, isTaskInactive } from "@/utils/taskTiming";
 
 function formatGreetingDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-US", {
@@ -91,7 +93,15 @@ export function DashboardPage() {
     let cancelled = false;
 
     async function loadDashboardUser() {
-      const uid = profile?.uid ?? firebaseUser?.uid;
+      if (profile) {
+        if (!cancelled) {
+          setDashboardUser(buildDashboardUser(profile));
+          setLoading(false);
+        }
+        return;
+      }
+
+      const uid = firebaseUser?.uid;
 
       if (!uid) {
         if (!authLoading) {
@@ -112,19 +122,19 @@ export function DashboardPage() {
         const role =
           data?.role === "Admin" || data?.role === "Student Leader" || data?.role === "Organization Member"
             ? data.role
-            : profile?.role ?? "Student Leader";
+            : "Student Leader";
 
         const fullName =
           typeof data?.fullName === "string" && data.fullName.trim()
             ? data.fullName
-            : profile?.fullName ?? "";
+            : "";
 
         let orgName =
           typeof data?.organizationName === "string" && data.organizationName.trim()
             ? data.organizationName
-            : profile?.organizationName ?? "";
+            : "";
 
-        const orgId = typeof data?.organizationId === "string" ? data.organizationId : profile?.organizationId ?? null;
+        const orgId = typeof data?.organizationId === "string" ? data.organizationId : null;
         if (!orgName && orgId && firebaseUser) {
           try {
             const orgData = await getOrganization(firebaseUser, orgId);
@@ -304,8 +314,8 @@ export function DashboardPage() {
   const isMemberView = dashboardUser.role === "Organization Member";
 
   const memberSubtasks = useMemo(() => {
-    const matched: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
-    const allInOrg: (Task & { eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+    const matched: (Task & { eventId: string; eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
+    const allInOrg: (Task & { eventId: string; eventTitle?: string; customStatuses?: Event["customStatuses"] })[] = [];
 
     const userNameLower = (dashboardUser.name || "").toLowerCase().trim();
     const userId = dashboardUser.id;
@@ -313,16 +323,20 @@ export function DashboardPage() {
     realtimeEventsList.forEach((event) => {
       if (Array.isArray(event.tasks)) {
         event.tasks.forEach((task) => {
-          const item = { ...task, eventTitle: event.title, customStatuses: event.customStatuses };
+          const item = { ...task, eventId: event.id, eventTitle: event.title, customStatuses: event.customStatuses };
           allInOrg.push(item);
 
           const assignedNameLower = (task.assignedMemberName || task.assignee?.name || "").toLowerCase().trim();
           const assignedUid = task.assignedMemberUID;
+
           const isMatch =
             (userId && assignedUid === userId) ||
             (userNameLower && assignedNameLower.includes(userNameLower)) ||
             (userNameLower && userNameLower.includes(assignedNameLower) && assignedNameLower.length > 2);
-          if (isMatch) matched.push(item);
+
+          if (isMatch) {
+            matched.push(item);
+          }
         });
       }
     });
@@ -330,8 +344,6 @@ export function DashboardPage() {
     return matched.length > 0 ? matched : allInOrg;
   }, [realtimeEventsList, dashboardUser.name, dashboardUser.id]);
 
-  // Only the match-score card uses strict member ownership; preserve the existing
-  // task list, counts, and nudge display behavior above.
   const memberAverageMatchScore = useMemo(() =>
     getAverageMatchScore(getMemberDashboardTasks(realtimeEventsList, dashboardUser.id, dashboardUser.name)),
     [realtimeEventsList, dashboardUser.id, dashboardUser.name]);
@@ -339,7 +351,7 @@ export function DashboardPage() {
   const activeMemberSubtasks = useMemo(() => {
     return memberSubtasks.filter((t) => {
       const st = (t.status || "").toLowerCase();
-      return !st.includes("completed") && !st.includes("done");
+      return !isTaskInactive(t) && !st.includes("completed") && !st.includes("done");
     });
   }, [memberSubtasks]);
 
@@ -365,96 +377,23 @@ export function DashboardPage() {
     void checkAndDispatchDueNudges();
   }, []);
 
-  const memberNudges: NudgeItem[] = useMemo(() => {
-    const nudgesList: NudgeItem[] = [];
+  const [deadlineNow, setDeadlineNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setDeadlineNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  const memberNudges: NudgeItem[] = useMemo(() => memberSubtasks.flatMap(task => {
+    const parent = realtimeEventsList.find(event => event.id === task.eventId);
+    if (!parent || isTaskInactive(parent) || parent.status === "Completed") return [];
+    const timing = getTaskReminder(task, deadlineNow);
+    if (!timing) return [];
+    return [{
+      id: `deadline_${task.eventId}_${task.id}`, type: timing.label,
+      title: `${task.title || "Subtask"}${task.blockedBy ? ` — Waiting for: ${(task.blockedByTaskTitles || []).join(", ")}` : ""}`,
+      date: task.dueDate || task.deadline || "No deadline", eventTitle: task.eventTitle, eventId: task.eventId, taskId: task.id
+    }];
+  }).sort((a, b) => Number(b.type.startsWith("Overdue")) - Number(a.type.startsWith("Overdue"))), [memberSubtasks, realtimeEventsList, deadlineNow]);
 
-    memberSubtasks.forEach((task) => {
-      const isCompleted = (task.status || "").toLowerCase().includes("completed") || (task.status || "").toLowerCase().includes("done");
-      if (isCompleted) return;
-
-      if (Array.isArray(task.nudges) && task.nudges.length > 0) {
-        task.nudges.forEach((n) => {
-          nudgesList.push({
-            id: `nudge_${n.nudgeUID || task.id}`,
-            type: (n.nudgeType as any) || "Follow-up",
-            title: task.title || task.description || "Subtask",
-            date: n.triggerDate || task.dueDate || "Upcoming",
-            eventTitle: task.eventTitle,
-            taskId: task.id
-          });
-        });
-      } else {
-        const dueDateStr = task.dueDate || task.deadline;
-        if (dueDateStr) {
-          const parsedDate = new Date(dueDateStr);
-          const now = new Date();
-          const diffDays = Math.ceil((parsedDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
-
-          if (diffDays <= 1 && diffDays >= 0) {
-            nudgesList.push({
-              id: `nudge_1d_${task.id}`,
-              type: "1 Day Prior (Urgent)",
-              title: task.title || task.description || "Subtask",
-              date: dueDateStr,
-              eventTitle: task.eventTitle,
-              taskId: task.id
-            });
-          } else if (diffDays <= 3 && diffDays > 1) {
-            nudgesList.push({
-              id: `nudge_3d_${task.id}`,
-              type: "3 Days Prior",
-              title: task.title || task.description || "Subtask",
-              date: dueDateStr,
-              eventTitle: task.eventTitle,
-              taskId: task.id
-            });
-          } else if (task.priority === "Critical" || task.priority === "High") {
-            nudgesList.push({
-              id: `nudge_deadline_${task.id}`,
-              type: "Deadline Alert",
-              title: task.title || task.description || "Subtask",
-              date: dueDateStr,
-              eventTitle: task.eventTitle,
-              taskId: task.id
-            });
-          } else {
-            nudgesList.push({
-              id: `nudge_followup_${task.id}`,
-              type: "Follow-up",
-              title: task.title || task.description || "Subtask",
-              date: dueDateStr,
-              eventTitle: task.eventTitle,
-              taskId: task.id
-            });
-          }
-        } else {
-          nudgesList.push({
-            id: `nudge_followup_${task.id}`,
-            type: "Follow-up",
-            title: task.title || task.description || "Subtask",
-            date: "Upcoming",
-            eventTitle: task.eventTitle,
-            taskId: task.id
-          });
-        }
-      }
-    });
-
-    const map = new Map<string, NudgeItem>();
-    nudgesList.forEach((n) => {
-      const key = `${n.type}_${n.title}`;
-      if (!map.has(key)) map.set(key, n);
-    });
-
-    const result = Array.from(map.values());
-    result.sort((a, b) => {
-      if (a.type === "Deadline Alert" && b.type !== "Deadline Alert") return -1;
-      if (a.type !== "Deadline Alert" && b.type === "Deadline Alert") return 1;
-      return 0;
-    });
-
-    return result;
-  }, [memberSubtasks]);
 
   // Do not render a role-specific shell until auth has resolved. Rendering
   // the default leader shell first causes a visible leader/member flicker.
@@ -482,7 +421,7 @@ export function DashboardPage() {
         onLogout={logout}
         user={dashboardUser}
       >
-        <section className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
+        <section data-tour="dashboard-summary" className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
           {memberKpis.map((kpi) => (
             <KPICard
               key={kpi.id}

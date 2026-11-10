@@ -1,5 +1,4 @@
 import type { User } from "firebase/auth";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 
 import { getFirebaseDb } from "../firebase/config";
 
@@ -61,7 +60,7 @@ export function subscribeAuditLogsFirestore(
 
   const loadLogs = () => {
     if (typeof document !== "undefined" && document.hidden) return;
-    void fetchAuditLogs(user ?? null)
+    void fetchAuditLogs(user ?? null, { pageSize: 25 })
       .then((res) => {
         if (isMounted) callbacks.onData(res.logs);
       })
@@ -74,7 +73,7 @@ export function subscribeAuditLogsFirestore(
   };
 
   loadLogs();
-  intervalId = setInterval(loadLogs, 30000);
+  intervalId = setInterval(loadLogs, 60000);
 
   return () => {
     isMounted = false;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useId, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 type SearchableComboboxProps = {
@@ -12,6 +12,7 @@ type SearchableComboboxProps = {
 };
 
 export function SearchableCombobox({ value, onChange, options, placeholder, className = "" }: SearchableComboboxProps) {
+  const listboxId = useId();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const filteredOptions = useMemo(() => {
@@ -40,7 +41,7 @@ export function SearchableCombobox({ value, onChange, options, placeholder, clas
           }}
           className={`${className} pr-9`}
           placeholder={placeholder}
-          role="combobox"
+          role="combobox" aria-controls={listboxId}
           aria-expanded={isOpen}
           aria-autocomplete="list"
         />
@@ -56,9 +57,11 @@ export function SearchableCombobox({ value, onChange, options, placeholder, clas
       </div>
 
       {isOpen && filteredOptions.length > 0 ? (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10">
+        <div id={listboxId} role="listbox" className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-[#dce3ed] bg-white py-1 shadow-lg shadow-slate-900/10">
           {filteredOptions.map((option) => (
             <button
+              role="option"
+              aria-selected={value === option}
               key={option}
               type="button"
               onMouseDown={(event) => {

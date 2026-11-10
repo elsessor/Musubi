@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
 import type { Task } from "@/components/events/types";
+import { OverdueBadge } from "@/components/events/overdue";
 
 type MemberActiveSubtaskItem = Task & {
   eventTitle?: string;
@@ -27,7 +28,7 @@ export function MemberActiveSubtasks({ subtasks }: MemberActiveSubtasksProps) {
   const pages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageStart + index);
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm flex flex-col h-full justify-between">
+    <div data-tour="dashboard-work" className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm flex flex-col h-full justify-between">
       <div>
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div className="flex min-w-0 items-center gap-2">
@@ -65,10 +66,10 @@ export function MemberActiveSubtasks({ subtasks }: MemberActiveSubtasksProps) {
               return (
                 <div
                   key={task.id}
-                  className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3.5 transition-colors hover:bg-slate-50/50 rounded-xl px-2 -mx-2"
+                  className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4 transition-colors hover:bg-slate-50/50 rounded-xl px-2 -mx-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-1">
+                    <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2">
                       {task.title || task.description}
                     </h3>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -102,50 +103,6 @@ export function MemberActiveSubtasks({ subtasks }: MemberActiveSubtasksProps) {
           </div>
         )}
       </div>
-
-      {totalPages > 1 && (
-        <div className="mt-auto border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[11px] font-medium text-slate-500">
-            Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, subtasks.length)} of {subtasks.length}
-          </span>
-          <nav aria-label="Active sub-tasks pagination" className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Previous page"
-              disabled={currentPage === 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="flex size-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            {pages.map((number) => (
-              <button
-                key={number}
-                type="button"
-                aria-label={`Page ${number}`}
-                aria-current={currentPage === number ? "page" : undefined}
-                onClick={() => setPage(number)}
-                className={`flex size-7 items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  currentPage === number
-                    ? "bg-blue-600 text-white shadow-xs"
-                    : "border border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {number}
-              </button>
-            ))}
-            <button
-              type="button"
-              aria-label="Next page"
-              disabled={currentPage === totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="flex size-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </nav>
-        </div>
-      )}
     </div>
   );
 }

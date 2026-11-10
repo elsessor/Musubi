@@ -5,22 +5,31 @@ import { usePathname, useRouter } from "next/navigation";
 import { CircleHelp } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { getTourSteps, nextTutorialStatus, tutorialKey, type TourKind, type TutorialStatus, type TourStep } from "@/config/tutorial";
-import { getPageTourForRoute, getPageTours, PAGE_TOUR_IDS, shouldShowPageTour, type PageTourId } from "@/config/tutorialPages";
-import { getWorkflowTours } from "@/config/tutorialWorkflows";
+import { getPageTourForRoute, PAGE_TOUR_IDS, type PageTourId } from "@/config/tutorialPages";
+import { getSidebarTourSteps } from "@/config/tutorialSidebar";
+import { isFinished, onboardingProgress, sectionProgress, updateSection, type OnboardingProgress, type OnboardingSection } from "@/config/onboardingProgress";
 import { loadTutorial, saveTutorial } from "@/services/tutorial.service";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { getDashboardNavItems } from "@/utils/routes";
 import { GuidedTour } from "./GuidedTour";
 import { collectPageControls } from "./controlGuide";
-import { getDashboardNavItems } from "@/utils/routes";
+import { findTourHighlightTargets } from "./tourTargets";
+import { GetStarted } from "./GetStarted";
+import { HelpCenter } from "./HelpCenter";
+import { WelcomeOnboarding } from "./WelcomeOnboarding";
 
-const HelpContext = createContext<() => void>(() => {});
-const button = "inline-flex min-h-11 items-center justify-center rounded-xl px-3 py-2 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:px-4 sm:py-2.5 sm:text-sm";
+const HelpContext = createContext<(view?: "guide" | "started", tour?: TourKind) => void>(() => {});
+type Run = { section?: OnboardingSection; context?: string; automatic: boolean };
 
 export function TutorialHelpButton() {
   const open = useContext(HelpContext);
-  return <button type="button" data-tour-help data-tour="help" onClick={() => open()} title="Help / User Guide" aria-label="Help / User Guide" className="inline-flex shrink-0 items-center gap-2 rounded-xl p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-    <CircleHelp className="size-5" /><span className="hidden text-xs font-semibold lg:inline">Help / User Guide</span>
-  </button>;
+  return <button type="button" data-tour-help data-tour="help" onClick={() => open()} title="Help / User Guide" aria-label="Help / User Guide" className="inline-flex shrink-0 items-center gap-2 rounded-xl p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"><CircleHelp className="size-5" /><span className="hidden text-xs font-semibold lg:inline">Help / User Guide</span></button>;
+}
+
+export function TutorialContextualHelp({ tour, label }: { tour: TourKind; label: string }) {
+  const open = useContext(HelpContext);
+  const role = useAuthStore((state) => state.profile?.role);
+  if (!role || !getTourSteps(role, tour).length) return null;
+  return <button type="button" data-tour-help onClick={() => open("guide", tour)} title={label} aria-label={label} className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"><CircleHelp aria-hidden="true" className="size-4" /></button>;
 }
 
 export function TutorialProvider({ children }: { children: ReactNode }) {
@@ -29,25 +38,36 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const loading = useAuthStore((s) => s.loading);
   const pathname = usePathname();
   const router = useRouter();
-  const [mode, setMode] = useState<"guide" | "tour" | null>(null);
-  const [automaticRoute, setAutomaticRoute] = useState<string | null>(null);
+  const [mode, setMode] = useState<"welcome" | "started" | "guide" | "tour" | null>(null);
   const [kind, setKind] = useState<TourKind>("quick");
-  const [inspectRoute, setInspectRoute] = useState<string | null>(null);
-  const [controlSteps, setControlSteps] = useState<TourStep[]>([]);
-  const controlCleanup = useRef<() => void>(() => {});
   const [index, setIndex] = useState(0);
-  const [localOnly, setLocalOnly] = useState(false);
-  const [statusLoaded, setStatusLoaded] = useState<string | null>(null);
+  const [run, setRun] = useState<Run | null>(null);
+  const [sidebarRoute, setSidebarRoute] = useState(pathname);
+  const [automaticSteps, setAutomaticSteps] = useState<TourStep[] | null>(null);
+  const [controlSteps, setControlSteps] = useState<TourStep[]>([]);
+  const [initialHelpTour, setInitialHelpTour] = useState<TourKind | null>(null);
+  const [inspectRoute, setInspectRoute] = useState<string | null>(null);
+  const controlCleanup = useRef<() => void>(() => {});
   const [saved, setSaved] = useState<TutorialStatus | null>(null);
   const savedRef = useRef<TutorialStatus | null>(null);
+  const [statusLoaded, setStatusLoaded] = useState<string | null>(null);
+  const [localOnly, setLocalOnly] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(false);
-  const opened = useRef(new Set<string>());
+  const [targetSignature, setTargetSignature] = useState("");
+  const [eventId, setEventId] = useState<string | null>(null);
+  const quietContext = useRef<string | null>(null);
   const identity = user && profile && user.uid === profile.uid ? tutorialKey(user.uid, profile.role) : null;
+  const pageContext = pathname === "/dashboard/events" && eventId ? "event" : undefined;
+  const contextKey = pageContext ? `${pathname}:event:${eventId}` : pathname;
+  const preview = Boolean(profile && profile.role !== "Admin" && !profile.organizationId?.trim());
   const allowed = Boolean(profile && (profile.role === "Admin" ? pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/dashboard/profile" : pathname === "/dashboard" || pathname.startsWith("/dashboard/")));
+  const visible = Boolean(identity && !loading && allowed && statusLoaded === identity);
+  const role = profile?.role;
+  const steps = useMemo(() => automaticSteps ?? (kind === "controls" ? controlSteps : kind === "sidebar" && role ? getSidebarTourSteps(role, sidebarRoute) : role ? getTourSteps(role, kind, preview) : []), [automaticSteps, kind, controlSteps, role, sidebarRoute, preview]);
 
   useEffect(() => {
     controlCleanup.current();
-    setMode(null); setAutomaticRoute(null); setStatusLoaded(null); setSaved(null); savedRef.current = null;
+    setMode(null); setRun(null); setInspectRoute(null); setAutomaticSteps(null); setStatusLoaded(null); setSaved(null); savedRef.current = null; quietContext.current = null;
     if (!identity || !user || !profile || loading) return;
     let cancelled = false;
     void loadTutorial(user, profile.role).then((result) => {
@@ -56,173 +76,145 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
       setSaved(result.status); setLocalOnly(result.localOnly); setStatusLoaded(identity);
     });
     return () => { cancelled = true; };
-    // Identity intentionally avoids reloading on unrelated profile refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identity, loading]);
 
   useEffect(() => {
     const check = () => {
       const el = document.querySelector('[data-tour="workspace"]');
-      setWorkspaceReady(el?.getAttribute("data-tutorial-ready") === "true" && el?.getAttribute("data-tutorial-role") === profile?.role
-        && !document.querySelector('[role="dialog"], [role="alertdialog"]'));
+      const selectedEvent = el?.querySelector('[data-tour="event-workspace"]')?.getAttribute("data-event-id") || null;
+      setEventId(selectedEvent);
+      const page = role && getPageTourForRoute(role, pathname, selectedEvent ? "event" : undefined);
+      setTargetSignature(page && role ? getTourSteps(role, page.id).filter((step) => step.reveal?.length || findTourHighlightTargets(step).length).map((step) => step.id).join(":") : "");
+      setWorkspaceReady(el?.getAttribute("data-tutorial-ready") === "true" && el?.getAttribute("data-tutorial-role") === role && !document.querySelector('[role="dialog"], [role="alertdialog"]'));
     };
     check();
     const observer = new MutationObserver(check);
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-tutorial-ready", "data-tutorial-role"] });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-tutorial-ready", "data-tutorial-role", "data-event-id"] });
     return () => observer.disconnect();
-  }, [pathname, profile?.role]);
+  }, [pathname, role]);
 
   useEffect(() => {
-    const setupReady = profile?.role === "Admin" || profile?.onboardingCompleted || Boolean(profile?.organizationId);
-    if (!identity || !profile || !setupReady || statusLoaded !== identity || loading || !allowed || !workspaceReady || mode || inspectRoute) return;
-    const pageTour = getPageTourForRoute(profile.role, pathname);
-    if (!pageTour || !shouldShowPageTour(savedRef.current, pageTour.id) || opened.current.has(`${identity}:${pageTour.id}`)) return;
-    opened.current.add(`${identity}:${pageTour.id}`);
-    setAutomaticRoute(pathname); setKind(pageTour.id); setIndex(0);
-    // Remember presentation immediately, including refreshes or an interrupted visit.
-    persist("in_progress", 0, pageTour.id, pageTour.id);
-    setMode("tour");
-    // Progress is read from its ref; profile refreshes must not restart a guide.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identity, statusLoaded, loading, allowed, pathname, workspaceReady, mode, inspectRoute, profile?.role, profile?.onboardingCompleted, profile?.organizationId]);
+    // Suppress another popup only for the visit where a guide was closed.
+    if (quietContext.current !== contextKey) quietContext.current = null;
+  }, [contextKey]);
 
   useEffect(() => {
-    if (automaticRoute && pathname !== automaticRoute) {
-      setMode(null); setAutomaticRoute(null);
+    if (!visible || !profile || !workspaceReady || mode || inspectRoute || quietContext.current === contextKey) return;
+    const progress = onboardingProgress(savedRef.current);
+    if (!progress.preference) {
+      persist("in_progress", 0, "quick", "welcome");
+      setRun({ context: contextKey, automatic: true }); setMode("welcome");
+      return;
     }
-  }, [automaticRoute, pathname]);
+    if (progress.preference.mode !== "guided") return;
+    if (!isFinished(progress.sidebar)) { startSidebar(true, true); return; }
+    const page = getPageTourForRoute(profile.role, pathname, pageContext);
+    if (!page || isFinished(progress.modules?.[page.id])) return;
+    const available = getTourSteps(profile.role, page.id, preview).filter((step) => step.reveal?.length || findTourHighlightTargets(step).length);
+    if (!available.length) return;
+    const first = Math.min(progress.modules?.[page.id]?.step ?? 0, available.length - 1);
+    setAutomaticSteps(available); setKind(page.id); setIndex(first); setRun({ section: page.id, context: contextKey, automatic: true });
+    persist("in_progress", first, page.id, page.id); setMode("tour");
+    // Progress refs avoid restarting a tour when a write refreshes the profile.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, workspaceReady, targetSignature, mode, inspectRoute, contextKey, pathname, pageContext, profile?.role, preview]);
 
+  useEffect(() => {
+    if (run?.context && run.context !== contextKey) {
+      if (mode === "tour" && visible) persist("in_progress", index, kind, run.section);
+      setMode(null); setRun(null); setAutomaticSteps(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextKey, run?.context]);
   useEffect(() => { if (!allowed) setMode(null); }, [allowed]);
   useEffect(() => () => controlCleanup.current(), []);
-  useEffect(() => { setInspectRoute(null); }, [identity]);
 
   useEffect(() => {
     if (!inspectRoute || pathname !== inspectRoute || !profile || !identity) return;
     const timeout = Date.now() + 6000;
     let timer: number;
     const collect = () => {
-      const workspace = document.querySelector('[data-tour="workspace"]');
-      if (workspace?.getAttribute("data-tutorial-ready") !== "true" && Date.now() < timeout) {
-        timer = window.setTimeout(collect, 150); return;
-      }
+      if (document.querySelector('[data-tour="workspace"]')?.getAttribute("data-tutorial-ready") !== "true" && Date.now() < timeout) { timer = window.setTimeout(collect, 150); return; }
       controlCleanup.current();
       const result = collectPageControls(profile.role, inspectRoute);
       controlCleanup.current = result.cleanup;
-      setControlSteps(result.steps.length ? result.steps : [{ id: "empty-page", route: inspectRoute, target: "workspace", title: "This page", description: "No controls are currently available. Records and actions will appear here when they are available to your account." }]);
-      setKind("controls"); setIndex(0); persist("in_progress", 0, "controls", getPageTourForRoute(profile.role, inspectRoute)?.id); setMode("tour"); setInspectRoute(null);
+      setControlSteps(result.steps.length ? result.steps : [{ id: "empty-page", route: inspectRoute, target: "workspace", title: "This page", description: "This page has no available controls. Features appear when they become accessible to your account." }]);
+      setKind("controls"); setIndex(0); persist("in_progress", 0, "controls"); setRun({ automatic: false }); setMode("tour"); setInspectRoute(null);
     };
     timer = window.setTimeout(collect, 350);
     return () => window.clearTimeout(timer);
-    // A scan belongs to the selected account and route, not profile refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectRoute, pathname, identity]);
 
-  function persist(status: TutorialStatus["status"], step = index, tour = kind, seenPage?: PageTourId) {
+  function write(next: TutorialStatus) {
     if (!user || !profile || !identity) return;
-    const next = nextTutorialStatus(savedRef.current, status, step, tour);
-    const currentPage = mode === "tour" && (!automaticRoute || automaticRoute === pathname) ? getPageTourForRoute(profile.role, pathname)?.id : undefined;
-    const seenPages = [...new Set([...(next.seenPages ?? []), ...(seenPage ? [seenPage] : []), ...(currentPage ? [currentPage] : [])])];
-    if (seenPages.length) next.seenPages = seenPages;
-    savedRef.current = next;
-    setSaved(next);
+    savedRef.current = next; setSaved(next);
     void saveTutorial(user, profile.role, next).then((synced) => {
       if (useAuthStore.getState().firebaseUser?.uid === user.uid && useAuthStore.getState().profile?.role === profile.role) setLocalOnly(!synced);
     });
   }
+  function persist(status: TutorialStatus["status"], step = index, tour = kind, section?: OnboardingSection, override?: OnboardingProgress) {
+    const next = nextTutorialStatus(savedRef.current, status, step, tour);
+    const progress = override ?? onboardingProgress(savedRef.current);
+    next.onboarding = section ? updateSection(progress, section, status, step) : progress;
+    if (section && PAGE_TOUR_IDS.includes(section as PageTourId) && status !== "in_progress") next.seenPages = [...new Set([...(next.seenPages ?? []), section as PageTourId])];
+    write(next);
+  }
   function close(complete = false) {
-    if (mode !== "guide") persist(complete ? "completed" : "dismissed");
-    controlCleanup.current();
-    controlCleanup.current = () => {};
-    setMode(null);
-    setAutomaticRoute(null);
-    setInspectRoute(null);
+    if (mode === "welcome") { dismissWelcome(); return; }
+    if (mode === "tour") persist(complete ? "completed" : "dismissed", index, kind, run?.section);
+    quietContext.current = contextKey;
+    controlCleanup.current(); controlCleanup.current = () => {};
+    setMode(null); setRun(null); setAutomaticSteps(null); setInspectRoute(null);
+  }
+  function startSidebar(automatic = false, resume = false, progress?: OnboardingProgress) {
+    if (!profile) return;
+    const first = resume ? Math.min(sectionProgress(progress ?? onboardingProgress(savedRef.current), "sidebar")?.step ?? 0, getSidebarTourSteps(profile.role, pathname).length - 1) : 0;
+    controlCleanup.current(); controlCleanup.current = () => {};
+    setAutomaticSteps(null); setSidebarRoute(pathname); setKind("sidebar"); setIndex(first); setRun({ section: "sidebar", context: contextKey, automatic });
+    persist("in_progress", first, "sidebar", "sidebar", progress); setMode("tour");
+  }
+  function acceptWelcome() {
+    const progress = updateSection(onboardingProgress(savedRef.current), "welcome", "completed");
+    startSidebar(true, false, { ...progress, preference: { mode: "guided", source: "user", updatedAt: new Date().toISOString() } });
+  }
+  function dismissWelcome() {
+    const progress = updateSection(onboardingProgress(savedRef.current), "welcome", "dismissed");
+    persist("dismissed", 0, "quick", undefined, { ...progress, preference: { mode: "independent", source: "user", updatedAt: new Date().toISOString() } });
+    quietContext.current = contextKey; setMode(null); setRun(null);
+  }
+  function restartOnboarding() {
+    controlCleanup.current(); controlCleanup.current = () => {};
+    setAutomaticSteps(null); setRun({ context: contextKey, automatic: false }); setMode("welcome");
   }
   function inspectPage(route: string) {
     if (!profile || ![...getDashboardNavItems(profile.role).map((item) => item.href), "/dashboard/profile"].includes(route)) return;
-    setMode(null); setAutomaticRoute(null); setInspectRoute(route);
+    setMode(null); setRun(null); setAutomaticSteps(null); setInspectRoute(route);
     if (pathname !== route) router.push(route);
   }
-  function start(tour: TourKind, resume = false, scope?: Element | null) {
-    if (!profile) return;
-    // Stored or manually supplied tour IDs never grant a role access to a workflow.
-    if (!["quick", "features", "controls"].includes(tour) && !getWorkflowTours(profile.role).some((item) => item.id === tour) && !getPageTours(profile.role).some((item) => item.id === tour)) return;
-    controlCleanup.current();
-    controlCleanup.current = () => {};
-    let count = getTourSteps(profile.role, tour).length;
-    if (tour === "controls") {
-      const collected = collectPageControls(profile.role, pathname, scope);
-      controlCleanup.current = collected.cleanup;
-      setControlSteps(collected.steps);
-      count = collected.steps.length;
-    }
-    if (!count) return;
-    // A feature form or selected record may no longer exist after refresh.
-    // Replay its safe opening controls instead of opening an arbitrary record.
-    const first = resume && saved && (tour === "quick" || tour === "features" || PAGE_TOUR_IDS.includes(tour as PageTourId)) ? Math.min(saved.step, count - 1) : 0;
-    setAutomaticRoute(null);
-    setKind(tour); setIndex(first); persist("in_progress", first, tour, getPageTourForRoute(profile.role, pathname)?.id); setMode("tour");
+  function start(tour: TourKind, resume = false) {
+    if (!profile || (tour === "page-event-details" && pageContext !== "event") || !getTourSteps(profile.role, tour).length) return;
+    if (tour === "sidebar") { startSidebar(false, resume); return; }
+    controlCleanup.current(); controlCleanup.current = () => {};
+    const first = resume && saved && (tour === "quick" || tour === "features" || PAGE_TOUR_IDS.includes(tour as PageTourId)) ? Math.min(saved.step, getTourSteps(profile.role, tour).length - 1) : 0;
+    const section = PAGE_TOUR_IDS.includes(tour as PageTourId) ? tour as PageTourId : undefined;
+    setAutomaticSteps(null); setKind(tour); setIndex(first); setRun({ section, automatic: false });
+    persist("in_progress", first, tour, section); setMode("tour");
   }
-  const visible = Boolean(identity && !loading && allowed && statusLoaded === identity);
-  const role = profile?.role;
-  const steps = useMemo(() => kind === "controls" ? controlSteps : role ? getTourSteps(role, kind) : [], [role, kind, controlSteps]);
-  useEffect(() => {
-    if (!visible || !role || mode !== "tour" || automaticRoute || steps[Math.min(index, steps.length - 1)]?.route !== pathname) return;
-    const pageTour = getPageTourForRoute(role, pathname);
-    // A page already introduced by a manual walkthrough needs no automatic repeat.
-    if (pageTour && shouldShowPageTour(savedRef.current, pageTour.id)) persist("in_progress", index, kind, pageTour.id);
-    // The ref avoids treating progress saves as a new page presentation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, role, mode, automaticRoute, steps, index, pathname, kind]);
-  const workflows = profile ? getWorkflowTours(profile.role) : [];
-  const currentPageTour = profile ? getPageTourForRoute(profile.role, pathname) : undefined;
-  const fullTourCount = profile ? getTourSteps(profile.role, "features").length : 0;
-  const pages = profile ? [...getDashboardNavItems(profile.role), { id: "profile", label: "Profile", href: "/dashboard/profile" }] : [];
-  const canResume = saved?.status === "in_progress" && (saved.tour === "quick" || saved.tour === "features" || workflows.some((tour) => tour.id === saved.tour) || (profile && getPageTours(profile.role).some((tour) => tour.id === saved.tour)));
-  return <HelpContext.Provider value={() => {
-    setAutomaticRoute(null);
-    setMode("guide");
+  const currentPageTour = profile ? getPageTourForRoute(profile.role, pathname, pageContext) : undefined;
+  const canResume = saved?.status === "in_progress" && saved.tour !== "controls" && profile && getTourSteps(profile.role, saved.tour).length > 0 && (saved.tour !== "page-event-details" || pageContext === "event");
+  return <HelpContext.Provider value={(view = "guide", tour) => {
+    if (tour && (!profile || !getTourSteps(profile.role, tour).length || (tour === "page-event-details" && pageContext !== "event"))) return;
+    if (mode === "tour") persist("in_progress", index, kind, run?.section);
+    controlCleanup.current(); controlCleanup.current = () => {};
+    setInitialHelpTour(tour ?? null); setRun(null); setAutomaticSteps(null); setMode(view);
   }}>
     {children}
     {visible && inspectRoute && <div role="status" className="fixed bottom-4 right-4 z-[201] rounded-xl bg-white p-4 text-sm text-slate-700 shadow-xl">Opening page guide…</div>}
-    {visible && mode === "tour" && (!automaticRoute || automaticRoute === pathname) && steps.length > 0 && <GuidedTour steps={steps} index={Math.min(index, steps.length - 1)} onStep={(step) => { setIndex(step); persist("in_progress", step); }} onExit={close} />}
-    {visible && mode === "guide" && <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
-      <DialogContent data-tour-help overlayClassName="z-[200] motion-reduce:animate-none" className="z-[201] flex max-h-[75dvh] max-w-[min(22rem,calc(100vw-32px))] flex-col gap-3 overflow-hidden rounded-2xl bg-white p-4 text-slate-900 motion-reduce:animate-none sm:max-h-[85dvh] sm:max-w-lg sm:gap-4 sm:p-6" onCloseAutoFocus={(event) => { event.preventDefault(); if (!document.querySelector('[data-tour-dialog]')) document.querySelector<HTMLButtonElement>('[data-tour="help"]')?.focus(); }}>
-        <DialogTitle className="shrink-0 pr-6 text-base font-bold sm:text-xl">Help / User Guide</DialogTitle>
-        <DialogDescription className="text-xs leading-5 text-slate-600 sm:text-sm sm:leading-relaxed">Replay this page's introduction, take the full walkthrough, or choose a specific task. Guides never save or publish changes.</DialogDescription>
-        <div className="flex shrink-0 flex-wrap gap-1.5 sm:gap-2">
-          {currentPageTour && <button type="button" className={`${button} bg-blue-600 text-white hover:bg-blue-700`} onClick={() => start(currentPageTour.id)}>Replay this page guide</button>}
-          <button type="button" className={`${button} border border-slate-200`} onClick={() => start("features")}>Full walkthrough · {fullTourCount} steps</button>
-          {canResume && saved && <button type="button" className={`${button} border border-slate-200`} onClick={() => start(saved.tour, true)}>{saved.tour === "quick" || saved.tour === "features" ? "Resume walkthrough" : "Reopen last guide"}</button>}
-          <button type="button" className={`${button} text-slate-600 hover:bg-slate-100`} onClick={() => close()}>Close</button>
-        </div>
-        {mode === "guide" && <div className="min-h-0 space-y-2 overflow-y-auto overscroll-contain pr-1">
-          <h3 className="text-sm font-bold">Help with a specific task</h3>
-          {pages.map((page) => <details key={page.id} open={page.href === pathname} className="rounded-xl border border-slate-200 p-3">
-            <summary className="cursor-pointer text-sm font-bold text-slate-900">{page.label}</summary>
-            <div className="mt-3 space-y-2">
-              {workflows.filter((tour) => tour.route === page.href).map((tour) => <button key={tour.id} type="button" onClick={() => start(tour.id)} className="block w-full rounded-xl border border-blue-100 bg-blue-50/40 p-3 text-left hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                <span className="block text-sm font-semibold text-slate-900">{tour.title}</span><span className="mt-1 block text-xs text-slate-600">{getTourSteps(profile!.role, tour.id).length} steps · optional field reference</span>
-              </button>)}
-              <details className="rounded-xl border border-slate-200 p-3">
-                <summary className="cursor-pointer text-xs font-semibold text-slate-600">Detailed control guide</summary>
-                <p className="mt-2 text-xs leading-relaxed text-slate-500">An optional, longer tour of individual buttons, tabs, and filters.</p>
-                <button type="button" onClick={() => inspectPage(page.href)} className={`${button} mt-2 w-full border border-blue-200 text-left text-blue-700`}>Explore individual controls</button>
-              </details>
-            </div>
-          </details>)}
-          <p className="text-xs leading-relaxed text-slate-500">Use Next to move through each guide. Forms and tabs open automatically. The guide never saves, publishes, or approves changes.</p>
-          <details className="rounded-xl border border-slate-200 p-3">
-            <summary className="cursor-pointer text-sm font-bold focus-visible:outline focus-visible:outline-blue-600">Read the user guide</summary>
-            <div className="mt-2 space-y-2">
-              {getTourSteps(profile!.role, "features").filter((step) => step.id !== "finish").map((step) => <details key={step.id} className="rounded-xl border border-slate-200 p-3">
-                <summary className="cursor-pointer text-sm font-semibold focus-visible:outline focus-visible:outline-blue-600">{step.title}</summary>
-                <p className="mt-2 text-xs leading-5 text-slate-600 sm:text-sm sm:leading-relaxed">{step.description}</p>
-              </details>)}
-            </div>
-          </details>
-        </div>}
-        {localOnly && <p role="status" className="text-xs text-slate-500">Account sync is unavailable. Progress is saved in this browser when storage is available.</p>}
-      </DialogContent>
-    </Dialog>}
+    {visible && mode === "welcome" && (!run?.context || run.context === contextKey) && <WelcomeOnboarding name={profile!.fullName} admin={profile!.role === "Admin"} onStart={acceptWelcome} onDismiss={dismissWelcome} />}
+    {visible && mode === "tour" && (!run?.context || run.context === contextKey) && steps.length > 0 && <GuidedTour steps={steps} index={Math.min(index, steps.length - 1)} skipUnavailable={run?.automatic} onStep={(step) => { setIndex(step); persist("in_progress", step, kind, run?.section); }} onExit={close} />}
+    {visible && mode === "started" && <GetStarted role={profile!.role} hasOrganization={!preview} onClose={close} onWalkthrough={() => start("features")} onPageGuide={currentPageTour ? () => start(currentPageTour.id) : undefined} onHelp={() => { setInitialHelpTour(null); setMode("guide"); }} onOrganization={() => { close(); router.push("/dashboard/organization"); }} />}
+    {visible && mode === "guide" && <HelpCenter key={initialHelpTour ?? "home"} role={profile!.role} preview={preview} eventOpen={pageContext === "event"} initialTour={initialHelpTour} currentPageTour={currentPageTour?.id} resumeTour={canResume && saved ? saved.tour : undefined} localOnly={localOnly} onClose={close} onStart={start} onInspect={inspectPage} onGetStarted={() => setMode("started")} onSidebar={() => startSidebar()} onRestart={restartOnboarding} />}
   </HelpContext.Provider>;
 }

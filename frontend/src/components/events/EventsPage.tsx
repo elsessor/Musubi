@@ -48,7 +48,15 @@ export function EventsPage() {
     let cancelled = false;
 
     async function loadUser() {
-      const uid = profile?.uid ?? firebaseUser?.uid;
+      if (profile) {
+        if (!cancelled) {
+          setDashboardUser(buildDashboardUser(profile));
+          setLoading(false);
+        }
+        return;
+      }
+
+      const uid = firebaseUser?.uid;
       if (!uid) {
         if (!authLoading) {
           if (!cancelled) {
@@ -64,18 +72,18 @@ export function EventsPage() {
         const role =
           data?.role === "Admin" || data?.role === "Student Leader" || data?.role === "Organization Member"
             ? data.role
-            : profile?.role ?? "Student Leader";
+            : "Student Leader";
         const fullName =
           typeof data?.fullName === "string" && data.fullName.trim()
             ? data.fullName
-            : profile?.fullName ?? "";
+            : "";
 
         let orgName =
           typeof data?.organizationName === "string" && data.organizationName.trim()
             ? data.organizationName
-            : profile?.organizationName ?? "";
+            : "";
 
-        const orgId = typeof data?.organizationId === "string" ? data.organizationId : profile?.organizationId ?? null;
+        const orgId = typeof data?.organizationId === "string" ? data.organizationId : null;
         if (!orgName && orgId && firebaseUser) {
           try {
             const orgData = await getOrganization(firebaseUser, orgId);

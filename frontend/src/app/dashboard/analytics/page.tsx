@@ -126,7 +126,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Dynamic Metric Cards */}
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-6 xl:grid-cols-4">
+        <div data-tour="analytics-summary" className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-6 xl:grid-cols-4">
           <StatCard
             title="Task Completion Rate"
             value={`${completionRate}%`}
@@ -158,7 +158,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Task Workflow & Velocity Overview */}
-        <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-3">
+        <div data-tour="analytics-workflow" className="mt-4 grid min-w-0 grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-3">
           {/* Main Telemetry & Events Velocity */}
           <div className="min-w-0 rounded-2xl border border-[#dce3ed] bg-white p-4 shadow-sm sm:p-6 lg:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 sm:pb-4">

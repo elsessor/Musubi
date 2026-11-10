@@ -1,10 +1,11 @@
 import type { Request, Response } from "express";
-import { firebaseAuth, firestore } from "../config/firebase.js";
+import { firebaseAdmin, firebaseAuth, firestore } from "../config/firebase.js";
 import { sendNudgeNotificationEmail } from "../services/email.service.js";
 import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { assertCanSendManualNudge } from "../utils/nudgePermissions.js";
-import { AppError } from "../utils/AppError.js";
 import { parseScheduleDate } from "../utils/dateRange.js";
+import { AppError } from "../utils/AppError.js";
+import { dispatchTaskReminders } from "../utils/taskReminderDispatch.js";
 
 export async function sendNudgeEmailController(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -151,7 +152,7 @@ export async function runDueNudgesCheck(scope?: { organizationId: string; member
           const userRecord = await firebaseAuth.getUser(task.assignedMemberUID);
           targetEmail = userRecord.email || "";
           targetName = userRecord.displayName || targetName;
-        } catch {}
+        } catch { }
       }
       if (!targetEmail && task.assignedMemberUID) {
         try {
@@ -161,7 +162,7 @@ export async function runDueNudgesCheck(scope?: { organizationId: string; member
             targetEmail = uData?.email || "";
             targetName = uData?.name || uData?.displayName || targetName;
           }
-        } catch {}
+        } catch { }
       }
       if (!targetEmail && targetName && targetName !== "Unassigned" && targetName !== "Team Member") {
         try {
@@ -169,7 +170,7 @@ export async function runDueNudgesCheck(scope?: { organizationId: string; member
           if (!usersQuery.empty) {
             targetEmail = usersQuery.docs[0].data()?.email || "";
           }
-        } catch {}
+        } catch { }
       }
 
       if (targetEmail) {

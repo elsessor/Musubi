@@ -43,6 +43,23 @@ test("page introductions stay on existing role-appropriate routes and never subm
   assert.equal(getPageTourForRoute("Student Leader", "/dashboard/events/event-id"), undefined);
 });
 
+test("opening an event selects its own introduction without resetting the selected event", () => {
+  for (const role of ["Student Leader", "Organization Member"] as const) {
+    const listing = getPageTourForRoute(role, "/dashboard/events")!;
+    const details = getPageTourForRoute(role, "/dashboard/events", "event")!;
+    assert.equal(listing.id, "page-events");
+    assert.equal(details.id, "page-event-details");
+    assert.equal(details.steps.length, 3);
+    assert.ok(details.steps.every((step) => step.route === "/dashboard/events" && !step.prepare && !step.openOnNext && !step.interaction));
+    const previous = progress({ seenPages: ["page-events"], status: "completed" });
+    assert.ok(shouldShowPageTour(previous, details.id));
+    assert.equal(shouldShowPageTour({ ...previous, seenPages: ["page-events", "page-event-details"] }, details.id), false);
+    assert.ok(details.steps[1].highlightTargets?.includes("task-filter-panel"));
+    assert.equal(details.steps[2].highlightTargets?.includes("task-create-actions") ?? false, role === "Student Leader");
+  }
+  assert.equal(getPageTourForRoute("Admin", "/dashboard/events", "event"), undefined);
+});
+
 test("seen pages stay acknowledged after completion, dismissal, and a manual walkthrough replay", () => {
   for (const status of ["in_progress", "completed", "dismissed"] as const) {
     const previous = progress({ status });
@@ -63,7 +80,7 @@ test("legacy progress remains valid and both validators reject malformed page hi
     const { updatedAt: _, ...payload } = state;
     assert.ok(tutorialStatusSchema.safeParse({ ...payload, role: "Organization Member" }).success);
   }
-  for (const seenPages of ["page-dashboard", ["unknown-page"], [null], Array(12).fill("page-dashboard")]) {
+  for (const seenPages of ["page-dashboard", ["unknown-page"], [null], Array(PAGE_TOUR_IDS.length + 1).fill("page-dashboard")]) {
     const state = { ...progress(), seenPages };
     assert.equal(isTutorialStatus(state), false);
     const { updatedAt: _, ...payload } = state;

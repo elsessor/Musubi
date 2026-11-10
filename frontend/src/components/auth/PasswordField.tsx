@@ -56,7 +56,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
           />
           <button
             aria-label={isVisible ? "Hide password" : "Show password"}
-            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-md text-slate-400 transition hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="absolute right-1 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:right-4 sm:block sm:size-auto"
             onClick={() => setIsVisible((value) => !value)}
             type="button"
           >

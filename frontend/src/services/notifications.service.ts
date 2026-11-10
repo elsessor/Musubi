@@ -1,7 +1,6 @@
 import type { User } from "firebase/auth";
 import { collection, doc, onSnapshot, query, updateDoc, arrayUnion, limit, where } from "firebase/firestore";
 import { getFirebaseDb } from "../firebase/config";
-import { subscribeEventsFirestore } from "./events.service";
 import { subscribeAnnouncementsFirestore } from "./announcements.service";
 import { useAuthStore } from "@/store/authStore";
 
@@ -175,7 +174,6 @@ export function subscribeNotificationsFirestore(
   let announcementNotifs: NotificationRecord[] = [];
   let directNotifs: NotificationRecord[] = [];
   let auditNotifs: NotificationRecord[] = [];
-  let eventNotifs: NotificationRecord[] = [];
 
   function emitMerged() {
     const readStorage = getReadNotifIdsFromStorage(user?.uid);
@@ -206,14 +204,6 @@ export function subscribeNotificationsFirestore(
       map.set(item.id, { ...item, unread: !isRead });
     });
 
-    // 3. Event Nudges & Subtasks
-    eventNotifs.forEach((item) => {
-      if (!map.has(item.id)) {
-        const isRead = checkIsRead(item.id, item.createdAt, !item.unread);
-        map.set(item.id, { ...item, unread: !isRead });
-      }
-    });
-
     // 4. Audit Logs
     auditNotifs.forEach((item) => {
       if (!map.has(item.id)) {
@@ -232,7 +222,7 @@ export function subscribeNotificationsFirestore(
     // Deduplicate merged array by type + title + description to eliminate duplicate notifications
     const dedupMap = new Map<string, NotificationRecord>();
     merged.forEach((item) => {
-      const key = `${item.type}_${(item.title || "").trim().toLowerCase()}_${(item.description || "").trim().toLowerCase()}`;
+      const key = item.nudgeCategory === "deadline" ? item.id : `${item.type}_${(item.title || "").trim().toLowerCase()}_${(item.description || "").trim().toLowerCase()}`;
       if (!dedupMap.has(key)) {
         dedupMap.set(key, item);
       } else {
@@ -295,85 +285,11 @@ export function subscribeNotificationsFirestore(
     emitMerged();
   });
 
-  // 2. Subscribe to real-time events & tasks for Nudges / Deadline Alerts
-  const unsubEvents = subscribeEventsFirestore(user, targetOrgId, (events) => {
-    eventNotifs = [];
-    events.forEach((event) => {
-      if (Array.isArray(event.tasks)) {
-        event.tasks.forEach((task) => {
-          const isCompleted = (task.status || "").toLowerCase().includes("completed") || (task.status || "").toLowerCase().includes("done");
-          const dueDateStr = task.dueDate || task.deadline;
-          const taskTitle = task.title || task.description || "Subtask";
-
-          if (!isCompleted) {
-            const parsedDate = dueDateStr ? new Date(dueDateStr) : null;
-            const now = new Date();
-            const diffDays = parsedDate && !isNaN(parsedDate.getTime()) ? Math.ceil((parsedDate.getTime() - now.getTime()) / (1000 * 3600 * 24)) : 99;
-
-            if (diffDays <= 1 && diffDays >= 0) {
-              eventNotifs.push({
-                id: `event_task_alert_1d_${event.id}_${task.id}`,
-                orgId: targetOrgId,
-                title: `${taskTitle} (Due Tomorrow - 1 Day Left)`,
-                description: `@ ${event.title}`,
-                type: "nudge",
-                nudgeCategory: "deadline",
-                unread: true,
-                dueDate: dueDateStr || "Tomorrow",
-                time: dueDateStr || "Tomorrow",
-                createdAt: new Date().toISOString()
-              });
-            } else if (diffDays <= 3 && diffDays > 1) {
-              eventNotifs.push({
-                id: `event_task_alert_3d_${event.id}_${task.id}`,
-                orgId: targetOrgId,
-                title: `${taskTitle} (Approaching - 3 Days Left)`,
-                description: `@ ${event.title}`,
-                type: "nudge",
-                nudgeCategory: "deadline",
-                unread: true,
-                dueDate: dueDateStr || "3 Days",
-                time: dueDateStr || "3 Days",
-                createdAt: new Date().toISOString()
-              });
-            } else if (task.priority === "Critical" || task.priority === "High") {
-              eventNotifs.push({
-                id: `event_task_alert_prio_${event.id}_${task.id}`,
-                orgId: targetOrgId,
-                title: `${taskTitle} (${task.priority} Priority)`,
-                description: `@ ${event.title}`,
-                type: "nudge",
-                nudgeCategory: "deadline",
-                unread: true,
-                dueDate: dueDateStr || "Upcoming",
-                time: dueDateStr || "Upcoming",
-                createdAt: new Date().toISOString()
-              });
-            } else {
-              eventNotifs.push({
-                id: `event_task_followup_${event.id}_${task.id}`,
-                orgId: targetOrgId,
-                title: taskTitle,
-                description: `@ ${event.title}`,
-                type: "nudge",
-                nudgeCategory: "followup",
-                unread: true,
-                dueDate: dueDateStr || "Upcoming",
-                time: dueDateStr || "Upcoming",
-                createdAt: new Date().toISOString()
-              });
-            }
-          }
-        });
-      }
-    });
-    emitMerged();
-  });
-
-  // 3. Subscribe to direct notifications
+  // Deadline alerts come from the backend's durable notification records.
+  // An unordered limit can exclude newly created alerts, so load the org feed.
   const notifQuery = targetOrgId
-    ? query(collection(db, "notifications"), where("orgId", "==", targetOrgId), limit(20))
-    : query(collection(db, "notifications"), limit(20));
+    ? query(collection(db, "notifications"), where("orgId", "==", targetOrgId))
+    : query(collection(db, "notifications"), where("recipientUID", "==", currentUid || "__signed_out__"));
   const unsubNotifs = onSnapshot(
     notifQuery,
     (snapshot) => {
@@ -386,7 +302,7 @@ export function subscribeNotificationsFirestore(
         const isForUser = Boolean(currentUid && recipientUID === currentUid);
         const isForOrg = Boolean(targetOrgId && itemOrgId === targetOrgId);
 
-        if (isForUser || isForOrg) {
+        if (recipientUID ? isForUser : isForOrg) {
           const readBy = Array.isArray(data.readBy) ? data.readBy : [];
           const isRead = Boolean(data.read) || (currentUid ? readBy.includes(currentUid) : false);
 
@@ -398,79 +314,12 @@ export function subscribeNotificationsFirestore(
             description: typeof data.description === "string" ? data.description : "",
             type: (["announcement", "nudge", "task", "ai", "organization", "event", "system"].includes(data.type) ? data.type : "system") as any,
             unread: !isRead,
+            nudgeCategory: data.nudgeCategory,
+            dueDate: typeof data.dueDate === "string" ? data.dueDate : undefined,
             time: formatRelativeTime(data.createdAt),
             createdAt: data.createdAt ? (typeof data.createdAt.toDate === "function" ? data.createdAt.toDate().toISOString() : String(data.createdAt)) : null
           });
         }
-      });
-      emitMerged();
-    },
-    (err) => {
-      emitMerged();
-    }
-  );
-
-  // 4. Subscribe to audit logs
-  const auditQuery = targetOrgId
-    ? query(collection(db, "audit_logs"), where("orgId", "==", targetOrgId), limit(15))
-    : query(collection(db, "audit_logs"), limit(15));
-  const unsubAudit = onSnapshot(
-    auditQuery,
-    (snapshot) => {
-      auditNotifs = [];
-      snapshot.docs.forEach((docSnap) => {
-        const data = docSnap.data();
-        const itemOrgId = typeof data.orgId === "string" ? data.orgId : null;
-
-        if (targetOrgId && itemOrgId && itemOrgId !== targetOrgId) return;
-
-        const category = typeof data.actionCategory === "string" ? data.actionCategory : "";
-        const action = typeof data.action === "string" ? data.action : "System activity";
-
-        if (
-          category === "Security & Access" ||
-          action.toLowerCase().includes("signed in") ||
-          action.toLowerCase().includes("login") ||
-          action.toLowerCase().includes("announcement")
-        ) {
-          return;
-        }
-        const actorName = typeof data.actorName === "string" ? data.actorName : "System";
-        const targetName = typeof data.targetName === "string" ? data.targetName : "";
-
-        let title = "System Notification";
-        let type: NotificationRecord["type"] = "system";
-
-        if (category === "AI Agent Actions") {
-          title = "AI Atomization Completed";
-          type = "ai";
-        } else if (category === "Events & Tasks") {
-          title = "New Task / Event Activity";
-          type = "task";
-        } else if (category === "Organization") {
-          title = "Organization Update";
-          type = "organization";
-        } else if (category === "User Management") {
-          title = "Member Activity";
-          type = "system";
-        }
-
-        const description = targetName
-          ? `${action} on '${targetName}' by ${actorName}`
-          : `${action} by ${actorName}`;
-
-        const notifId = `audit_${docSnap.id}`;
-
-        auditNotifs.push({
-          id: notifId,
-          orgId: itemOrgId,
-          title,
-          description,
-          type,
-          unread: true,
-          time: formatRelativeTime(data.createdAt),
-          createdAt: data.createdAt ? (typeof data.createdAt.toDate === "function" ? data.createdAt.toDate().toISOString() : String(data.createdAt)) : null
-        });
       });
       emitMerged();
     },
@@ -486,9 +335,7 @@ export function subscribeNotificationsFirestore(
       window.removeEventListener("storage", handleGlobalReadChange);
     }
     unsubAnnouncements();
-    unsubEvents();
     unsubNotifs();
-    unsubAudit();
   };
 }
 
@@ -503,8 +350,7 @@ export async function markNotificationAsRead(user: User | null, notificationId: 
     const db = getFirebaseDb();
     const docRef = doc(db, "notifications", notificationId);
     await updateDoc(docRef, {
-      readBy: arrayUnion(authUser.uid),
-      read: true
+      readBy: arrayUnion(authUser.uid)
     });
   } catch (err) {
     console.warn("Failed to mark notification as read in Firestore:", err);
@@ -528,8 +374,7 @@ export async function markAllNotificationsAsRead(user: User | null, notification
           const db = getFirebaseDb();
           const docRef = doc(db, "notifications", id);
           await updateDoc(docRef, {
-            readBy: arrayUnion(authUser.uid),
-            read: true
+            readBy: arrayUnion(authUser.uid)
           });
         } catch (err) {
           console.warn("Failed to mark notification as read in Firestore:", err);
@@ -592,8 +437,10 @@ export async function checkAndDispatchDueNudges(): Promise<{ success: boolean; p
           signal: controller.signal
         });
         const data = await res.json();
-        return { success: res.ok && data.success !== false, processedCount: data.processedCount,
-          error: res.ok ? undefined : data.error || data.message || "Could not check due nudges." };
+        return {
+          success: res.ok && data.success !== false, processedCount: data.processedCount,
+          error: res.ok ? undefined : data.error || data.message || "Could not check due nudges."
+        };
       })(),
       new Promise<{ success: false; error: string }>((resolve) => {
         timeout = setTimeout(() => {

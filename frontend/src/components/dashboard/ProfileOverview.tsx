@@ -113,7 +113,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
       {showPerformance && <section aria-label="Profile statistics" aria-busy={loading || tasksLoading} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {[
           { label: "Workload score", value: `${metrics.workload}%`, tone: metrics.workload >= 80 ? "text-rose-500" : metrics.workload >= 50 ? "text-amber-500" : "text-emerald-500", hint: `${metrics.counts.active + metrics.counts.pending} unfinished tasks / ${PROFILE_TASK_CAPACITY}-task capacity` },
-          { label: "Reliability score", value: metrics.reliability === null ? "—" : `${metrics.reliability}%`, tone: "text-blue-600", hint: metrics.reliabilitySampleCount ? `On-time completions across ${metrics.reliabilitySampleCount} tasks with recorded dates` : "No completed tasks with both a completion date and a deadline yet" },
+          { label: "Reliability score", value: metrics.reliability === null ? "—" : `${metrics.reliability}%`, tone: "text-blue-600", hint: metrics.reliabilitySampleCount ? `On-time delivery across ${metrics.reliabilitySampleCount} completed tasks; review delays are excluded when submission time is recorded` : "No completed tasks with recorded delivery dates and deadlines yet" },
           { label: "Avg match %", value: metrics.averageMatch === null ? "—" : `${metrics.averageMatch}%`, tone: "text-blue-600", hint: "Average of saved assignment match scores" },
           { label: "Tasks done", value: metrics.counts.done, tone: "text-slate-900", hint: "Completed tasks assigned to this profile" }
         ].map((metric) => <div key={metric.label} title={metric.hint} className={`${cardClass} px-3 py-5 text-center`}>
@@ -146,7 +146,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
             </div>
           </section>}
 
-          <section aria-label="Personal details" className={`${cardClass} px-5 py-2`}>
+          <section data-tour="profile-details" aria-label="Personal details" className={`${cardClass} px-5 py-2`}>
             <dl className="divide-y divide-slate-100">
               {fields.map(([label, value]) => <div key={label} className="py-3">
                 <dt className={labelClass}>{label}</dt>
@@ -155,7 +155,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
             </dl>
           </section>
 
-          <section aria-labelledby="skills-heading" className={`${cardClass} p-5`}>
+          <section data-tour="profile-skills" aria-labelledby="skills-heading" className={`${cardClass} p-5`}>
             <h3 id="skills-heading" className={labelClass}>Skill keywords</h3>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {user.skills.length ? user.skills.map((skill) => <span key={skill} className="rounded-full bg-[#f0f4f8] px-3 py-1 text-[10px]">{skill}</span>) : <p className="text-xs text-slate-500">{onEdit ? "No skills added yet. Edit your profile to add skills." : "No skills listed."}</p>}
@@ -184,7 +184,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
             {ready && metrics.undatedCompletions > 0 ? <p className="mt-3 text-[10px] leading-relaxed text-slate-400">{metrics.undatedCompletions} completed {metrics.undatedCompletions === 1 ? "task has" : "tasks have"} no recorded completion date and {metrics.undatedCompletions === 1 ? "is" : "are"} excluded from the chart.</p> : null}
           </section>}
 
-          <section aria-labelledby="subtasks-heading" aria-busy={loading || tasksLoading} className={`${cardClass} p-5`}>
+          <section data-tour="profile-tasks" aria-labelledby="subtasks-heading" aria-busy={loading || tasksLoading} className={`${cardClass} p-5`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 id="subtasks-heading" className={labelClass}>All sub-tasks</h3>
               <div className="flex flex-wrap items-center gap-1" aria-label="Filter sub-tasks">

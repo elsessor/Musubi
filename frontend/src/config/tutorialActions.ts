@@ -1,6 +1,8 @@
 // Only navigation and opening/closing UI belong here. Saving and business actions
 // must never be called by a walkthrough.
 export const TUTORIAL_ACTIONS: Record<string, { expected?: string; close?: string }> = {
+  "navigation-open": { expected: "nav-dashboard", close: "navigation-close" }, "navigation-close": {},
+  "overview-tab": {},
   "create-event": { expected: "event-title", close: "event-cancel" },
   "event-cancel": {}, "events-tab": {}, "event-filter-panel": { expected: "event-filter-done", close: "event-filter-done" }, "event-filter-done": {},
   "event-card": { expected: "add-task" }, "task-card": { expected: "task-close", close: "task-close" },

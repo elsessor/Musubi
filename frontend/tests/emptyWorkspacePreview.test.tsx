@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { OrganizationPreview } from "../src/components/dashboard/OrganizationPreview";
 import { EventPlaceholderCard } from "../src/components/events/EventPlaceholderCard";
+import { EventWorkspacePreview } from "../src/components/events/EventWorkspacePreview";
 import { EventsTasksView } from "../src/components/events/EventsTasksView";
 import { AtomizerForm } from "../src/components/events/AtomizerForm";
 import { useAuthStore } from "../src/store/authStore";
@@ -40,6 +41,24 @@ test("event placeholders describe the card layout without becoming selectable re
   const html = renderToStaticMarkup(createElement(EventPlaceholderCard));
   for (const label of ["Event name", "Event status", "Committee", "Start date", "End date", "Members", "Task progress"]) assert.ok(html.includes(label), label);
   assert.doesNotMatch(html, /<button|href=|data-tour="event-card"/);
+});
+
+test("event placeholders provide a preview action without becoming business records", () => {
+  const html = renderToStaticMarkup(createElement(EventPlaceholderCard, { onPreview: () => {} }));
+  assert.match(html, /Explore event workspace/);
+  assert.doesNotMatch(html, /data-tour="event-card"|href=/);
+});
+
+test("event workspace previews expose guide targets without enabling organization writes", () => {
+  for (const isLeader of [false, true]) {
+    const html = renderToStaticMarkup(createElement(EventWorkspacePreview, { isLeader, onBack: () => {} }));
+    for (const target of ["event-workspace", "event-summary", "task-view", "task-committee-filter", "task-status-filter", "task-search", "event-task-workspace"]) assert.ok(html.includes(`data-tour="${target}"`), target);
+    assert.match(html, /data-event-id="workspace-preview"/);
+    assert.match(html, /Task title/);
+    assert.equal(html.includes("Add Task"), isLeader);
+    if (isLeader) assert.match(html, /disabled=""/);
+    assert.doesNotMatch(html, /type="submit"|data-tour="task-card"/);
+  }
 });
 
 test("every Organization tab retains its layout while a join request is pending", () => {

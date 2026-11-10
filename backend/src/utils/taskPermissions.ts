@@ -24,6 +24,7 @@ export function assertCanContributeTask(user: TaskActor, orgId: unknown, task: T
   assertEventAccess(user, orgId);
   if (task.archivedAt || String(task.status).toLowerCase() === "archived") throw new AppError("Restore this archived subtask before making changes.", 409);
   if (isTaskLeader(user)) return;
+  if (["cancelled", "canceled"].includes(String(task.status).trim().toLowerCase())) throw new AppError("A leader must reopen this cancelled task before you can work on it.", 409);
   const name = String(task.assignedMemberName || task.assignee?.name || task.assigneeName || "").trim().toLowerCase();
   const ownsTask = task.assignedMemberUID
     ? task.assignedMemberUID === user.uid
@@ -31,12 +32,13 @@ export function assertCanContributeTask(user: TaskActor, orgId: unknown, task: T
   if (!ownsTask) throw new AppError("You can only update status or add attachments on subtasks assigned to you.", 403);
 }
 
-export function applyTaskStatusUpdate(task: TaskRecord, input: unknown, event: TaskRecord): TaskRecord {
+export function applyTaskStatusUpdate(task: TaskRecord, input: unknown, event: TaskRecord, actor?: TaskActor): TaskRecord {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new AppError("Choose a valid task status.", 400);
   const update = input as TaskRecord;
+  if (["cancelled", "canceled"].includes(String(update.status).trim().toLowerCase()) && (!actor || !isTaskLeader(actor))) throw new AppError("Only leaders can cancel tasks.", 403);
   if (Object.keys(update).some((key) => key !== "status")) throw new AppError("This action only allows updating the task status.", 403);
   const allowed = new Set([
-    "To Do", "In Progress", "In Review", "Completed", "Done", "Pending", task.status,
+    "To Do", "In Progress", "In Review", "Completed", "Done", "Pending", "Cancelled", task.status,
     ...(Array.isArray(event.customStatuses) ? event.customStatuses.map((status: TaskRecord) => status.name) : []),
     ...(Array.isArray(event.statusOrder) ? event.statusOrder : [])
   ]);

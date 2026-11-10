@@ -11,19 +11,19 @@ export function controlDetails(role: UserRole, route: string, marker: string): T
 }
 
 export function describeControl(label: string, tag: string, type: string, role: string | null): string {
-  if (tag === "input" && type === "file") return "Select a real file only when you intend to attach or upload it. Check the file requirements before submitting. This guide never uploads files.";
-  if (tag === "input" && type === "checkbox") return "This checkbox selects an item or toggles the displayed option. Check which items are selected before using a bulk action or saving.";
-  if (/search/i.test(label)) return "Enter text to narrow the records shown on this screen. Clear the search to restore results; combine it with the available filters.";
-  if (/filter|all (roles|organizations|committees|statuses|categories)|date range/i.test(label)) return "Use this filter to narrow the records displayed. The all/reset option removes that restriction. Filters do not grant access to additional records.";
-  if (/cancel|^close$|^back$|^done$/i.test(label)) return "Return to the previous view or close the current menu or form. Review any unsaved input before leaving.";
-  if (/save|submit|publish|approve|reject|delete|remove|archive|restore|send|sync|connect|disconnect|generate|auto.assign|auto.fix|mark.*read|confirm/i.test(label) || type === "submit") return "This action can save changes, change records, send a notification, or affect an external service according to its label. Review the current record, fields, and any confirmation first. The guide explains it without activating it; exit before acting intentionally.";
-  if (/grid|table|expanded|kanban|calendar|list view/i.test(label)) return "Switch how the same accessible records are displayed. Grid emphasizes cards, table emphasizes columns, Kanban groups by status, and calendar places scheduled work by date.";
-  if (/previous|next|today|month|week|day|year/i.test(label)) return "Move through the displayed records or calendar period. Check the current date range or page indicator to keep your place.";
-  if (/view profile|view details|details|^edit|change role|reassign/i.test(label)) return "Open details or an editor for the selected record. Opening it is separate from saving; inspect permissions and consequences before confirming any changes.";
-  if (tag === "select" || role === "combobox" || role === "listbox") return "Open the available choices and select the value that fits your task. Check the field label and selected value before saving. Some options may be disabled by permissions or workflow rules.";
-  if (tag === "input" || tag === "textarea") return `Use this ${type === "number" ? "numeric field" : type === "date" ? "date field" : "field"} for ${label.toLowerCase()}. Required fields and validation messages must be satisfied before submitting. This guide does not enter or save information.`;
-  if (role === "tab" || /overview|members|committees|announcements|notifications|activity|nudges|ratings/i.test(label)) return "Switch to this section to inspect its information and available actions. Your role determines which records and management controls are visible.";
-  return `Use ${label} in the current screen. For a step-by-step explanation of the associated form or workflow, choose its guide from Help / User Guide. This reference does not activate the control.`;
+  if (tag === "input" && type === "file") return "Select a file that meets the attachment requirements. The guide never uploads files; close it before uploading your work.";
+  if (tag === "input" && type === "checkbox") return "Select or clear this option. Review selected items before applying a bulk action or saving changes.";
+  if (/search/i.test(label)) return "Enter a search term to narrow the records displayed. Clear the search to restore the list.";
+  if (/filter|all (roles|organizations|committees|statuses|categories)|date range/i.test(label)) return "Select a filter to limit the records displayed. Choose All or Reset to remove that filter.";
+  if (/cancel|^close$|^back$|^done$/i.test(label)) return "Close this view or return to the previous screen. Review any unsaved changes before leaving.";
+  if (/save|submit|publish|approve|reject|delete|remove|archive|restore|send|sync|connect|disconnect|generate|auto.assign|auto.fix|mark.*read|confirm/i.test(label) || type === "submit") return "Review the selected item and any confirmation before proceeding. This action may save changes, send a notification, or update a connection. The guide explains it without activating it.";
+  if (/grid|table|expanded|kanban|calendar|list view/i.test(label)) return "Choose how records are displayed: cards, lists, table rows, status columns, or calendar entries.";
+  if (/previous|next|today|month|week|day|year/i.test(label)) return "Use these controls to change the page or calendar period. Check the page number or date range to confirm your location.";
+  if (/view profile|view details|details|^edit|change role|reassign/i.test(label)) return "Open the selected item to review its details or editable fields. Changes take effect only after saving.";
+  if (tag === "select" || role === "combobox" || role === "listbox") return "Select an available value for this field. Review the selection before saving; permissions or workflow requirements may limit the choices.";
+  if (tag === "input" || tag === "textarea") return `${type === "number" ? "Enter a number" : type === "date" ? "Select a date" : "Enter a value"} for ${label.toLowerCase()}. Required fields and validation errors must be addressed before submitting.`;
+  if (role === "tab" || /overview|members|committees|announcements|notifications|activity|nudges|ratings/i.test(label)) return "Open this section to review its information and actions. Available controls depend on your role and organization permissions.";
+  return `Select ${label} to access its available options. Related workflow instructions are available in Help / User Guide.`;
 }
 
 export function collectPageControls(role: UserRole, route: string, scope?: Element | null): { steps: TourStep[]; cleanup: () => void } {
@@ -57,7 +57,7 @@ export function collectPageControls(role: UserRole, route: string, scope?: Eleme
     const id = `control-${steps.length}`;
     records.push({ element, previous: element.getAttribute('data-tour-control') });
     element.setAttribute('data-tour-control', id);
-    const disabled = element.matches(':disabled, [aria-disabled="true"]') ? " This control is currently disabled; its prerequisites or permissions must be satisfied first." : "";
+    const disabled = element.matches(':disabled, [aria-disabled="true"]') ? " This control is unavailable until its requirements or permissions are met." : "";
     const title = curated && ["event-view", "event-status-filter"].includes(marker ?? "") ? `${curated.title}: ${label}` : curated?.title ?? label;
     const details = marker ? controlDetails(role, route, marker) : [];
     steps.push({ id, title, description: (curated?.description ?? describeControl(label, tag, type, element.getAttribute('role'))) + disabled,

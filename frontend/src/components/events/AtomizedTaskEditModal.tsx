@@ -9,6 +9,7 @@ import { sendNudgeEmail } from "@/services/notifications.service";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
+import { getTaskReminder } from "@/utils/taskTiming";
 import { findBestMemberForSubtask } from "@/utils/heuristicDelegation";
 import { resolveSubtaskAssignee, uniqueOrganizationMembers } from "@/utils/subtaskAssignment";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
@@ -117,7 +118,7 @@ export function AtomizedTaskEditModal({ subtask, subtasks = [subtask], members, 
       return;
     }
     const estimatedDays = Math.max(1, Math.ceil((targetDate.getTime() - scheduleStart.getTime()) / 86400000));
-    const daysUntilDue = (targetDate.getTime() - Date.now()) / 86400000;
+    const timing = getTaskReminder({ status: "To Do", dueDate: deadline });
     const nudges = [3, 1].map((days) => ({
       nudgeUID: `${subtask.id}_${days}d`,
       triggerDate: new Date(targetDate.getTime() - days * 86400000).toISOString().split("T")[0],
@@ -130,8 +131,9 @@ export function AtomizedTaskEditModal({ subtask, subtasks = [subtask], members, 
         taskTitle: title.trim(),
         eventName: "Organization Task",
         deadline,
-        isUrgent: daysUntilDue <= 1,
-        nudgeType: daysUntilDue <= 1 ? "1_day_prior" : daysUntilDue <= 3 ? "3_days_prior" : "standard"
+        message: timing ? `${timing.label}. Please check your task progress.` : "Please check your task progress.",
+        isUrgent: timing?.kind === "overdue" || timing?.kind === "due-today",
+        nudgeType: timing?.kind === "due-tomorrow" ? "1_day_prior" : timing?.kind === "due-today" ? "due_today" : timing?.kind || "standard"
       }).then((result) => {
         if (!result.success) useToastStore.getState().showToast({ title: "Could not send nudge", description: result.error || "The task was saved, but the email could not be sent.", tone: "error" });
       });

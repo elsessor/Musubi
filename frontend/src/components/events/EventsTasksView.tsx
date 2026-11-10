@@ -8,6 +8,7 @@ import { BookOpen, CalendarDays, Plus, X, Zap } from "lucide-react";
 import { AtomizerForm } from "./AtomizerForm";
 import { EventsDashboard } from "./EventsDashboard";
 import { KanbanBoard } from "./KanbanBoard";
+import { EventWorkspacePreview } from "./EventWorkspacePreview";
 import { TaskAssigneeMembersContext } from "./TaskAssignee";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import type { CustomStatusConfig } from "./statusUtils";
@@ -21,6 +22,7 @@ import { useToastStore } from "@/store/toastStore";
 import { createEventFirestore, subscribeEventsFirestore, updateEventFirestore } from "@/services/events.service";
 import { getOrganizationCommittees, subscribeOrganizationMembersFirestore, type OrganizationMember } from "@/services/auth.service";
 import { prepareTasksForReuse } from "@/utils/taskReuse";
+import { TutorialContextualHelp } from "@/components/onboarding/TutorialProvider";
 
 type Tab = "events" | "atomizer";
 
@@ -42,8 +44,9 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId?: stri
 
   const [activeTab, setActiveTab] = useState<Tab>("events");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [previewEventOpen, setPreviewEventOpen] = useState(false);
   useEffect(() => {
-    const prepare = () => { setActiveTab("events"); setSelectedEvent(null); };
+    const prepare = () => { setActiveTab("events"); setSelectedEvent(null); setPreviewEventOpen(false); };
     window.addEventListener("musubi:tutorial:prepare-events", prepare);
     return () => window.removeEventListener("musubi:tutorial:prepare-events", prepare);
   }, []);
@@ -267,14 +270,17 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId?: stri
           onClick={() => { setActiveTab("events"); }}
         />
         {isLeader && (
-          <TabButton
-            tourId="ai-tab"
-            icon={<Zap size={14} className="text-blue-500" />}
-            label="AI Task Atomizer"
-            badge="AI"
-            active={currentTab === "atomizer"}
-            onClick={() => { setActiveTab("atomizer"); setSelectedEvent(null); }}
-          />
+          <>
+            <TabButton
+              tourId="ai-tab"
+              icon={<Zap size={14} className="text-blue-500" />}
+              label="AI Task Atomizer"
+              badge="AI"
+              active={currentTab === "atomizer"}
+              onClick={() => { setActiveTab("atomizer"); setSelectedEvent(null); }}
+            />
+            <TutorialContextualHelp tour="ai-delegation" label="Help with AI Task Atomizer" />
+          </>
         )}
       </div>
 
@@ -282,6 +288,8 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId?: stri
       <div className="min-w-0 flex-1">
         {currentTab === "atomizer" && isLeader ? (
           <AtomizerForm events={events} members={members} onPublishGoalTasks={handlePublishGoalTasks} />
+        ) : previewEventOpen && !effectiveOrgId ? (
+          <EventWorkspacePreview isLeader={isLeader} onBack={() => setPreviewEventOpen(false)} />
         ) : selectedEvent ? (
           <KanbanBoard
             event={selectedEvent}
@@ -300,6 +308,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId?: stri
             events={events}
             isLeader={isLeader}
             onSelectEvent={handleSelectEvent}
+            onPreviewEvent={!effectiveOrgId ? () => setPreviewEventOpen(true) : undefined}
             onNewEvent={handleNewEvent}
             onUpdateEvent={handleUpdateEvent}
           />

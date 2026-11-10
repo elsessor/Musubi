@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getTourSteps, isTutorialStatus, TOUR_IDS } from "../../frontend/src/config/tutorial.js";
 import { getWorkflowTours } from "../../frontend/src/config/tutorialWorkflows.js";
-import { canInteractWithTourTarget, findTourHighlightTargets, findTourTarget, getTourHighlightRect, openTutorialControl } from "../../frontend/src/components/onboarding/tourTargets.js";
+import { canInteractWithTourTarget, findTourHighlightTargets, findTourSidebarTarget, findTourTarget, getTourHighlightRect, openTutorialControl } from "../../frontend/src/components/onboarding/tourTargets.js";
 import { controlDetails, describeControl } from "../../frontend/src/components/onboarding/controlGuide.js";
 import { tutorialStatusSchema } from "../src/utils/tutorialStatus.js";
 
@@ -117,6 +117,131 @@ test("visible target lookup handles duplicate responsive controls and hidden con
   assert.equal(findTourTarget(step), visible);
   doc.querySelectorAll = () => [];
   assert.equal(findTourTarget(step), null);
+});
+
+test("full walkthrough highlights page content consistently across roles and screen sizes", (t) => {
+  const element = () => ({ getBoundingClientRect: () => ({ width: 100, height: 40, right: 140, left: 40 }) });
+  const workspace = element(), sidebar = element(), control = element();
+  const viewport = { innerWidth: 375 };
+  const values = {
+    window: viewport,
+    document: { querySelectorAll: (selector: string) => selector === '[data-tour="workspace"]' ? [workspace] : selector.includes('nav-') ? [sidebar] : [control] },
+    getComputedStyle: () => ({ visibility: "visible" })
+  };
+  for (const [key, value] of Object.entries(values)) {
+    const old = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { value, configurable: true });
+    t.after(() => old ? Object.defineProperty(globalThis, key, old) : Reflect.deleteProperty(globalThis, key));
+  }
+  for (const width of [375, 768, 1440]) {
+    viewport.innerWidth = width;
+    for (const role of roles) {
+      for (const step of getTourSteps(role, "features")) {
+        assert.deepEqual(findTourHighlightTargets(step), [step.id === "finish" ? control : workspace], `${role}: ${step.id} at ${width}px`);
+        if (step.id === "finish") {
+          assert.equal(step.target, "help");
+          assert.equal(step.selector, undefined);
+          assert.equal(step.sidebarTarget, undefined);
+        }
+        assert.equal(step.openOnNext, undefined);
+      }
+      assert.equal(findTourTarget(getTourSteps(role, "quick")[0]), workspace);
+    }
+    // Detailed workflows retain control-level highlights.
+    const create = getTourSteps("Student Leader", "event-create")[0];
+    assert.deepEqual(findTourHighlightTargets(create), [control]);
+  }
+  const events = getTourSteps("Student Leader", "features").find((step) => step.id === "events")!;
+  assert.equal(events.prepare, "events", "Returning from the AI overview restores the event list");
+});
+
+test("full walkthrough identifies the matching sidebar tab and uses the menu button on phones", (t) => {
+  const expectedTabs: Record<string, string> = {
+    "/admin": "nav-dashboard", "/dashboard": "nav-dashboard",
+    "/admin/org-requests": "nav-org-requests", "/admin/organizations": "nav-organizations", "/admin/members": "nav-members",
+    "/admin/audit-logs": "nav-audit-logs", "/admin/settings": "nav-settings",
+    "/dashboard/events": "nav-events", "/dashboard/organization": "nav-organization", "/dashboard/analytics": "nav-analytics",
+    "/dashboard/notifications": "nav-notifications", "/dashboard/settings": "nav-settings"
+  };
+  const viewport = { innerWidth: 375 };
+  let collapsed = false, menuHidden = false;
+  const workspace = { getBoundingClientRect: () => ({ width: 100, height: 40, right: 140, left: 40 }) };
+  const help = { getBoundingClientRect: () => ({ width: 44, height: 44, right: viewport.innerWidth - 12, left: viewport.innerWidth - 56 }) };
+  const menu = { getBoundingClientRect: () => ({ width: 44, height: 44, right: 56, left: 12 }) };
+  const links = new Map(Object.values(expectedTabs).map((id) => [id, {
+    getBoundingClientRect: () => ({ width: collapsed ? 44 : 200, height: 44, left: viewport.innerWidth < 768 ? -240 : 12, right: viewport.innerWidth < 768 ? -40 : collapsed ? 56 : 212 })
+  }]));
+  const values = {
+    window: viewport,
+    document: { querySelectorAll: (selector: string) => {
+      if (selector === '[data-tour="workspace"]') return [workspace];
+      if (selector === '[data-tour="help"]') return [help];
+      if (selector === 'button[aria-label="Open navigation"]') return viewport.innerWidth < 768 && !menuHidden ? [menu] : [];
+      const id = selector.match(/^\[data-tour="([^"]+)"\]$/)?.[1];
+      return id && links.has(id) ? [links.get(id)] : [];
+    } },
+    getComputedStyle: () => ({ visibility: "visible" })
+  };
+  for (const [key, value] of Object.entries(values)) {
+    const old = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { value, configurable: true });
+    t.after(() => old ? Object.defineProperty(globalThis, key, old) : Reflect.deleteProperty(globalThis, key));
+  }
+  for (const width of [375, 768, 1440]) {
+    viewport.innerWidth = width;
+    for (const role of roles) for (const step of getTourSteps(role, "features")) {
+      if (step.id === "finish") {
+        assert.equal(findTourSidebarTarget(step), null);
+        assert.deepEqual(findTourHighlightTargets(step), [help], "The final step highlights Help on phones and desktops");
+        continue;
+      }
+      assert.equal(step.sidebarTarget, expectedTabs[step.route], `${role}: ${step.id}`);
+      assert.equal(findTourSidebarTarget(step), width < 768 ? menu : links.get(expectedTabs[step.route]));
+      assert.deepEqual(findTourHighlightTargets(step), [workspace], "The sidebar must not expand the page highlight bounds");
+    }
+  }
+  collapsed = true;
+  const events = getTourSteps("Student Leader", "features").find((step) => step.id === "events")!;
+  assert.equal(findTourSidebarTarget(events), links.get("nav-events"));
+  viewport.innerWidth = 375; menuHidden = true;
+  assert.equal(findTourSidebarTarget(events), null);
+  assert.deepEqual(findTourHighlightTargets(events), [workspace]);
+  assert.equal(findTourSidebarTarget(getTourSteps("Student Leader", "event-create")[0]), null);
+});
+
+test("event introduction highlights mobile Filters alongside the view selector and desktop filter controls", (t) => {
+  const viewport = { innerWidth: 375, innerHeight: 700 };
+  const box = (left: number, right: number) => ({ left, right, top: 100, bottom: 144, width: right - left, height: 44 });
+  const hidden = { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 };
+  const filterButton = { getBoundingClientRect: () => viewport.innerWidth < 640 ? box(4, 78) : hidden };
+  const committee = { getBoundingClientRect: () => viewport.innerWidth >= 640 ? box(4, 150) : hidden };
+  const status = { getBoundingClientRect: () => viewport.innerWidth >= 640 ? box(160, 300) : hidden };
+  const view = { getBoundingClientRect: () => box(90, 280) };
+  const elements = new Map([["event-filter-panel", filterButton], ["event-committee-filter", committee], ["event-status-filter", status], ["event-view", view]]);
+  const values = {
+    window: viewport,
+    document: { querySelectorAll: (selector: string) => {
+      const id = selector.match(/^\[data-tour="([^"]+)"\]$/)?.[1];
+      return id && elements.has(id) ? [elements.get(id)] : [];
+    } },
+    getComputedStyle: () => ({ visibility: "visible" })
+  };
+  for (const [key, value] of Object.entries(values)) {
+    const old = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { value, configurable: true });
+    t.after(() => old ? Object.defineProperty(globalThis, key, old) : Reflect.deleteProperty(globalThis, key));
+  }
+  for (const role of ["Student Leader", "Organization Member"] as const) {
+    const step = getTourSteps(role, "page-events").find((step) => step.id === "events-views")!;
+    viewport.innerWidth = 375;
+    const targets = findTourHighlightTargets(step);
+    assert.deepEqual(targets, [filterButton, view]);
+    const bounds = getTourHighlightRect(targets)!;
+    assert.ok(bounds.x <= 4 && bounds.x + bounds.width >= 280);
+    assert.ok(bounds.x + bounds.width < 292, "New Event must remain outside the highlight");
+    viewport.innerWidth = 1440;
+    assert.deepEqual(findTourHighlightTargets(step), [committee, status, view]);
+  }
 });
 
 test("group highlights include every available field when another field is missing or hidden", (t) => {

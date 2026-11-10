@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Bell, Check, LogOut, Menu, Settings, User } from "lucide-react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 
@@ -165,8 +166,8 @@ export function TopHeader({
           typeof data.availability === "string" && data.availability.trim()
             ? data.availability
             : typeof data.status === "string" && data.status.trim()
-            ? data.status
-            : "Available";
+              ? data.status
+              : "Available";
 
         const liveEmail =
           typeof data.email === "string" && data.email.trim()
@@ -268,7 +269,7 @@ export function TopHeader({
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
     };
-  }, [firebaseUser?.uid, liveUser.organizationId, profile?.organizationId]);
+  }, [firebaseUser, liveUser.organizationId, profile?.organizationId]);
 
   const bellCount = liveUnreadCount !== null ? notifications.filter((item) => item.unread).length : (notificationCount || 0);
 
@@ -376,6 +377,7 @@ export function TopHeader({
     <header className="sticky top-0 z-20 flex min-h-[64px] items-center justify-between gap-3 border-b border-slate-200/80 bg-[#f1f4f8]/95 px-4 py-3 backdrop-blur sm:px-6 lg:min-h-[80px] lg:px-9 lg:py-3">
       <div className="flex min-w-0 items-center gap-3">
         <button
+          data-tour="navigation-open"
           aria-label="Open navigation"
           className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-200 md:hidden"
           onClick={onMenuToggle}
@@ -394,29 +396,44 @@ export function TopHeader({
           </p>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
         <TutorialHelpButton />
         {liveUser.role !== "Admin" ? (
-          <div ref={notificationRef} className="static sm:relative">
-          <button
-            ref={notificationBellRef}
-            aria-label={`Notifications ${bellCount}`}
-            aria-expanded={notificationsOpen}
-            aria-controls="header-notifications"
-            aria-haspopup="dialog"
-            onClick={() => { setNotificationsOpen((current) => !current); setMenuOpen(false); }}
-            className="relative flex size-10 cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:size-11 sm:rounded-xl"
-            type="button"
-          >
-            <Bell className="size-5" strokeWidth={1.75} />
-            <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
-              {bellCount}
-            </span>
-          </button>
-          {notificationsOpen && (
-            <NotificationPanel notifications={notifications} onClose={closeNotifications} onRead={readNotification} onReadAll={readAllNotifications} />
-          )}
-          </div>
+          <>
+            <Link
+              href="/dashboard/notifications"
+              aria-label={`Notifications ${bellCount}`}
+              onClick={() => { setNotificationsOpen(false); setMenuOpen(false); }}
+              className="relative flex size-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:hidden"
+            >
+              <Bell className="size-5" strokeWidth={1.75} />
+              <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
+                {bellCount}
+              </span>
+            </Link>
+            <div ref={notificationRef} className="relative hidden sm:block">
+              <button
+                ref={notificationBellRef}
+                aria-label={`Notifications ${bellCount}`}
+                aria-expanded={notificationsOpen}
+                aria-controls="header-notifications"
+                aria-haspopup="dialog"
+                onClick={() => { setNotificationsOpen((current) => !current); setMenuOpen(false); }}
+                className="relative flex size-10 cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:bg-slate-50 sm:size-11 sm:rounded-xl"
+                type="button"
+              >
+                <Bell className="size-5" strokeWidth={1.75} />
+                {bellCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-[#ff2c62] px-1.5 py-0.5 text-xs font-extrabold leading-none text-white">
+                    {bellCount}
+                  </span>
+                ) : null}
+              </button>
+              {notificationsOpen && (
+                <NotificationPanel notifications={notifications} onClose={closeNotifications} onRead={readNotification} onReadAll={readAllNotifications} />
+              )}
+            </div>
+          </>
         ) : null}
         <div ref={menuRef} className="relative">
           <button
@@ -453,11 +470,10 @@ export function TopHeader({
               <div className="space-y-1.5">
                 {/* Available Option */}
                 <button
-                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
-                    currentAvailability === "Available"
+                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${currentAvailability === "Available"
                       ? getAvailabilityTheme("Available").badge
                       : "border-transparent hover:bg-slate-50"
-                  }`}
+                    }`}
                   onClick={() => handleAvailabilityChange("Available")}
                   type="button"
                 >
@@ -479,11 +495,10 @@ export function TopHeader({
 
                 {/* Busy Option */}
                 <button
-                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
-                    currentAvailability === "Busy"
+                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${currentAvailability === "Busy"
                       ? getAvailabilityTheme("Busy").badge
                       : "border-transparent hover:bg-slate-50"
-                  }`}
+                    }`}
                   onClick={() => handleAvailabilityChange("Busy")}
                   type="button"
                 >
@@ -505,11 +520,10 @@ export function TopHeader({
 
                 {/* On Leave Option */}
                 <button
-                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${
-                    currentAvailability === "On Leave"
+                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left transition ${currentAvailability === "On Leave"
                       ? getAvailabilityTheme("On Leave").badge
                       : "border-transparent hover:bg-slate-50"
-                  }`}
+                    }`}
                   onClick={() => handleAvailabilityChange("On Leave")}
                   type="button"
                 >

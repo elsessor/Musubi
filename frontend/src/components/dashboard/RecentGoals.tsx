@@ -39,7 +39,7 @@ function GoalRow({ title, dueDate, progress, status, customStatuses }: Dashboard
 
 export function RecentGoals({ goals }: RecentGoalsProps) {
   return (
-    <article className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
+    <article data-tour="dashboard-work" className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600" aria-hidden="true"><Target className="size-4" /></span>

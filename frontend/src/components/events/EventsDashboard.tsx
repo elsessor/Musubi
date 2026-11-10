@@ -52,6 +52,7 @@ type EventsDashboardProps = {
   organizationId?: string | null;
   isLeader?: boolean;
   onSelectEvent: (event: Event) => void;
+  onPreviewEvent?: () => void;
   onNewEvent: (initialStatus?: EventStatus) => void;
   onUpdateEvent?: (updatedEvent: Event) => void;
   committees?: { id: string; name: string }[];
@@ -62,6 +63,7 @@ export function EventsDashboard({
   organizationId,
   isLeader = true,
   onSelectEvent: selectEvent,
+  onPreviewEvent,
   onNewEvent,
   onUpdateEvent,
   committees = []
@@ -592,12 +594,13 @@ export function EventsDashboard({
       </div>
 
       {/* 1. Grid View */}
+      {preview && onPreviewEvent && viewMode !== "grid" && viewMode !== "expanded" && <button type="button" onClick={onPreviewEvent} className="mb-4 min-h-11 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Explore event workspace</button>}
       {viewMode === "grid" && (
         <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-3">
           {visible.map((event) => (
             <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} />
           ))}
-          {preview && visible.length === 0 && <><EventPlaceholderCard /><EventPlaceholderCard /></>}
+          {preview && visible.length === 0 && <><EventPlaceholderCard onPreview={onPreviewEvent} /><EventPlaceholderCard onPreview={onPreviewEvent} /></>}
           {isLeader && !compactMobile && <CreateEventCard onClick={() => onNewEvent()} />}
         </div>
       )}
@@ -674,7 +677,7 @@ export function EventsDashboard({
       {/* 3. Expanded View */}
       {viewMode === "expanded" && (
         <div className="space-y-4">
-          {preview && visible.length === 0 && <EventPlaceholderCard />}
+          {preview && visible.length === 0 && <EventPlaceholderCard onPreview={onPreviewEvent} />}
           {visible.map((event) => {
             const theme = getStatusTheme(event.status, customStatuses);
             return (
