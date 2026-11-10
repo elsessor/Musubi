@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ArrowLeft, ArrowRight, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import type { TourStep } from "@/config/tutorial";
 import { canInteractWithTourTarget, findTourHighlightTargets, getTourHighlightRect, openTutorialControl } from "./tourTargets";
@@ -30,6 +31,7 @@ export function GuidedTour({ steps, index, onStep, onExit }: Props) {
   const [position, setPosition] = useState<{ left: number; top: number; maxHeight?: number; maxWidth?: number }>({ left: 16, top: 16 });
   const [ready, setReady] = useState(false);
   const [interactive, setInteractive] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export function GuidedTour({ steps, index, onStep, onExit }: Props) {
   }, []);
 
   useEffect(() => {
+    setReferenceOpen(false);
     if (content.current) content.current.scrollTop = 0;
     panel.current?.focus({ preventScroll: true });
   }, [index, portalHost]);
@@ -117,7 +120,7 @@ export function GuidedTour({ steps, index, onStep, onExit }: Props) {
       if (workspace?.getAttribute("data-tutorial-ready") === "true" && el && box && box.width > 0 && box.height > 0 && box.right > 0 && box.left < window.innerWidth) {
         if (!scrolled) {
           // These selectors identify read-only tabs, never forms or business actions.
-          if (!step.interaction && ["announcements-tab", "ai-tab", "members-tab", "committees-tab"].includes(step.target)) el.click();
+          if (!step.interaction && ["overview-tab", "announcements-tab", "ai-tab", "members-tab", "committees-tab"].includes(step.target)) el.click();
           el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" }); scrolled = true;
         }
         const allowed = canInteractWithTourTarget(el, step);
@@ -152,7 +155,7 @@ export function GuidedTour({ steps, index, onStep, onExit }: Props) {
       const originX = viewport?.offsetLeft ?? 0, originY = viewport?.offsetTop ?? 0;
       const margin = vw < 640 ? 16 : 24;
       const maxWidth = Math.max(0, vw - margin * 2);
-      const maxHeight = Math.max(0, Math.min(vh - margin * 2, vw < 640 ? vh * 0.48 : vh));
+      const maxHeight = Math.max(0, Math.min(vh - margin * 2, vw < 640 ? Math.max(200, vh * (referenceOpen ? 0.72 : 0.48)) : vh));
       const width = Math.min(panel.current?.offsetWidth ?? 320, maxWidth), height = Math.min(panel.current?.offsetHeight ?? 260, maxHeight);
       const minLeft = originX + margin, minTop = originY + margin;
       const maxLeft = Math.max(minLeft, originX + vw - width - margin), maxTop = Math.max(minTop, originY + vh - height - margin);
@@ -178,7 +181,7 @@ export function GuidedTour({ steps, index, onStep, onExit }: Props) {
     viewport?.addEventListener("resize", place);
     viewport?.addEventListener("scroll", place);
     return () => { observer.disconnect(); window.removeEventListener("resize", place); viewport?.removeEventListener("resize", place); viewport?.removeEventListener("scroll", place); };
-  }, [rect, step, ready, interactive, portalHost]);
+  }, [rect, step, ready, interactive, portalHost, referenceOpen]);
 
   if (!portalHost) return null;
   return createPortal(<>
@@ -196,32 +199,34 @@ export function GuidedTour({ steps, index, onStep, onExit }: Props) {
         <div className="pointer-events-auto absolute right-0" style={{ top: rect.y, left: rect.x + rect.width, height: rect.height }} />
       </div> : <div aria-hidden="true" className="fixed inset-0 z-[200]" />}
       <div data-tour-dialog role="dialog" aria-modal={!interactive} aria-labelledby={`${maskId}-title`} aria-describedby={`${maskId}-description`} tabIndex={-1} ref={panel} style={position} className="fixed z-[201] flex max-h-[48dvh] w-[min(20rem,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white p-3 text-slate-900 shadow-2xl outline-none [overflow-wrap:anywhere] motion-safe:transition-[left,top] motion-safe:duration-150 sm:max-h-[calc(100dvh-48px)] sm:w-[min(28rem,calc(100vw-48px))] sm:p-5">
-        <div ref={content} className="min-h-0 overflow-y-auto overscroll-contain pr-1">
-        <div aria-live="polite" aria-atomic="true">
-          <p className="mb-1 pr-8 text-[10px] font-bold uppercase tracking-wide text-blue-700 sm:mb-3 sm:text-xs">Step {index + 1} of {steps.length}</p>
-          <h2 id={`${maskId}-title`} className="pr-8 text-[15px] font-bold leading-snug sm:text-lg">{step.title}</h2>
-          <p id={`${maskId}-description`} className="mt-2 text-xs leading-5 text-slate-600 sm:mt-3 sm:text-sm sm:leading-relaxed">{step.description}</p>
+        <div aria-live="polite" aria-atomic="true" className="shrink-0 pb-2 pr-8 sm:pb-3">
+          <p className="mb-1 text-[11px] font-bold text-blue-700 sm:mb-2 sm:text-xs">Step {index + 1} of {steps.length}</p>
+          <h2 id={`${maskId}-title`} className="text-[15px] font-bold leading-snug sm:text-lg">{step.title}</h2>
         </div>
-        {step.details && <FieldReference key={step.id} fields={step.details} />}
-        {!ready && <p role="status" className="mt-3 text-xs text-slate-500">Opening your workspace…</p>}
-        {ready && !rect && <p className="mt-3 text-xs text-slate-500">This control is currently unavailable. You can still read this instruction and continue.</p>}
-        {interactive && <button type="button" onClick={() => targetRef.current?.focus()} className={`${control} mt-3 border border-blue-200 text-blue-700`}>Focus highlighted control</button>}
-        {interactive && <p role="status" className="mt-2 text-xs text-blue-700">Click the highlighted control to continue, or choose Skip step.</p>}
+        <div ref={content} className="min-h-0 overflow-y-auto overscroll-contain pr-1">
+          <p id={`${maskId}-description`} className="text-xs leading-5 text-slate-600 sm:text-sm sm:leading-relaxed">{step.description}</p>
+          {step.details && <FieldReference key={step.id} fields={step.details} onOpenChange={setReferenceOpen} />}
+          {!ready && <p role="status" className="mt-2 text-xs text-slate-500">Opening your workspace…</p>}
+          {ready && !rect && <p className="mt-2 text-xs text-slate-500">Currently unavailable. Read the guide and continue with Next.</p>}
+          {interactive && <button type="button" onClick={() => targetRef.current?.focus()} className={`${control} mt-2 border border-blue-200 text-blue-700`}>Focus highlighted control</button>}
+          {interactive && <p role="status" className="mt-1 text-xs text-blue-700">Select the highlight to continue, or skip this step.</p>}
         </div>
         <div className="shrink-0 bg-white">
-        <div role="progressbar" aria-label="Tutorial progress" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={index + 1} className="my-2 h-1 overflow-hidden rounded-full bg-slate-100 sm:my-4 sm:h-1.5"><div className="h-full bg-blue-600" style={{ width: `${(index + 1) / steps.length * 100}%` }} /></div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button type="button" className={`${control} text-slate-600 hover:bg-slate-100`} onClick={() => onExit(false)}>Skip Tutorial</button>
-          <div className="flex gap-1">
-            <button type="button" className={`${control} border border-slate-200`} disabled={index === 0} onClick={() => onStep(index - 1)}>Back</button>
-            <button type="button" className={`${control} bg-blue-600 text-white hover:bg-blue-700`} onClick={() => {
-              if (step.openOnNext) openControl(step.openOnNext);
-              index === steps.length - 1 ? onExit(true) : onStep(index + 1);
-            }}>{index === steps.length - 1 ? "Finish" : interactive ? "Skip step" : "Next"}</button>
+          <div role="progressbar" aria-label="Tutorial progress" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={index + 1} className="mb-1 mt-2 h-1 overflow-hidden rounded-full bg-slate-100 sm:my-4 sm:h-1.5"><div className="h-full bg-blue-600" style={{ width: `${(index + 1) / steps.length * 100}%` }} /></div>
+          <div className="flex items-center justify-between gap-1">
+            <button type="button" aria-label="Skip tutorial" className={`${control} text-slate-600 hover:bg-slate-100`} onClick={() => onExit(false)}>Skip<span className="hidden sm:inline">&nbsp;Tutorial</span></button>
+            <div className="flex gap-1">
+              <button type="button" aria-label="Previous step" className={`${control} min-w-11 gap-1 border border-slate-200`} disabled={index === 0} onClick={() => onStep(index - 1)}>
+                <ArrowLeft aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Back</span>
+              </button>
+              <button type="button" className={`${control} gap-1 bg-blue-600 text-white hover:bg-blue-700`} onClick={() => {
+                if (step.openOnNext) openControl(step.openOnNext);
+                index === steps.length - 1 ? onExit(true) : onStep(index + 1);
+              }}>{index === steps.length - 1 ? "Finish" : interactive ? "Skip step" : "Next"}<ArrowRight aria-hidden="true" className="size-4" /></button>
+            </div>
           </div>
         </div>
-        </div>
-        <button type="button" onClick={() => onExit(false)} aria-label="Close tutorial" className="absolute right-1 top-1 inline-flex size-11 items-center justify-center rounded-lg bg-white text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 sm:right-2 sm:top-2">×</button>
+        <button type="button" onClick={() => onExit(false)} aria-label="Close tutorial" className="absolute right-1 top-1 inline-flex size-11 items-center justify-center rounded-lg bg-white text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 sm:right-2 sm:top-2"><X aria-hidden="true" className="size-4" /></button>
       </div>
   </>, portalHost);
 }

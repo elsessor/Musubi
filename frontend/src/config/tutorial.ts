@@ -1,9 +1,10 @@
 import type { UserRole } from "../types/auth";
 import { compactWorkflowSteps, getWorkflowTours, WORKFLOW_IDS, type WorkflowId } from "./tutorialWorkflows";
+import { getPageTours, PAGE_TOUR_IDS, type PageTourId } from "./tutorialPages";
 
 export const TUTORIAL_VERSION = 1;
-export type TourKind = "quick" | "features" | "controls" | WorkflowId;
-export const TOUR_IDS = ["quick", "features", "controls", ...WORKFLOW_IDS] as const;
+export type TourKind = "quick" | "features" | "controls" | WorkflowId | PageTourId;
+export const TOUR_IDS = ["quick", "features", "controls", ...WORKFLOW_IDS, ...PAGE_TOUR_IDS] as const;
 export type TutorialStatus = {
   version: number;
   status: "in_progress" | "completed" | "dismissed";
@@ -11,12 +12,14 @@ export type TutorialStatus = {
   tour: TourKind;
   updatedAt: string;
   acknowledged?: boolean;
+  seenPages?: PageTourId[];
 };
 export type TourStep = { id: string; title: string; description: string; route: string; target: string; highlightTargets?: string[]; details?: { title: string; description: string }[]; interaction?: "click"; openOnNext?: string; reveal?: string[]; selector?: string; prepare?: "events" | "ai" | "members" | "committees" | "announcements" };
 
 const page = (id: string, title: string, description: string, route: string, target = "workspace"): TourStep => ({ id, title, description, route, target });
 
 export function getTourSteps(role: UserRole, kind: TourKind): TourStep[] {
+  if (PAGE_TOUR_IDS.includes(kind as PageTourId)) return getPageTours(role).find((tour) => tour.id === kind)?.steps ?? [];
   if (kind !== "quick" && kind !== "features") return compactWorkflowSteps(getWorkflowTours(role).find((tour) => tour.id === kind)?.steps ?? []);
   const admin = role === "Admin";
   const leader = role === "Student Leader";
@@ -25,14 +28,14 @@ export function getTourSteps(role: UserRole, kind: TourKind): TourStep[] {
     ? "Review platform statistics and recent administrative activity from your central workspace."
     : leader ? "See your organization's active events, task progress, member availability, and recent activity."
     : "See your assigned work, upcoming deadlines, nudges, and organization activity in one place.", home);
-  const notifications = page("notifications", "Reminders and nudges", "Open Notifications to review task assignments, deadline reminders, and organization updates. Your unread count also appears on the header bell.", "/dashboard/notifications");
+  const notifications = page("notifications", "Reminders and nudges", "Check Notifications for assignments, deadlines, and updates. The header bell shows your unread count.", "/dashboard/notifications");
   const organization = page("organization", "Your organization", leader
-    ? "Use the Overview, Members, Committees, and Announcements tabs to coordinate your organization. Review membership and join requests using the controls available to your role."
-    : "Use the organization tabs to see your fellow members, committees, and announcements. Your available actions follow your organization permissions.", "/dashboard/organization");
+    ? "Use Overview for organization details, Members for join requests, Committees for teams, and Announcements for updates. Actions follow your permissions."
+    : "Use the organization tabs to find teammates, committees, and announcements. Actions follow your permissions.", "/dashboard/organization");
   const events = page("events", leader ? "Events, goals, and tasks" : "Your assigned tasks", leader
     ? "Open an event to review its goals and subtasks. Create an event to plan goals, deadlines, and task assignments."
-    : "Browse events and open an assigned task to inspect its description, deadline, priority, and current status. Update your assigned work as you make progress.", "/dashboard/events", leader ? "create-event" : "workspace");
-  const finish = page("finish", "You're ready!", "Use Help / User Guide in the header anytime to restart this tour, explore the feature walkthrough, or read the instructions at your own pace.", home, "help");
+    : "Open your assigned task to check instructions, deadline, priority, and status. Update it as you make progress.", "/dashboard/events", leader ? "create-event" : "workspace");
+  const finish = page("finish", "You're ready!", "Return to Help / User Guide anytime to replay a walkthrough or read instructions at your own pace.", home, "help");
   if (kind === "quick") return admin ? [dashboard,
     page("requests", "Organization requests", "Review registration requests here. Open a request to inspect its details before approving it or rejecting it with a reason.", "/admin/org-requests"),
     page("members", "Manage campus accounts", "Find accounts and review their roles, positions, organization assignments, and account status using the available management controls.", "/admin/members"), finish]
@@ -45,17 +48,17 @@ export function getTourSteps(role: UserRole, kind: TourKind): TourStep[] {
     page("settings", "Administrator settings", "Review your available administrative settings. Your profile is accessible from the sidebar or account menu.", "/admin/settings"), finish];
   return [dashboard,
     { ...events, description: leader
-      ? "Open an event to see its tasks. When creating work, describe the outcome, choose an owner, and set a deadline. Use filters and views to monitor progress."
+      ? "Open an event to see tasks. When creating work, set the outcome, owner, and deadline. Use filters and views to track progress."
       : "Open an assigned task to read its instructions, check the deadline and prerequisites, update progress, and attach your work." },
     ...(leader ? [
-      page("delegation", "Plan with AI, then review", "Describe your goal to generate a draft plan. Check suggested tasks, member matches, skills, availability, and workload; edit assignments before publishing.", "/dashboard/events", "ai-tab")
+      page("delegation", "Plan with AI, then review", "Describe your goal for a draft plan. Review tasks, member matches, skills, availability, and workload. Adjust assignments before publishing.", "/dashboard/events", "ai-tab")
     ] : []),
     { ...organization, description: leader
-      ? "Manage your roster and join requests in Members, organize teams in Committees, and share updates in Announcements. Choose a detailed guide from Help when you need one."
+      ? "Manage your roster and join requests in Members, teams in Committees, and updates in Announcements. Find detailed guides in Help."
       : "Find your teammates in Members, see your groups in Committees, and read updates in Announcements." },
     ...(leader ? [page("analytics", "Organization analytics", "Review available task and organization performance information to understand progress and workload.", "/dashboard/analytics")] : []),
     notifications,
-    page("settings", "Settings and your profile", "Adjust your preferences in Settings. Open your profile from the account menu or sidebar to review your information, skills, availability, and performance.", "/dashboard/settings"), finish];
+    page("settings", "Settings and your profile", "Adjust preferences in Settings. Open your profile from the menu or sidebar to review details, skills, availability, and performance.", "/dashboard/settings"), finish];
 }
 
 export function tutorialKey(uid: string, role: UserRole) {
@@ -69,7 +72,8 @@ export function shouldOfferTutorial(status: TutorialStatus | null) {
 export function nextTutorialStatus(previous: TutorialStatus | null, status: TutorialStatus["status"], step: number, tour: TourKind): TutorialStatus {
   return {
     version: TUTORIAL_VERSION, status, step, tour, updatedAt: new Date().toISOString(),
-    acknowledged: status !== "in_progress" || Boolean(previous?.acknowledged) || previous?.status === "completed" || previous?.status === "dismissed"
+    acknowledged: status !== "in_progress" || Boolean(previous?.acknowledged) || previous?.status === "completed" || previous?.status === "dismissed",
+    ...(previous?.seenPages ? { seenPages: [...previous.seenPages] } : {})
   };
 }
 
@@ -79,5 +83,6 @@ export function isTutorialStatus(value: unknown): value is TutorialStatus {
   return s.version === TUTORIAL_VERSION && ["in_progress", "completed", "dismissed"].includes(s.status)
     && Number.isInteger(s.step) && s.step >= 0 && s.step <= 500
     && TOUR_IDS.includes(s.tour) && typeof s.updatedAt === "string"
-    && (s.acknowledged === undefined || typeof s.acknowledged === "boolean");
+    && (s.acknowledged === undefined || typeof s.acknowledged === "boolean")
+    && (s.seenPages === undefined || (Array.isArray(s.seenPages) && s.seenPages.length <= PAGE_TOUR_IDS.length && s.seenPages.every((id) => PAGE_TOUR_IDS.includes(id))));
 }

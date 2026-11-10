@@ -12,7 +12,7 @@ const campus: UserRole[] = ["Student Leader", "Organization Member"];
 const leader: UserRole[] = ["Student Leader"];
 const admin: UserRole[] = ["Admin"];
 const s = (target: string, title: string, description: string, open?: "click"): Omit<TourStep, "route"> => ({ id: target, target, title,
-  description: open ? `${description} Select Next to continue automatically.` : description, openOnNext: open ? target : undefined });
+  description, openOnNext: open ? target : undefined });
 const flow = (id: WorkflowId, title: string, description: string, roles: UserRole[], route: string, instructions: Omit<TourStep, "route">[]): WorkflowTour => {
   let openers: string[] = [];
   const steps = instructions.map((step, index) => {
@@ -182,15 +182,15 @@ export function getWorkflowTours(role: UserRole): WorkflowTour[] {
 }
 
 const sectionSummaries: Record<string, [string, string]> = {
-  "event-title": ["Describe and schedule the event", "Add a name and purpose, choose the committee, and set the start and end dates. You can reuse tasks from a previous event. Review everything before creating the event."],
+  "event-title": ["Describe and schedule the event", "Add a name, purpose, committee, and dates. Optionally reuse previous tasks. Review before creating; field details explain each choice."],
   "event-committee-filter": ["Find and monitor events", "Combine committee and status filters to find work, then choose a view that suits you. Leaders can also configure event statuses."],
-  "new-task-title": ["Plan the task", "Describe the deliverable, choose an assignee and committee, and set priority, prerequisites, and dates. Check the details before saving."],
-  "task-title": ["Review and update your work", "Read the instructions, check the owner and priority, and review prerequisites. Update the permitted status and attach your work before saving."],
-  "ai-target": ["Describe the plan you need", "Choose an event or start from a new description. Add the date, participating members, and goal, then generate a draft when ready."],
+  "new-task-title": ["Plan the task", "Describe the work, assign an owner and committee, then set priority, prerequisites, and dates. Review before saving."],
+  "task-title": ["Review and update your work", "Check instructions, owner, priority, and prerequisites. Update your permitted status and attachments, then review before saving."],
+  "ai-target": ["Describe the plan you need", "Choose an event or new description. Set status, date, member count, and goal before generating a draft to review."],
   "ai-match": ["Check the suggested assignment", "Compare the match explanation with the task. Review skills, availability, and workload before choosing an assignee."],
   "ai-warnings": ["Review before publishing", "Resolve missing details and assignment warnings, then check the whole plan before publishing it to your organization."],
   "committee-name": ["Set up the team", "Name the committee, explain its purpose, and choose a head and members. Review the team before creating it."],
-  "member-search": ["Find people and review membership", "Search the roster and open a profile to learn about a member. Leaders can also review join requests and manage membership."],
+  "member-search": ["Find people and review membership", "Search members and open profiles. Leaders can review join requests and manage membership; changes affect real accounts."],
   "announcement-title": ["Write and target your update", "Add a title and message, choose who should see it, and optionally pin it. Check the audience before posting."],
   "request-card": ["Review the request", "Read the organization and requester details before deciding. Approving changes the real request immediately."],
   "request-reason": ["Explain your decision", "A rejection needs a clear reason for the requester. Confirm only after reviewing the decision."],
@@ -218,7 +218,7 @@ export function compactWorkflowSteps(steps: TourStep[]): TourStep[] {
     if (group.length > 1 && summary) {
       const memberOnly = first.target === "member-search" && !group.some((step) => step.target === "join-requests");
       result.push({ ...first, title: summary[0],
-        description: memberOnly ? "Search the roster and open a profile to learn about a teammate and their available performance information." : summary[1],
+        description: memberOnly ? "Search members, then open a profile to see their available details and performance information." : summary[1],
         highlightTargets: group.map((step) => step.target),
         details: group.map(({ title, description }) => ({ title, description })) });
     } else result.push(...group);

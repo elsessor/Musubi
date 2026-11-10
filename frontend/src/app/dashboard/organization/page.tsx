@@ -22,6 +22,7 @@ import {
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { OrganizationMemberTable } from "@/components/dashboard/OrganizationMemberTable";
+import { OrganizationPreview } from "@/components/dashboard/OrganizationPreview";
 import { PendingJoinRequests } from "@/components/dashboard/PendingJoinRequests";
 import { OrganizationTypeSelect } from "@/components/dashboard/OrganizationTypeSelect";
 import { useLogout } from "@/hooks/useLogout";
@@ -331,11 +332,11 @@ export default function OrganizationPage() {
   };
 
   return (
-    <DashboardLayout activeNavId="organization" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems(profile.role)} notificationCount={0} onLogout={logout} user={user}>
+    <DashboardLayout tutorialReady={!loading} activeNavId="organization" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems(profile.role)} notificationCount={0} onLogout={logout} user={user}>
       <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
         <div className="flex items-center justify-between gap-4"><h1 className="text-[21px] font-bold tracking-[-0.02em]">Organization</h1>{profile.role !== "Admin" && firebaseUser ? <button type="button" onClick={() => setAccessModalOpen(true)} className="flex h-9 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4" />{profile.role === "Student Leader" ? "Create or join" : "Join organization"}</button> : null}</div>
         <div className="mt-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-[#e8eef7] p-1.5">
-          <TabButton active={activeTab === "overview"} icon={BriefcaseBusiness} label="Overview" onClick={() => handleChangeTab("overview")} />
+          <TabButton tourId="overview-tab" active={activeTab === "overview"} icon={BriefcaseBusiness} label="Overview" onClick={() => handleChangeTab("overview")} />
           <TabButton tourId="members-tab" active={activeTab === "members"} icon={UsersRound} label="Members" onClick={() => handleChangeTab("members")} />
           <TabButton tourId="committees-tab" active={activeTab === "committees"} icon={ClipboardList} label="Committees" onClick={() => handleChangeTab("committees")} />
           <TabButton tourId="announcements-tab" active={activeTab === "announcements"} icon={Bell} label="Announcements" onClick={() => handleChangeTab("announcements")} />
@@ -346,11 +347,7 @@ export default function OrganizationPage() {
         ) : error ? (
           <ErrorCard message={error} />
         ) : !organization ? (
-          myJoinRequest ? (
-            <PendingJoinCard organizationName={myJoinRequest.organizationName} />
-          ) : (
-            <LoadCard message="Use the button above to request to join an organization or, if you are a leader, create one." />
-          )
+          <OrganizationPreview tab={activeTab} isLeader={profile.role === "Student Leader"} pendingOrganizationName={myJoinRequest?.organizationName} onShowMembers={() => handleChangeTab("members")} />
         ) : activeTab === "overview" ? (
           <Overview
             organization={organization}
@@ -863,7 +860,6 @@ function CommitteeCard({ committee, members, currentUserId, currentUserName }: {
 }
 function EmptyPanel({ tab }: { tab: Exclude<OrganizationTab, "overview" | "members"> }) { const label = tab === "committees" ? "Committees" : "Announcements"; const Icon = tab === "committees" ? ClipboardList : Megaphone; return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-center"><Icon className="size-7 text-slate-400" /><h2 className="mt-3 text-lg font-bold">{label}</h2><p className="mt-1 text-sm text-slate-500">{label} will appear here once they are added to your organization.</p></div>; }
 function LoadCard({ message }: { message: string }) { return <div className="mt-6 rounded-2xl border border-[#dce3ed] bg-white p-10 text-center text-sm text-slate-500">{message}</div>; }
-function PendingJoinCard({ organizationName }: { organizationName: string }) { return <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-10 text-center"><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Pending approval</span><h2 className="mt-4 text-lg font-extrabold text-slate-900">Your request to join {organizationName} is pending</h2><p className="mt-2 text-sm text-slate-600">An organization leader must accept your request before you can access this organization.</p></div>; }
 function ErrorCard({ message }: { message: string }) { return <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 p-8 text-center text-sm font-medium text-rose-700">{message}</div>; }
 function CardTitle({ title, subtitle, action, onActionClick }: { title: string; subtitle?: string; action?: string; onActionClick?: () => void }) { return <div className="flex min-h-12 items-center justify-between gap-3 px-4 py-3 border-b border-[#e5eaf1]"><div><h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</h3>{subtitle && <p className="mt-0.5 text-[10px] text-slate-500">{subtitle}</p>}</div>{action && <button onClick={onActionClick} className="text-[11px] font-medium text-[#2868ed] hover:text-blue-700 transition">{action}</button>}</div>; }
 function DetailRow({ label, value }: { label: string; value: string }) { return <div className="flex min-h-9 items-center justify-between gap-6 border-t border-[#e5eaf1] px-4 py-2.5 text-[11px]"><span className="uppercase font-semibold text-slate-500">{label}</span><span className="max-w-[65%] truncate font-medium text-slate-700">{value}</span></div>; }

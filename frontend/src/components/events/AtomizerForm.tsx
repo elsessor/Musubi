@@ -215,6 +215,7 @@ type AtomizerFormProps = {
 export function AtomizerForm({ events, members = [], onPublishGoalTasks }: AtomizerFormProps) {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const profile = useAuthStore((state) => state.profile);
+  const canGenerate = Boolean(profile?.organizationId?.trim());
   const draftScope = JSON.stringify([firebaseUser?.uid || profile?.uid, profile?.organizationId?.trim()]);
   const draft = useAtomizerDraftStore((state) => state.drafts[draftScope] || EMPTY_ATOMIZER_DRAFT);
   const updateDraft = useAtomizerDraftStore((state) => state.updateDraft);
@@ -309,7 +310,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   }
 
   async function handleAtomize() {
-    if (isAtomizingActive || !goalDescription.trim()) return;
+    if (!canGenerate || isAtomizingActive || !goalDescription.trim()) return;
     if (!firebaseUser) {
       setErrorMsg("Your session has expired. Please sign in again.");
       return;
@@ -399,7 +400,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
   }
 
   // If a goal draft is active, show SubtaskReviewScreen.
-  if (activeGoalDraft) {
+  if (activeGoalDraft && canGenerate) {
     return (
       <SubtaskReviewScreen
         key={activeGoalDraft.id}
@@ -410,6 +411,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
         existingTasks={targetEvent?.tasks || []}
         onBack={() => setActiveGoalDraft(null)}
         onPublishGoal={async (publishedGoal) => {
+          if (!canGenerate) return;
           const targetId = isCreateFromDescription
             ? "CREATE_NEW"
             : selectedEventId || events[0]?.id || "culture-week";
@@ -676,7 +678,8 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
           <button data-tour="ai-generate"
             type="button"
             onClick={handleAtomize}
-            disabled={isAtomizingActive || !goalDescription.trim()}
+            disabled={!canGenerate || isAtomizingActive || !goalDescription.trim()}
+            title={!canGenerate ? "Available after joining an organization" : undefined}
             className="flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-blue-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-5"
           >
             {isAtomizingActive ? (

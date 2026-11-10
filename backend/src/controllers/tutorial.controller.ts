@@ -23,8 +23,16 @@ export async function tutorialController(request: AuthenticatedRequest, response
     if (!parsed.success) throw new AppError("Invalid tutorial progress.", 400);
     const { role: expectedRole, ...progress } = parsed.data;
     if (expectedRole !== role) throw new AppError("Account role has changed. Reload your workspace.", 409);
-    const tutorial = { ...progress, updatedAt: new Date().toISOString() };
-    await ref.set({ tutorials: { [key]: tutorial } }, { merge: true });
+    const tutorial = await firestore.runTransaction(async (transaction) => {
+      const current = await transaction.get(ref);
+      if (current.data()?.role !== role) throw new AppError("Account role has changed. Reload your workspace.", 409);
+      const previous = current.data()?.tutorials?.[key];
+      const seenPages = [...new Set([...(Array.isArray(previous?.seenPages) ? previous.seenPages : []), ...(progress.seenPages ?? [])])];
+      const nextProgress = { ...progress, ...(seenPages.length ? { seenPages } : {}), updatedAt: new Date().toISOString() };
+      // Concurrent devices must retain each other's first-visit acknowledgements.
+      transaction.set(ref, { tutorials: { [key]: nextProgress } }, { merge: true });
+      return nextProgress;
+    });
     response.json({ role, tutorial });
   } catch (error) { next(error); }
 }

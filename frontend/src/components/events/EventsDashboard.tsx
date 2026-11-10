@@ -27,6 +27,7 @@ import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { CalendarView } from "./CalendarView";
+import { EventPlaceholderCard } from "./EventPlaceholderCard";
 
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
@@ -65,6 +66,7 @@ export function EventsDashboard({
   onUpdateEvent,
   committees = []
 }: EventsDashboardProps) {
+  const preview = !organizationId?.trim();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const showToast = useToastStore((state) => state.showToast);
   const [settingsError, setSettingsError] = useState("");
@@ -126,8 +128,9 @@ export function EventsDashboard({
 
   useEffect(() => {
     let cancelled = false;
-    if (!firebaseUser) {
+    if (!firebaseUser || preview) {
       setGoogleEvents([]);
+      setLoadingGoogleEvents(false);
       return;
     }
 
@@ -161,13 +164,15 @@ export function EventsDashboard({
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser]);
+  }, [firebaseUser, preview]);
 
   useEffect(() => {
     let cancelled = false;
     setSettingsReady(false);
     setCustomStatuses([]);
     setStatusOrder(DEFAULT_EVENT_STATUSES);
+    setSettingsError("");
+    if (preview) return;
     async function refresh() {
       if (!firebaseUser || pendingSaves.current) return;
       try {
@@ -206,7 +211,7 @@ export function EventsDashboard({
     void refresh();
     const interval = window.setInterval(() => { if (!document.hidden) void refresh(); }, 120000);
     return () => { cancelled = true; window.clearInterval(interval); };
-  }, [firebaseUser, organizationId, isLeader]);
+  }, [firebaseUser, organizationId, isLeader, preview]);
 
   function persistSettings(custom: CustomStatusConfig[], order: string[]) {
     if (!isLeader || !settingsReady) return;
@@ -592,6 +597,7 @@ export function EventsDashboard({
           {visible.map((event) => (
             <EventCard key={event.id} event={event} onClick={onSelectEvent} customStatuses={customStatuses} />
           ))}
+          {preview && visible.length === 0 && <><EventPlaceholderCard /><EventPlaceholderCard /></>}
           {isLeader && !compactMobile && <CreateEventCard onClick={() => onNewEvent()} />}
         </div>
       )}
@@ -668,6 +674,7 @@ export function EventsDashboard({
       {/* 3. Expanded View */}
       {viewMode === "expanded" && (
         <div className="space-y-4">
+          {preview && visible.length === 0 && <EventPlaceholderCard />}
           {visible.map((event) => {
             const theme = getStatusTheme(event.status, customStatuses);
             return (
@@ -958,6 +965,7 @@ export function EventsDashboard({
             <div className={compactMobile ? "w-full min-w-0" : "w-[280px] min-w-[280px] shrink-0"}>
               <button data-tour="event-custom-status"
                 type="button"
+                disabled={!settingsReady}
                 onClick={() => setIsAddStatusModalOpen(true)}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 px-4 py-4 text-xs font-bold text-slate-600 hover:border-blue-400 hover:bg-blue-50/60 hover:text-blue-700 transition-all shadow-2xs"
               >

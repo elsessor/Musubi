@@ -72,6 +72,17 @@ test("members cannot call full event editing endpoints, even on their own tasks"
   assert.doesNotThrow(() => assertEventAccess(member, "org"));
 });
 
+test("accounts exploring workspace previews have no access to organization records before joining", () => {
+  for (const actor of [member, leader]) {
+    const unaffiliated = { ...actor, organizationId: null };
+    for (const organizationId of [null, "org"]) {
+      assert.throws(() => assertEventAccess(unaffiliated, organizationId), forbidden);
+      assert.throws(() => assertCanEditEvent(unaffiliated, organizationId), forbidden);
+      assert.throws(() => assertCanContributeTask(unaffiliated, organizationId, task), forbidden);
+    }
+  }
+});
+
 test("status updates reject priority, title, description, deadline, assignment and review changes", () => {
   for (const changes of [
     { priority: "Critical" }, { title: "Changed title" }, { description: "Changed instructions" },

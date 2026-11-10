@@ -31,26 +31,10 @@ export function EventsTasksView() {
 
   if (loading || !profile) return null;
 
-  if (!organizationId) {
-    return (
-      <section className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
-        <BookOpen className="mb-4 size-10 text-slate-400" aria-hidden="true" />
-        <h1 className="text-xl font-bold text-slate-900">Join an organization to get started</h1>
-        <p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">
-          You need to be a member of an organization to access Events &amp; Tasks and the AI Task Atomizer.
-          If you have already sent a join request, these tools will be available once your request is accepted.
-        </p>
-        <Link href="/dashboard/organization" className="mt-6 rounded-xl bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90">
-          Go to Organization
-        </Link>
-      </section>
-    );
-  }
-
-  return <OrganizationEventsTasksView key={`${profile.uid}:${organizationId}`} organizationId={organizationId} />;
+  return <OrganizationEventsTasksView key={`${profile.uid}:${organizationId || "preview"}`} organizationId={organizationId} />;
 }
 
-function OrganizationEventsTasksView({ organizationId }: { organizationId: string }) {
+function OrganizationEventsTasksView({ organizationId }: { organizationId?: string }) {
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const showToast = useToastStore((state) => state.showToast);
@@ -80,6 +64,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
   const [dateError, setDateError] = useState("");
 
   useEffect(() => {
+    if (!effectiveOrgId || !firebaseUser) return;
     const unsubscribe = subscribeEventsFirestore(firebaseUser, effectiveOrgId, (realtimeEvents) => {
       setEvents(realtimeEvents);
       setSelectedEvent((currentSelected) => {
@@ -94,6 +79,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
   }, [firebaseUser, effectiveOrgId]);
 
   useEffect(() => {
+    if (!effectiveOrgId || !firebaseUser) return;
     const unsubscribe = subscribeOrganizationMembersFirestore(effectiveOrgId, setMembers, firebaseUser);
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
@@ -125,7 +111,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
   }
 
   async function handleArchiveSelectedEvent() {
-    if (!selectedEvent) return;
+    if (!selectedEvent || !effectiveOrgId) return;
     const status = selectedEvent.status === "Archived" ? selectedEvent.statusBeforeArchive || "Active" : "Archived";
     await updateEventFirestore(firebaseUser, selectedEvent.id, { status });
     const updated = { ...selectedEvent, status, archivedAt: status === "Archived" ? new Date().toISOString() : null,
@@ -146,6 +132,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
     newEventDetails?: { title: string; description: string },
     workflow?: { customStatuses: CustomStatusConfig[]; statusOrder: string[] }
   ) {
+    if (!effectiveOrgId) throw new Error("Join an organization before publishing tasks.");
     if (targetEventId === "CREATE_NEW" || newEventDetails) {
       const startFormatted = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       const endFormatted = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -208,6 +195,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
 
   async function handleCreateEventSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!effectiveOrgId) return;
     if (!title.trim()) return;
     const startFormatted = startDate
       ? startDate.trim()
@@ -268,6 +256,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
   return (
     <TaskAssigneeMembersContext.Provider value={members}>
     <div className="flex min-h-full min-w-0 flex-col">
+      {!effectiveOrgId && <p className="mb-3 text-xs leading-5 text-slate-500">Explore the tabs, views, and form fields below. <Link href="/dashboard/organization" className="font-semibold text-blue-600 underline underline-offset-2">Join an organization</Link> to save events and publish tasks.</p>}
       {/* Tab navigation */}
       <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
         <TabButton
@@ -449,9 +438,10 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId: strin
                 </button>
                 <button data-tour="event-submit"
                   type="submit"
-                  disabled={creating || !title.trim()}
+                  disabled={!effectiveOrgId || creating || !title.trim()}
+                  title={!effectiveOrgId ? "Available after joining an organization" : undefined}
                   className={`w-full rounded-xl py-2.5 text-xs font-bold transition-all shadow-xs ${
-                    title.trim() && !creating
+                    effectiveOrgId && title.trim() && !creating
                       ? "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98]"
                       : "bg-slate-300 text-slate-500 cursor-not-allowed opacity-70"
                   }`}

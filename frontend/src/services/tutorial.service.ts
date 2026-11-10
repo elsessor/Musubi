@@ -25,7 +25,7 @@ async function request(user: User, role: UserRole, method: "GET" | "PUT", status
   const token = await user.getIdToken();
   const response = await fetch(`${API_BASE_URL}/auth/tutorial`, {
     method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    ...(status ? { body: JSON.stringify({ role, version: status.version, status: status.status, step: status.step, tour: status.tour, acknowledged: status.acknowledged }) } : {}),
+    ...(status ? { body: JSON.stringify({ role, version: status.version, status: status.status, step: status.step, tour: status.tour, acknowledged: status.acknowledged, seenPages: status.seenPages }) } : {}),
     signal: AbortSignal.timeout(8000)
   });
   if (!response.ok) throw new Error("Tutorial sync unavailable");
@@ -39,15 +39,19 @@ export async function loadTutorial(user: User, role: UserRole): Promise<{ status
     const result = await request(user, role, "GET");
     if (result.role !== role) return { status: local, localOnly: true };
     const remote = isTutorialStatus(result.tutorial) ? result.tutorial : null;
+    const seenPages = [...new Set([...(remote?.seenPages ?? []), ...(local?.seenPages ?? [])])];
+    const latest = local && (!remote || local.updatedAt > remote.updatedAt) ? local : remote;
+    const merged = latest && seenPages.length ? { ...latest, seenPages } : latest;
     // A local dismissal/completion during an outage should survive a stale server record.
-    if (local && (!remote || local.updatedAt > remote.updatedAt)) {
-      const saved = await request(user, role, "PUT", local);
+    if (merged && (!remote || (local && local.updatedAt > remote.updatedAt) || seenPages.some((id) => !remote.seenPages?.includes(id)))) {
+      cache(user.uid, role, merged);
+      const saved = await request(user, role, "PUT", merged);
       if (isTutorialStatus(saved.tutorial)) cache(user.uid, role, saved.tutorial);
-      return { status: local, localOnly: false };
+      return { status: merged, localOnly: false };
     }
-    if (remote) cache(user.uid, role, remote);
-    return { status: remote, localOnly: false };
-  } catch { return { status: local, localOnly: true }; }
+    if (merged) cache(user.uid, role, merged);
+    return { status: merged, localOnly: false };
+  } catch { return { status: localTutorial(user.uid, role) ?? local, localOnly: true }; }
 }
 
 export function saveTutorial(user: User, role: UserRole, status: TutorialStatus): Promise<boolean> {
