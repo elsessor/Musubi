@@ -55,12 +55,14 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [targetSignature, setTargetSignature] = useState("");
   const [eventId, setEventId] = useState<string | null>(null);
+  const [memberProfileId, setMemberProfileId] = useState<string | null>(null);
   const quietContext = useRef<string | null>(null);
   const identity = user && profile && user.uid === profile.uid ? tutorialKey(user.uid, profile.role) : null;
   const pageContext = pathname === "/dashboard/events" && eventId ? "event" : undefined;
-  const contextKey = pageContext ? `${pathname}:event:${eventId}` : pathname;
+  const memberProfileOpen = pathname === "/dashboard/organization/member-profile";
+  const contextKey = pageContext ? `${pathname}:event:${eventId}` : memberProfileOpen && memberProfileId ? `${pathname}:member:${memberProfileId}` : pathname;
   const preview = Boolean(profile && profile.role !== "Admin" && !profile.organizationId?.trim());
-  const allowed = Boolean(profile && (profile.role === "Admin" ? pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/dashboard/profile" : pathname === "/dashboard" || pathname.startsWith("/dashboard/")));
+  const allowed = Boolean(profile && (profile.role === "Admin" ? pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/dashboard/profile" || memberProfileOpen : pathname === "/dashboard" || pathname.startsWith("/dashboard/")));
   const visible = Boolean(identity && !loading && allowed && statusLoaded === identity);
   const role = profile?.role;
   const steps = useMemo(() => automaticSteps ?? (kind === "controls" ? controlSteps : kind === "sidebar" && role ? getSidebarTourSteps(role, sidebarRoute) : role ? getTourSteps(role, kind, preview) : []), [automaticSteps, kind, controlSteps, role, sidebarRoute, preview]);
@@ -84,13 +86,14 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
       const el = document.querySelector('[data-tour="workspace"]');
       const selectedEvent = el?.querySelector('[data-tour="event-workspace"]')?.getAttribute("data-event-id") || null;
       setEventId(selectedEvent);
+      setMemberProfileId(pathname === "/dashboard/organization/member-profile" ? el?.querySelector('[data-tour="member-profile-page"]')?.getAttribute("data-profile-id") || null : null);
       const page = role && getPageTourForRoute(role, pathname, selectedEvent ? "event" : undefined);
       setTargetSignature(page && role ? getTourSteps(role, page.id).filter((step) => step.reveal?.length || findTourHighlightTargets(step).length).map((step) => step.id).join(":") : "");
       setWorkspaceReady(el?.getAttribute("data-tutorial-ready") === "true" && el?.getAttribute("data-tutorial-role") === role && !document.querySelector('[role="dialog"], [role="alertdialog"]'));
     };
     check();
     const observer = new MutationObserver(check);
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-tutorial-ready", "data-tutorial-role", "data-event-id"] });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-tutorial-ready", "data-tutorial-role", "data-event-id", "data-profile-id"] });
     return () => observer.disconnect();
   }, [pathname, role]);
 
@@ -199,18 +202,18 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     if (pathname !== route) router.push(route);
   }
   function start(tour: TourKind, resume = false) {
-    if (!profile || (tour === "page-event-details" && pageContext !== "event") || !getTourSteps(profile.role, tour).length) return;
+    if (!profile || (tour === "page-event-details" && pageContext !== "event") || (tour === "page-member-profile" && !memberProfileOpen) || !getTourSteps(profile.role, tour).length) return;
     if (tour === "sidebar") { startSidebar(false, resume); return; }
     controlCleanup.current(); controlCleanup.current = () => {};
     const first = resume && saved && (tour === "quick" || tour === "features" || PAGE_TOUR_IDS.includes(tour as PageTourId)) ? Math.min(saved.step, getTourSteps(profile.role, tour).length - 1) : 0;
     const section = PAGE_TOUR_IDS.includes(tour as PageTourId) ? tour as PageTourId : undefined;
-    setAutomaticSteps(null); setKind(tour); setIndex(first); setRun({ section, automatic: false });
+    setAutomaticSteps(null); setKind(tour); setIndex(first); setRun({ section, automatic: false, ...(tour === "page-member-profile" ? { context: contextKey } : {}) });
     persist("in_progress", first, tour, section); setMode("tour");
   }
   const currentPageTour = profile ? getPageTourForRoute(profile.role, pathname, pageContext) : undefined;
-  const canResume = saved?.status === "in_progress" && saved.tour !== "controls" && profile && getTourSteps(profile.role, saved.tour).length > 0 && (saved.tour !== "page-event-details" || pageContext === "event");
+  const canResume = saved?.status === "in_progress" && saved.tour !== "controls" && profile && getTourSteps(profile.role, saved.tour).length > 0 && (saved.tour !== "page-event-details" || pageContext === "event") && (saved.tour !== "page-member-profile" || memberProfileOpen);
   return <HelpContext.Provider value={(view = "guide", tour) => {
-    if (tour && (!profile || !getTourSteps(profile.role, tour).length || (tour === "page-event-details" && pageContext !== "event"))) return;
+    if (tour && (!profile || !getTourSteps(profile.role, tour).length || (tour === "page-event-details" && pageContext !== "event") || (tour === "page-member-profile" && !memberProfileOpen))) return;
     if (mode === "tour") persist("in_progress", index, kind, run?.section);
     controlCleanup.current(); controlCleanup.current = () => {};
     setInitialHelpTour(tour ?? null); setRun(null); setAutomaticSteps(null); setMode(view);
@@ -220,6 +223,6 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     {visible && mode === "welcome" && (!run?.context || run.context === contextKey) && <WelcomeOnboarding name={profile!.fullName} admin={profile!.role === "Admin"} onStart={acceptWelcome} onDismiss={dismissWelcome} />}
     {visible && mode === "tour" && (!run?.context || run.context === contextKey) && steps.length > 0 && <GuidedTour steps={steps} index={Math.min(index, steps.length - 1)} skipUnavailable={run?.automatic} onStep={(step) => { setIndex(step); persist("in_progress", step, kind, run?.section); }} onExit={close} />}
     {visible && mode === "started" && <GetStarted role={profile!.role} hasOrganization={!preview} onClose={close} onContinue={run?.restart ? continueRestart : undefined} onWalkthrough={run?.restart ? continueRestart : () => start("features")} onPageGuide={currentPageTour ? () => start(currentPageTour.id) : undefined} onHelp={() => { setRun(null); setInitialHelpTour(null); setMode("guide"); }} onOrganization={() => { close(); router.push("/dashboard/organization"); }} />}
-    {visible && mode === "guide" && <HelpCenter key={initialHelpTour ?? "home"} role={profile!.role} preview={preview} eventOpen={pageContext === "event"} initialTour={initialHelpTour} currentPageTour={currentPageTour?.id} resumeTour={canResume && saved ? saved.tour : undefined} localOnly={localOnly} onClose={close} onStart={start} onInspect={inspectPage} onGetStarted={() => { setRun(null); setMode("started"); }} onSidebar={() => startSidebar()} onRestart={restartOnboarding} />}
+    {visible && mode === "guide" && <HelpCenter key={initialHelpTour ?? "home"} role={profile!.role} preview={preview} eventOpen={pageContext === "event"} memberProfileOpen={memberProfileOpen} initialTour={initialHelpTour} currentPageTour={currentPageTour?.id} resumeTour={canResume && saved ? saved.tour : undefined} localOnly={localOnly} onClose={close} onStart={start} onInspect={inspectPage} onGetStarted={() => { setRun(null); setMode("started"); }} onSidebar={() => startSidebar()} onRestart={restartOnboarding} />}
   </HelpContext.Provider>;
 }

@@ -22,7 +22,7 @@ function find(node: any, predicate: (node: Node) => boolean): Node | undefined {
 function provider(t: TestContext, role: "Admin" | "Student Leader" | "Organization Member" = "Student Leader", options: {
   pathname?: string; organizationId?: string | null; onboardingCompleted?: boolean; saved?: tutorial.TutorialStatus | null; loading?: boolean;
 } = {}) {
-  let eventId: string | null = null, cursor = 0, dirty = false;
+  let eventId: string | null = null, memberProfileId: string | null = null, cursor = 0, dirty = false;
   let pathname = options.pathname ?? "/dashboard/events";
   let blocking = false, ready = true;
   let hiddenTargets: string[] = [];
@@ -66,7 +66,7 @@ function provider(t: TestContext, role: "Admin" | "Student Leader" | "Organizati
   };
   const workspace = {
     getAttribute: (name: string) => name === "data-tutorial-role" ? role : String(ready),
-    querySelector: () => eventId ? { getAttribute: () => eventId } : null
+    querySelector: (selector: string) => selector.includes('member-profile-page') ? memberProfileId ? { getAttribute: () => memberProfileId } : null : eventId ? { getAttribute: () => eventId } : null
   };
   const values = {
     window: { innerWidth: 375, innerHeight: 700 },
@@ -108,6 +108,7 @@ function provider(t: TestContext, role: "Admin" | "Student Leader" | "Organizati
     setReady(value: boolean) { ready = value; for (const observer of observers) observer(); },
     setRoute(route: string) { pathname = route; },
     setEvent(id: string | null) { eventId = id; for (const observer of observers) observer(); },
+    setMemberProfile(id: string | null) { memberProfileId = id; for (const observer of observers) observer(); },
     async settle() {
       for (let attempts = 0; attempts < 20; attempts++) {
         dirty = false; cursor = 0; effects = [];
@@ -434,6 +435,32 @@ test("welcome waits until authentication and account progress have loaded", asyn
   assert.equal(app.writes.length, 0);
   app.setLoading(false);
   assert.ok(find(await app.settle(), (node) => node.type === "WelcomeOnboarding"));
+});
+
+test("visiting a member receives a separate profile guide with only permitted metric explanations", async (t) => {
+  for (const role of ["Admin", "Student Leader", "Organization Member"] as const) await t.test(role, async (t) => {
+    const stamp = "2026-11-10T00:00:00Z";
+    const app = provider(t, role, { pathname: "/dashboard/organization/member-profile", saved: { version: 1, tour: "page-profile", status: "completed", step: 6, updatedAt: stamp, seenPages: ["page-profile"] } });
+    app.setReady(false); app.setMemberProfile("member-one");
+    assert.equal(find(await app.settle(), (node) => node.type === "GuidedTour"), undefined);
+    app.setReady(true);
+    let tree = await app.settle();
+    let guide = find(tree, (node) => node.type === "GuidedTour")!;
+    assert.equal(guide.props.index, 0);
+    assert.equal(guide.props.steps.length, role === "Organization Member" ? 4 : 7);
+    assert.equal(guide.props.steps[0].target, "profile-page");
+    guide.props.onStep(1); await app.settle();
+    app.setMemberProfile("member-two"); tree = await app.settle();
+    guide = find(tree, (node) => node.type === "GuidedTour")!;
+    assert.equal(guide.props.index, 1);
+    guide.props.onExit(true); tree = await app.settle();
+    assert.equal(app.writes.at(-1)?.onboarding?.modules?.["page-member-profile"]?.status, "completed");
+    tree.props.value(); tree = await app.settle();
+    const help = find(tree, (node) => node.type === "HelpCenter")!;
+    assert.equal(help.props.memberProfileOpen, true);
+    help.props.onStart("page-member-profile");
+    assert.equal(find(await app.settle(), (node) => node.type === "GuidedTour")!.props.index, 0);
+  });
 });
 
 test("legacy dismissed-guide history does not suppress an unintroduced event workspace", async (t) => {

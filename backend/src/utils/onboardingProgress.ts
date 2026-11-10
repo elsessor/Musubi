@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const pageTourSchema = z.enum(["page-dashboard", "page-events", "page-organization", "page-notifications", "page-settings", "page-analytics", "page-audit", "page-requests", "page-organizations", "page-members", "page-profile", "page-event-details"]);
+export const pageTourSchema = z.enum(["page-dashboard", "page-events", "page-organization", "page-notifications", "page-settings", "page-analytics", "page-audit", "page-requests", "page-organizations", "page-members", "page-profile", "page-event-details", "page-member-profile"]);
 const sectionSchema = z.object({ status: z.enum(["in_progress", "completed", "dismissed"]), step: z.number().int().min(0).max(500), updatedAt: z.string().datetime() }).strict();
 export const onboardingSchema = z.object({
   version: z.literal(1),

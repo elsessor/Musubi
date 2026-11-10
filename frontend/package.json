@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test:previews": "node ../backend/node_modules/tsx/dist/cli.mjs --tsconfig tsconfig.test.json --test tests/emptyWorkspacePreview.test.tsx"
+    "test:previews": "node ../backend/node_modules/tsx/dist/cli.mjs --tsconfig tsconfig.test.json --test tests/emptyWorkspacePreview.test.tsx",
+    "test:profiles": "node ../backend/node_modules/tsx/dist/cli.mjs --tsconfig tsconfig.test.json --test tests/profileOnboarding.test.tsx"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

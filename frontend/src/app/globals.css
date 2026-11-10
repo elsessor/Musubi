@@ -5,6 +5,16 @@
 @tailwind utilities;
 
 /* Keep the status form visible beside its walkthrough on wider screens. */
+@media (max-width: 639px) {
+  body:has([data-tour-dialog]) [data-tour="custom-status-backdrop"] {
+    align-items: flex-start;
+  }
+
+  body:has([data-tour-dialog]) [data-tour="custom-status-dialog"] {
+    max-height: calc(52dvh - 2rem);
+  }
+}
+
 @media (min-width: 640px) {
   body:has([data-tour-dialog]) [data-tour="custom-status-dialog"] {
     margin-right: auto;

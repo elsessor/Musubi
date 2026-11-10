@@ -31,7 +31,7 @@ test("new accounts can start a dashboard introduction directly and get a separat
 test("page introductions stay on existing role-appropriate routes and never submit business actions", () => {
   for (const role of roles) for (const tour of getPageTours(role)) {
     assert.ok(existsSync(fileURLToPath(new URL(`../../frontend/src/app${tour.route}/page.tsx`, import.meta.url))), tour.route);
-    assert.ok(tour.steps.length > 0 && tour.steps.filter((step) => !step.demoView).length <= 4);
+    assert.ok(tour.steps.length > 0 && tour.steps.filter((step) => !step.demoView).length <= (tour.id === "page-profile" || tour.id === "page-member-profile" ? 7 : 4));
     assert.ok(tour.steps.filter((step) => step.demoView).length === 0 || tour.steps.filter((step) => step.demoView).length === 5);
     assert.deepEqual(getTourSteps(role, tour.id), tour.steps);
     assert.equal(new Set(tour.steps.map((step) => step.id)).size, tour.steps.length);

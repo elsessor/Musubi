@@ -25,7 +25,7 @@ export type ProfileOverviewUser = {
   status: string;
 };
 
-const cardClass = "rounded-2xl border border-[#e2e8f0] bg-white";
+const cardClass = "min-w-0 rounded-2xl border border-[#e2e8f0] bg-white";
 const labelClass = "text-[10px] font-medium uppercase tracking-[0.06em] text-slate-400";
 const pageSize = 5;
 
@@ -84,10 +84,10 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
   ];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 text-[#0f203a]">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        {onEdit && <button type="button" onClick={onEdit} disabled={loading || Boolean(profileError)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
+    <div data-tour="profile-page" className="mx-auto min-w-0 max-w-7xl space-y-4 text-[#0f203a] sm:space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h1>
+        {onEdit && <button data-tour="profile-edit" type="button" onClick={onEdit} disabled={loading || Boolean(profileError)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
           <Edit2 size={14} /> Edit Profile
         </button>}
       </div>
@@ -95,10 +95,10 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
       {profileError ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{profileError}</p> : null}
       {tasksError ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{tasksError}</p> : null}
 
-      <section aria-label="Profile summary" aria-busy={loading} className="relative overflow-hidden rounded-[24px] bg-[#203d63] px-6 py-7 text-white shadow-[0_8px_16px_rgba(15,23,42,0.14)] sm:px-7">
+      <section data-tour="profile-summary" aria-label="Profile summary" aria-busy={loading} className="relative min-w-0 overflow-hidden rounded-[24px] bg-[#203d63] px-4 py-5 text-white shadow-[0_8px_16px_rgba(15,23,42,0.14)] sm:px-7 sm:py-7">
         <div className="pointer-events-none absolute -right-16 -top-24 size-80 rounded-full bg-blue-500/10 blur-3xl" />
-        <div className="relative flex items-center gap-5">
-          <div className="relative flex size-[72px] shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#2563eb] text-xl font-bold shadow-md">
+        <div className="relative flex items-center gap-3 sm:gap-5">
+          <div className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#2563eb] text-xl font-bold shadow-md sm:size-[72px]">
             {initials || "?"}
             {user.profilePicture && user.profilePicture !== failedPicture ? <Image src={user.profilePicture} alt="" width={72} height={72} unoptimized onError={() => setFailedPicture(user.profilePicture)} className="absolute inset-0 size-full object-cover" /> : null}
           </div>
@@ -110,13 +110,13 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
         </div>
       </section>
 
-      {showPerformance && <section aria-label="Profile statistics" aria-busy={loading || tasksLoading} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      {showPerformance && <section data-tour="profile-statistics" aria-label="Profile statistics" aria-busy={loading || tasksLoading} className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {[
-          { label: "Workload score", value: `${metrics.workload}%`, tone: metrics.workload >= 80 ? "text-rose-500" : metrics.workload >= 50 ? "text-amber-500" : "text-emerald-500", hint: `${metrics.counts.active + metrics.counts.pending} unfinished tasks / ${PROFILE_TASK_CAPACITY}-task capacity` },
-          { label: "Reliability score", value: metrics.reliability === null ? "—" : `${metrics.reliability}%`, tone: "text-blue-600", hint: metrics.reliabilitySampleCount ? `On-time delivery across ${metrics.reliabilitySampleCount} completed tasks; review delays are excluded when submission time is recorded` : "No completed tasks with recorded delivery dates and deadlines yet" },
-          { label: "Avg match %", value: metrics.averageMatch === null ? "—" : `${metrics.averageMatch}%`, tone: "text-blue-600", hint: "Average of saved assignment match scores" },
-          { label: "Tasks done", value: metrics.counts.done, tone: "text-slate-900", hint: "Completed tasks assigned to this profile" }
-        ].map((metric) => <div key={metric.label} title={metric.hint} className={`${cardClass} px-3 py-5 text-center`}>
+          { marker: "profile-workload", label: "Workload score", value: `${metrics.workload}%`, tone: metrics.workload >= 80 ? "text-rose-500" : metrics.workload >= 50 ? "text-amber-500" : "text-emerald-500", hint: `${metrics.counts.active + metrics.counts.pending} unfinished tasks / ${PROFILE_TASK_CAPACITY}-task capacity` },
+          { marker: "profile-reliability", label: "Reliability score", value: metrics.reliability === null ? "—" : `${metrics.reliability}%`, tone: "text-blue-600", hint: metrics.reliabilitySampleCount ? `On-time delivery across ${metrics.reliabilitySampleCount} completed tasks; review delays are excluded when submission time is recorded` : "No completed tasks with recorded delivery dates and deadlines yet" },
+          { marker: "profile-match", label: "Avg match %", value: metrics.averageMatch === null ? "—" : `${metrics.averageMatch}%`, tone: "text-blue-600", hint: "Average of saved assignment match scores" },
+          { marker: "profile-done", label: "Tasks done", value: metrics.counts.done, tone: "text-slate-900", hint: "Completed tasks assigned to this profile" }
+        ].map((metric) => <div data-tour={metric.marker} key={metric.label} title={metric.hint} className={`${cardClass} px-3 py-5 text-center`}>
           <p className={`text-[28px] font-bold leading-none ${metric.tone}`}>{ready ? metric.value : "—"}</p>
           <p className={`mt-2 ${labelClass}`}>{metric.label}</p>
         </div>)}
@@ -124,7 +124,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
 
       <div className={`grid items-start gap-5 ${showTasks ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : "grid-cols-1"}`}>
         <div className={showTasks ? "min-w-0 space-y-5" : "grid min-w-0 items-start gap-5 sm:grid-cols-2"}>
-          {showPerformance && <section aria-labelledby="performance-heading" className={`${cardClass} p-5`}>
+          {showPerformance && <section data-tour="profile-rating" aria-labelledby="performance-heading" className={`${cardClass} p-4 sm:p-5`}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">Leader reviews &amp; performance</p>
@@ -164,31 +164,31 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
         </div>
 
         {showTasks && <div className="min-w-0 space-y-5">
-          {showPerformance && <section aria-labelledby="completion-heading" className={`${cardClass} p-5`}>
+          {showPerformance && <section data-tour="profile-completion" aria-labelledby="completion-heading" className={`${cardClass} p-4 sm:p-5`}>
             <h3 id="completion-heading" className={labelClass}>Sub-task completion — this month</h3>
             <p className="sr-only">{new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}. {ready ? metrics.weeks.map((week) => `${week.label}: ${week.count}`).join(". ") : "Completion data unavailable."}</p>
             {ready && metrics.weeks.every((week) => week.count === 0) ? <p className="mt-3 text-xs text-slate-400">No recorded completions this month.</p> : null}
-            <div className="mt-6 flex h-40 gap-3 border-b border-slate-100" aria-hidden="true">
+            <div className="mt-6 flex h-40 gap-2 border-b border-slate-100 sm:gap-3" aria-hidden="true">
               <div className="flex w-5 shrink-0 flex-col justify-between pb-5 text-right text-[10px] text-slate-400">
                 {[4, 3, 2, 1, 0].map((step) => <span key={step}>{(chartMaximum / 4) * step}</span>)}
               </div>
-              <div className="grid min-w-0 flex-1 gap-3" style={{ gridTemplateColumns: `repeat(${metrics.weeks.length}, minmax(0, 1fr))` }}>
+              <div className="grid min-w-0 flex-1 gap-1.5 sm:gap-3" style={{ gridTemplateColumns: `repeat(${metrics.weeks.length}, minmax(0, 1fr))` }}>
                 {metrics.weeks.map((week) => <div key={week.label} className="flex min-w-0 flex-col items-center justify-end" title={`${week.label} (days ${week.startDay}–${week.endDay}): ${ready ? week.count : "unavailable"}`}>
                   <div className="relative h-full w-9 max-w-full overflow-hidden rounded-t-lg bg-[#f1f5f9]">
                     <div className="absolute inset-x-0 bottom-0 rounded-t-lg bg-[#2860ed] transition-[height] duration-500" style={{ height: ready ? `${(week.count / chartMaximum) * 100}%` : "0%" }} />
                   </div>
-                  <span className="shrink-0 py-1.5 text-[10px] text-slate-500">{week.label}</span>
+                  <span className="shrink-0 whitespace-nowrap py-1.5 text-[9px] text-slate-500 sm:text-[10px]">{week.label}</span>
                 </div>)}
               </div>
             </div>
             {ready && metrics.undatedCompletions > 0 ? <p className="mt-3 text-[10px] leading-relaxed text-slate-400">{metrics.undatedCompletions} completed {metrics.undatedCompletions === 1 ? "task has" : "tasks have"} no recorded completion date and {metrics.undatedCompletions === 1 ? "is" : "are"} excluded from the chart.</p> : null}
           </section>}
 
-          <section data-tour="profile-tasks" aria-labelledby="subtasks-heading" aria-busy={loading || tasksLoading} className={`${cardClass} p-5`}>
+          <section data-tour="profile-tasks" aria-labelledby="subtasks-heading" aria-busy={loading || tasksLoading} className={`${cardClass} p-4 sm:p-5`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 id="subtasks-heading" className={labelClass}>All sub-tasks</h3>
-              <div className="flex flex-wrap items-center gap-1" aria-label="Filter sub-tasks">
-                {filters.map((item) => <button key={item.id} type="button" aria-pressed={filter === item.id} disabled={!ready} onClick={() => { setFilter(item.id); setPage(1); }} className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition hover:opacity-80 disabled:opacity-50 ${filter === item.id ? item.selected : item.tone}`}>
+              <div data-tour="profile-task-filters" className="flex flex-wrap items-center gap-1" aria-label="Filter sub-tasks">
+                {filters.map((item) => <button key={item.id} type="button" aria-pressed={filter === item.id} disabled={!ready} onClick={() => { setFilter(item.id); setPage(1); }} className={`min-h-11 rounded-full px-2.5 py-1 text-[10px] font-semibold transition hover:opacity-80 disabled:opacity-50 sm:min-h-7 ${filter === item.id ? item.selected : item.tone}`}>
                   {ready ? item.label : item.id === "all" ? "All" : item.id}
                 </button>)}
               </div>
@@ -201,7 +201,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
                     const taskLabel = task.archivedAt ? "Archived" : task.status || "Pending";
                     const tone = getStatusTheme(taskLabel, task.customStatuses).badge;
                     const match = task.matchPercentage;
-                    return <div key={`${task.eventId}:${task.id}`} className="flex items-center justify-between gap-3 py-4">
+                    return <div key={`${task.eventId}:${task.id}`} className="flex flex-col items-start justify-between gap-2 py-4 sm:flex-row sm:items-center sm:gap-3">
                       <div className="min-w-0">
                         <h4 className="break-words text-xs font-medium leading-relaxed">{task.title}</h4>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
@@ -210,17 +210,17 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
                           {showPerformance && task.performanceReview && <span className="font-medium text-amber-600">Leader rating: {task.performanceReview.rating}/5</span>}
                         </div>
                       </div>
-                      <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] ${tone}`}>{taskLabel}</span>
+                      <span className={`max-w-full shrink-0 break-words rounded-full border px-3 py-1 text-[10px] ${tone}`}>{taskLabel}</span>
                     </div>;
                   })}
                 </div>}
 
             {ready && filtered.length > 0 ? <div className="mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
               <span className="text-[10px] text-slate-500">Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} sub-tasks</span>
-              <nav aria-label="Sub-task pages" className="flex items-center gap-1.5">
-                <button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} className="flex size-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 disabled:opacity-40"><ChevronLeft size={14} /></button>
-                {pages.map((number) => <button key={number} type="button" aria-label={`Page ${number}`} aria-current={currentPage === number ? "page" : undefined} onClick={() => setPage(number)} className={`flex size-7 items-center justify-center rounded-lg text-[10px] font-medium ${currentPage === number ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{number}</button>)}
-                <button type="button" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)} className="flex size-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 disabled:opacity-40"><ChevronRight size={14} /></button>
+              <nav data-tour="profile-task-pages" aria-label="Sub-task pages" className="flex max-w-full flex-wrap items-center gap-1.5">
+                <button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} className="flex size-11 items-center justify-center rounded-lg border border-slate-200 text-slate-500 disabled:opacity-40 sm:size-7"><ChevronLeft size={14} /></button>
+                {pages.map((number) => <button key={number} type="button" aria-label={`Page ${number}`} aria-current={currentPage === number ? "page" : undefined} onClick={() => setPage(number)} className={`flex size-11 items-center justify-center rounded-lg text-[10px] font-medium sm:size-7 ${currentPage === number ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{number}</button>)}
+                <button type="button" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)} className="flex size-11 items-center justify-center rounded-lg border border-slate-200 text-slate-500 disabled:opacity-40 sm:size-7"><ChevronRight size={14} /></button>
               </nav>
             </div> : null}
           </section>

@@ -60,13 +60,13 @@ export function MemberProfileModal({
       aria-modal="true"
       aria-labelledby="member-profile-title"
     >
-      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
+      <div className="flex max-h-[90dvh] w-full min-w-0 max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 p-5 bg-slate-50/50">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <MemberAvatar member={member} className="size-12 rounded-2xl shadow-sm" fallbackClassName="rounded-2xl text-base" />
-            <div>
-              <h2 id="member-profile-title" className="text-base font-bold text-slate-900 leading-tight">
+            <div className="min-w-0">
+              <h2 id="member-profile-title" className="break-words text-base font-bold leading-tight text-slate-900">
                 {member.name}
               </h2>
               <p className="text-xs font-semibold text-slate-500 mt-0.5">{member.role}</p>
@@ -74,15 +74,20 @@ export function MemberProfileModal({
           </div>
           <button
             type="button"
+            aria-label="Close member profile"
             onClick={onClose}
-            className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-600 transition"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-600"
           >
             <X className="size-5" />
           </button>
         </div>
 
         {/* Content Area */}
-        <div className="space-y-4 p-6 overflow-y-auto">
+        <div className="min-h-0 min-w-0 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <details className="rounded-xl border border-blue-100 bg-blue-50 px-3 text-xs text-blue-900">
+            <summary className="flex min-h-11 cursor-pointer items-center font-semibold">How to read this profile</summary>
+            <p className="pb-3 leading-5">Review the member&apos;s committee, listed skills, availability, and recent sub-tasks. {canViewPerformance ? "Workload reflects unfinished assignments; reliability reflects recorded on-time delivery. Open the full profile for explanations of average match, leader ratings, monthly completions, and all assigned tasks." : "Private performance information is not shown. Open the full profile to review the member's permitted details and all assigned tasks."}</p>
+          </details>
           {/* Committee */}
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Committee</p>
@@ -111,7 +116,7 @@ export function MemberProfileModal({
           </div>
 
           {/* Realtime Stats Bar */}
-          <div className={`grid ${canViewPerformance ? "grid-cols-3" : "grid-cols-1"} gap-3 rounded-2xl bg-slate-50/90 border border-slate-100 p-4 text-center`}>
+          <div className={`grid grid-cols-1 ${canViewPerformance ? "min-[400px]:grid-cols-3" : ""} gap-3 rounded-2xl bg-slate-50/90 border border-slate-100 p-4 text-center`}>
             {canViewPerformance && <><div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <div className="h-1.5 w-12 rounded-full bg-slate-200 overflow-hidden">
@@ -148,9 +153,9 @@ export function MemberProfileModal({
                     key={`${task.eventTitle || ""}:${task.id}`}
                     className="p-3 rounded-xl border border-slate-200/80 bg-white text-xs space-y-1"
                   >
-                    <p className="font-bold text-slate-900">{task.title}</p>
+                    <p className="break-words font-bold text-slate-900">{task.title}</p>
                     {canViewPerformance && task.performanceReview && <p className="text-[11px] text-slate-500">Leader performance rating: {task.performanceReview.rating}/5</p>}
-                    <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
                       <span className="text-slate-400 font-medium">• {task.eventTitle || "Campus Event"}</span>
                       <span
                         className={`font-bold rounded-full px-2 py-0.5 text-[10px] ${
@@ -167,7 +172,7 @@ export function MemberProfileModal({
           )}
         </div>
         {member.id && <div className="flex justify-end border-t border-slate-100 p-4">
-          <Link href={fullProfileHref} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">View full profile</Link>
+          <Link href={fullProfileHref} className="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">View full profile</Link>
         </div>}
       </div>
     </div>

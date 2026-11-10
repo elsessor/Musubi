@@ -38,6 +38,8 @@ export function getTourHighlightRect(elements: HTMLElement[]): { x: number; y: n
         top = Math.max(top, bounds.top + parent.clientTop);
         bottom = Math.min(bottom, bounds.top + parent.clientTop + parent.clientHeight);
       }
+      // A fixed overlay belongs to the viewport, outside dashboard scroll clipping.
+      if (style.position === "fixed") break;
     }
     return right > left && bottom > top ? [{ left, top, right, bottom }] : [];
   });

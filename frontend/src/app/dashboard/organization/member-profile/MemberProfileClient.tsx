@@ -80,8 +80,8 @@ export function MemberProfileClient() {
     academicYear: `AY ${new Date().getFullYear()}–${new Date().getFullYear() + 1}`,
     greetingDate: new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date())
   };
-  return <DashboardLayout user={viewer} navItems={getDashboardNavItems(profile.role)} activeNavId="organization" kpis={[]} goals={[]} activities={[]} notificationCount={0} onLogout={logout}>
-    <div className="mx-auto max-w-7xl space-y-5">
+  return <DashboardLayout tutorialReady={!loading && Boolean(member) && !error} user={viewer} navItems={getDashboardNavItems(profile.role)} activeNavId="organization" kpis={[]} goals={[]} activities={[]} notificationCount={0} onLogout={logout}>
+    <div data-tour="member-profile-page" data-profile-id={memberId} className="mx-auto min-w-0 max-w-7xl space-y-5">
       <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700">
         <ArrowLeft size={16} />{backHref.startsWith("/dashboard/organization/committees?") ? "Back to committee" : "Back to organization members"}
       </Link>

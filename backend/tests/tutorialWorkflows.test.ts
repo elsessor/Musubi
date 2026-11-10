@@ -328,6 +328,19 @@ test("missing, disabled, and explanatory targets cannot receive tutorial interac
   assert.equal(canInteractWithTourTarget(enabled, { ...step, interaction: undefined }), false);
 });
 
+test("fixed status dialogs are highlighted beyond the dashboard's scrolling content bounds", (t) => {
+  const main = { parentElement: null, clientLeft: 0, clientTop: 0, clientWidth: 1100, clientHeight: 800, getBoundingClientRect: () => ({ left: 248, top: 70, right: 1348, bottom: 870 }) };
+  const backdrop = { parentElement: main, getBoundingClientRect: () => ({ left: 0, top: 0, right: 1904, bottom: 952 }) };
+  const dialog = { parentElement: backdrop, getBoundingClientRect: () => ({ left: 16, top: 32, right: 464, bottom: 900 }) };
+  const values = { window: { innerWidth: 1904, innerHeight: 952 }, getComputedStyle: (element: unknown) => element === backdrop ? { position: "fixed", overflowX: "visible", overflowY: "visible" } : { position: "static", overflowX: "auto", overflowY: "auto" } };
+  for (const [key, value] of Object.entries(values)) {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { value, configurable: true });
+    t.after(() => previous ? Object.defineProperty(globalThis, key, previous) : Reflect.deleteProperty(globalThis, key));
+  }
+  assert.deepEqual(getTourHighlightRect([dialog as unknown as HTMLElement]), { x: 11, y: 27, width: 458, height: 878 });
+});
+
 test("control reference explains searches, filters, fields, views, and consequential actions", () => {
   assert.match(describeControl("Search tasks", "input", "text", null), /narrow the records/);
   assert.match(describeControl("All Committees", "select", "", null), /filter/);

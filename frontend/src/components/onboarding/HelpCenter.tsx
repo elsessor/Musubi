@@ -13,6 +13,7 @@ type Props = {
   role: UserRole;
   preview: boolean;
   eventOpen: boolean;
+  memberProfileOpen?: boolean;
   initialTour?: TourKind | null;
   currentPageTour?: TourKind;
   resumeTour?: TourKind;
@@ -44,8 +45,8 @@ function CategoryList({ categories, onSelect }: { categories: HelpCategory[]; on
   })}</nav>;
 }
 
-export function HelpCenter({ role, preview, eventOpen, initialTour, currentPageTour, resumeTour, localOnly, onClose, onStart, onInspect, onGetStarted, onSidebar, onRestart }: Props) {
-  const categories = useMemo(() => getHelpCategories(role, preview, eventOpen), [role, preview, eventOpen]);
+export function HelpCenter({ role, preview, eventOpen, memberProfileOpen = false, initialTour, currentPageTour, resumeTour, localOnly, onClose, onStart, onInspect, onGetStarted, onSidebar, onRestart }: Props) {
+  const categories = useMemo(() => getHelpCategories(role, preview, eventOpen, memberProfileOpen), [role, preview, eventOpen, memberProfileOpen]);
   const [view, setView] = useState<View>(() => {
     const category = initialTour && categories.find((item) => item.guides.some((guide) => guide.tour === initialTour));
     return category ? { type: "guide", categoryId: category.id, guideId: initialTour!, fromSearch: false } : { type: "home" };

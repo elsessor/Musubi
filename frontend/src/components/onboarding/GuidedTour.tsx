@@ -142,7 +142,7 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
         if (!scrolled) {
           // These selectors identify read-only tabs, never forms or business actions.
           if (!step.interaction && ["overview-tab", "announcements-tab", "ai-tab", "members-tab", "committees-tab"].includes(step.target)) openControl(step.target);
-          el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+          el.scrollIntoView({ block: step.target === "profile-page" ? "start" : "nearest", inline: "nearest", behavior: "instant" });
           sidebar?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
           scrolled = true;
         }
@@ -197,7 +197,7 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
       const originX = viewport?.offsetLeft ?? 0, originY = viewport?.offsetTop ?? 0;
       const margin = vw < 640 ? 16 : 24;
       const maxWidth = Math.max(0, vw - margin * 2);
-      const maxHeight = Math.max(0, Math.min(vh - margin * 2, vw < 640 ? Math.max(200, vh * (referenceOpen ? 0.72 : 0.48)) : vh));
+      const maxHeight = Math.max(0, Math.min(vh - margin * 2, vw < 640 ? Math.max(200, vh * (referenceOpen && step.target !== "custom-status-dialog" ? 0.72 : 0.48)) : vh));
       const width = Math.min(panel.current?.offsetWidth ?? 320, maxWidth), height = Math.min(panel.current?.offsetHeight ?? 260, maxHeight);
       const minLeft = originX + margin, minTop = originY + margin;
       const maxLeft = Math.max(minLeft, originX + vw - width - margin), maxTop = Math.max(minTop, originY + vh - height - margin);

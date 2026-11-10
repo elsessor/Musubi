@@ -23,7 +23,7 @@ test("Help categories retain every permitted page, workflow, and detailed contro
       assert.equal(guide.route, workflow.route);
       assert.equal(guide.stepCount, getTourSteps(role, workflow.id).length);
     }
-    for (const page of getPageTours(role).filter((tour) => tour.id !== "page-event-details")) {
+    for (const page of getPageTours(role).filter((tour) => tour.id !== "page-event-details" && tour.id !== "page-member-profile")) {
       assert.ok(guides.some((guide) => guide.tour === page.id), `${role}: ${page.id}`);
     }
     for (const category of categories) {
@@ -67,6 +67,16 @@ test("the event workspace guide is offered only when an event is selected", () =
     assert.ok(getHelpCategories(role).every((category) => !category.guides.some((guide) => guide.id === "page-event-details")));
     const guides = getHelpCategories(role, false, true).flatMap((category) => category.guides);
     assert.equal(guides.some((guide) => guide.id === "page-event-details"), role !== "Admin");
+  }
+});
+
+test("the member profile guide is available and searchable only while viewing a member profile", () => {
+  for (const role of roles) {
+    assert.ok(getHelpCategories(role).every((category) => !category.guides.some((guide) => guide.id === "page-member-profile")));
+    const categories = getHelpCategories(role, false, false, true);
+    assert.ok(searchHelp(categories, "member profile").some((result) => result.guide?.tour === "page-member-profile"));
+    const guide = categories.flatMap((category) => category.guides).find((guide) => guide.id === "page-member-profile")!;
+    assert.equal(guide.stepCount, role === "Organization Member" ? 4 : 7);
   }
 });
 

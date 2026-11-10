@@ -16,7 +16,7 @@ export type HelpCategory = { id: string; title: string; description: string; rou
 export type HelpSearchResult = { category: HelpCategory; guide?: HelpGuide };
 
 // Build the help catalog from the same definitions and permissions as the tours.
-export function getHelpCategories(role: UserRole, preview = false, eventOpen = false): HelpCategory[] {
+export function getHelpCategories(role: UserRole, preview = false, eventOpen = false, memberProfileOpen = false): HelpCategory[] {
   const workflows = getWorkflowTours(role);
   const pages = [...getDashboardNavItems(role), { id: "profile", label: "Profile", href: "/dashboard/profile" }];
   return pages.map((page) => {
@@ -28,6 +28,13 @@ export function getHelpCategories(role: UserRole, preview = false, eventOpen = f
       if (eventIntro) {
         const steps = getTourSteps(role, eventIntro.id, preview);
         guides.push({ id: eventIntro.id, title: eventIntro.title, description: steps[0].description, route: eventIntro.route, tour: eventIntro.id, stepCount: steps.length });
+      }
+    }
+    if (memberProfileOpen && page.id === "profile") {
+      const memberIntro = getPageTourForRoute(role, "/dashboard/organization/member-profile");
+      if (memberIntro) {
+        const steps = getTourSteps(role, memberIntro.id);
+        guides.push({ id: memberIntro.id, title: memberIntro.title, description: steps[0].description, route: memberIntro.route, tour: memberIntro.id, stepCount: steps.length });
       }
     }
     guides.push(...workflows.filter((tour) => tour.route === page.href).map((tour) => ({

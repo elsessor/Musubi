@@ -3,8 +3,9 @@ import type { TourStep, TutorialStatus } from "./tutorial";
 import { getViewTourSteps } from "./tutorialViews";
 import { getCalendarConnectionSteps } from "./tutorialCalendar";
 import { getCustomStatusStep } from "./tutorialStatuses";
+import { getProfileTourSteps } from "./tutorialProfiles";
 
-export const PAGE_TOUR_IDS = ["page-dashboard", "page-events", "page-organization", "page-notifications", "page-settings", "page-analytics", "page-audit", "page-requests", "page-organizations", "page-members", "page-profile", "page-event-details"] as const;
+export const PAGE_TOUR_IDS = ["page-dashboard", "page-events", "page-organization", "page-notifications", "page-settings", "page-analytics", "page-audit", "page-requests", "page-organizations", "page-members", "page-profile", "page-event-details", "page-member-profile"] as const;
 export type PageTourId = typeof PAGE_TOUR_IDS[number];
 export type PageTour = { id: PageTourId; title: string; route: string; steps: TourStep[] };
 
@@ -106,11 +107,8 @@ export function getPageTours(role: UserRole): PageTour[] {
       step("settings-overview", "Manage your preferences", "Review your profile and preferences. Update the fields permitted for your account and verify changes before saving.", "settings-profile"),
       ...getCalendarConnectionSteps(`${home}/settings`)
     ]),
-    tour("page-profile", "Profile introduction", "/dashboard/profile", [
-      step("profile-overview", "Your profile and availability", "Review personal account information and availability. Use the profile editor to update the details permitted for your account.", "profile-details"),
-      step("profile-skills", "Skills support planning", "Review skill keywords used to describe your capabilities. Keep editable skills current to help leaders plan suitable assignments.", "profile-skills"),
-      ...(!admin ? [step("profile-tasks", "Assigned work and performance", "Review your recorded tasks and filter them by status. Performance information appears where available to your role.", "profile-tasks")] : [])
-    ])
+    tour("page-profile", "Profile introduction", "/dashboard/profile", getProfileTourSteps("/dashboard/profile")),
+    tour("page-member-profile", "Member profile introduction", "/dashboard/organization/member-profile", getProfileTourSteps("/dashboard/organization/member-profile", true, admin || leader))
   ];
 }
 

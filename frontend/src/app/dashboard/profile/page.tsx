@@ -268,6 +268,7 @@ export default function DashboardProfilePage() {
 
   return (
     <DashboardLayout
+      tutorialReady={!loading && !tasksLoading && !profileError}
       user={dashboardUser}
       navItems={getDashboardNavItems(dashboardUser.role)}
       kpis={[]}

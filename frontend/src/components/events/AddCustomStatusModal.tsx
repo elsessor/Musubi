@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, ChevronUp, GripVertical, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { COLOR_OPTIONS, getStatusTheme, getTaskStatusDescription, getEventStatusDescription, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 
@@ -133,9 +134,9 @@ export function AddCustomStatusModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div data-tour="custom-status-dialog" data-status-type={type} className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain animate-in fade-in zoom-in duration-150 rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl space-y-4">
+  const modal = (
+    <div data-tour="custom-status-backdrop" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div data-tour="custom-status-dialog" data-status-type={type} className="max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-md overflow-y-auto overscroll-contain animate-in fade-in zoom-in duration-150 rounded-3xl border border-slate-100 bg-white p-4 shadow-2xl space-y-4 sm:p-6">
         {/* Modal Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -149,7 +150,7 @@ export function AddCustomStatusModal({
             aria-label="Close status dialog"
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
           >
             <X size={18} />
           </button>
@@ -306,16 +307,18 @@ export function AddCustomStatusModal({
           {error && <p className="text-xs text-rose-500 font-medium">{error}</p>}
 
           {/* Color Palette Dots */}
-          <div className="flex items-center justify-between px-1 py-1">
+          <div className="flex flex-wrap items-center gap-2 px-1 py-1">
             {COLOR_OPTIONS.map((c) => {
               const isSelected = selectedColor === c.key;
               return (
                 <button
                   key={c.key}
                   type="button"
+                  aria-label={c.label}
+                  aria-pressed={isSelected}
                   onClick={() => setSelectedColor(c.key)}
                   title={c.label}
-                  className={`relative flex h-6 w-6 items-center justify-center rounded-full transition-all hover:scale-110 ${c.dot} ${
+                  className={`relative flex size-11 shrink-0 items-center justify-center rounded-full transition-all hover:scale-110 sm:size-8 ${c.dot} ${
                     isSelected
                       ? "ring-2 ring-slate-900 ring-offset-2 scale-110 shadow-xs"
                       : "hover:opacity-90"
@@ -381,4 +384,5 @@ export function AddCustomStatusModal({
       </div>
     </div>
   );
+  return typeof document === "undefined" ? modal : createPortal(modal, document.body);
 }
