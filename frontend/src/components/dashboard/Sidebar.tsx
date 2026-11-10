@@ -141,12 +141,12 @@ export function Sidebar({
           href="/dashboard/profile"
           onClick={onNavigate}
           aria-label={`View and edit profile for ${userName}`}
-          className="flex min-w-0 items-center gap-3 rounded-xl outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-white/70"
+          className={cn("flex min-h-14 w-full min-w-0 items-center gap-3 rounded-xl px-2 py-2 outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-white/70", collapsed && "justify-center")}
           title={collapsed ? `${userName} · View profile` : undefined}
         >
           <AvatarFallback name={userName} role={role} profilePicture={profilePicture} />
           {!collapsed ? (
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-extrabold leading-tight">{userName}</p>
               <p className="mt-1 truncate text-xs font-semibold leading-tight text-[#aebdd0]">{roleLabel}</p>
             </div>

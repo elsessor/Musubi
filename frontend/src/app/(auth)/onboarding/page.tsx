@@ -10,15 +10,15 @@ import { SuccessDialog } from "@/components/ui/SuccessDialog";
 import { completeOnboarding, getOrganizationDirectory, joinOrganization, type OrganizationDirectoryOption } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
 import { OrganizationTypeSelect } from "@/components/dashboard/OrganizationTypeSelect";
-import { PROGRAM_OPTIONS, SKILL_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
+import { LEADER_POSITION_OPTIONS, MEMBER_POSITION_OPTIONS, PROGRAM_OPTIONS, SKILL_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
 
 type Role = "leader" | "member";
 type Stage = "role" | "leader-check" | "organization" | "details" | "pending";
 
 const skills = SKILL_OPTIONS;
 const years = YEAR_LEVEL_OPTIONS;
-const leaderPositionOptions = ["President", "Vice President", "Secretary", "Treasurer", "Finance Officer", "Auditor", "Public Relations Officer", "Committee Chair", "Project Coordinator", "Team Lead"];
-const memberPositionOptions = ["Organization Member", "Committee Member", "Project Member", "Volunteer", "Staff", "Associate", "Sub-committee Member"];
+const leaderPositionOptions = LEADER_POSITION_OPTIONS;
+const memberPositionOptions = MEMBER_POSITION_OPTIONS;
 const programOptions = PROGRAM_OPTIONS;
 
 const DEFAULT_DIRECTORY_ORGANIZATIONS: OrganizationDirectoryOption[] = [

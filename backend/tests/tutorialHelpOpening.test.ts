@@ -26,7 +26,8 @@ test("manual Help opens before remote progress is loaded without starting an aut
     "@/store/authStore": { useAuthStore: (selector: any) => selector(auth) },
     "@/config/tutorial": { tutorialKey: () => "member:role", getTourSteps: () => [] },
     "@/config/tutorialPages": { getPageTourForRoute: () => undefined, PAGE_TOUR_IDS: [] },
-    "./HelpCenter": { HelpCenter: "HelpCenter" }
+    "./HelpCenter": { HelpCenter: "HelpCenter" },
+    "./TutorialPreviewContext": { TutorialPreviewContext: { Provider: "TutorialPreviewProvider" } }
   };
   const source = readFileSync(resolve(__dirname, "../../frontend/src/components/onboarding/TutorialProvider.tsx"), "utf8");
   const code = ts.transpileModule(source, { compilerOptions: {

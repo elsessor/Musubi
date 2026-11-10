@@ -1017,7 +1017,7 @@ export function EventsDashboard({
         <EmptyState
           icon={Calendar}
           title={events.length ? "No events match these filters" : preview ? "No events to display yet" : "No events created yet"}
-          description={events.length ? "Try clearing the status and committee filters to find your events." : preview ? "Join an organization to see its events and assigned tasks." : isLeader ? "Create your first event to start planning work with your organization." : "Your organization's events will appear here once they are created."}
+          description={events.length ? "Try clearing the status and committee filters to find your events." : preview ? "Events and assigned tasks will appear once your organization membership is active." : isLeader ? "Create your first event to start planning work with your organization." : "Your organization's events will appear here once they are created."}
         >
           {events.length > 0 && <button type="button" onClick={() => { setFilter("All"); setSelectedCommittee("All"); }} className="min-h-11 rounded-lg px-3 text-xs font-semibold text-blue-600 hover:underline">Clear filters</button>}
         </EmptyState>

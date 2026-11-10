@@ -22,6 +22,7 @@ import { getFirebaseDb } from "@/firebase/config";
 import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
+import { LEADER_POSITION_OPTIONS } from "@/utils/profileOptions";
 import { getDashboardNavItems } from "@/utils/routes";
 import { subscribeNotificationsFirestore } from "@/services/notifications.service";
 import { getOrganization, updateOrganizationDetails, updateUserProfile } from "@/services/auth.service";
@@ -42,18 +43,7 @@ function greetingDate() {
   }).format(new Date());
 }
 
-const LEADER_POSITIONS = [
-  "President",
-  "Vice President",
-  "Secretary",
-  "Treasurer",
-  "Finance Officer",
-  "Auditor",
-  "Public Relations Officer",
-  "Committee Chair",
-  "Project Coordinator",
-  "Team Lead"
-];
+const LEADER_POSITIONS = LEADER_POSITION_OPTIONS;
 
 function CustomSelect({
   value,

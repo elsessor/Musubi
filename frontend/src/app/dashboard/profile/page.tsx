@@ -15,12 +15,13 @@ import { ProfileOverview, type ProfileOverviewUser } from "@/components/dashboar
 import { useLogout } from "@/hooks/useLogout";
 import { getMyProfile, updateMyProfile } from "@/services/auth.service";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SkillsPicker } from "@/components/ui/SkillsPicker";
 import { subscribeEventsFirestore } from "@/services/events.service";
 import type { Event } from "@/components/events/types";
 import { getAssignedProfileTasks } from "@/utils/profileMetrics";
 import { getDashboardNavItems } from "@/utils/routes";
-import { PROGRAM_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
+import { getProfilePositionOptions, PROGRAM_OPTIONS, YEAR_LEVEL_OPTIONS } from "@/utils/profileOptions";
 import { useToastStore } from "@/store/toastStore";
 import { getProfileReturnPath } from "@/utils/profileNavigation";
 
@@ -36,18 +37,7 @@ function asDateInputValue(value: string): string {
 
 function getLatestAllowedBirthdate(): string {
   const latest = new Date();
-  latest.setFullYear(latest.getFullYear() - 17);
   return asDateInputValue(`${latest.getFullYear()}-${String(latest.getMonth() + 1).padStart(2, "0")}-${String(latest.getDate()).padStart(2, "0")}`);
-}
-
-function isAtLeastSeventeen(birthdate: string): boolean {
-  const value = asDateInputValue(birthdate);
-  if (!value) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  const today = new Date();
-  let age = today.getFullYear() - year;
-  if (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day)) age -= 1;
-  return age >= 17;
 }
 
 export default function DashboardProfilePage() {
@@ -200,10 +190,6 @@ export default function DashboardProfilePage() {
     if (!firebaseUser?.uid) return;
     setProfileSaveError("");
     const birthdateToSave = editBirthdate || userData.birthdate;
-    if (birthdateToSave && !isAtLeastSeventeen(birthdateToSave)) {
-      setProfileSaveError("You must be at least 17 years old to save your birthdate.");
-      return;
-    }
     setIsSaving(true);
 
     try {
@@ -325,29 +311,27 @@ export default function DashboardProfilePage() {
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                      <label htmlFor="edit-profile-position" className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                         Position / Role
                       </label>
-                      <input
-                        type="text"
-                        value={editPosition}
-                        onChange={(e) => setEditPosition(e.target.value)}
-                        className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-                      />
+                      <Select value={editPosition} onValueChange={setEditPosition}>
+                        <SelectTrigger id="edit-profile-position" className="min-h-11 rounded-2xl border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:bg-white"><SelectValue placeholder="Choose position" /></SelectTrigger>
+                        <SelectContent className="z-[70] max-h-[var(--radix-select-content-available-height)] w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)] rounded-2xl border-slate-200 bg-white text-slate-900">
+                          {getProfilePositionOptions(userData.role, userData.position).map((position) => <SelectItem key={position} value={position} className="min-h-11 rounded-xl text-xs font-semibold focus:bg-blue-50">{position}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                      <label htmlFor="edit-profile-year-level" className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                         Year Level
                       </label>
-                      <select
-                        value={editYearLevel}
-                        onChange={(event) => setEditYearLevel(event.target.value)}
-                        className="h-10 w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
-                      >
-                        <option value="" disabled>Choose year level</option>
-                        {YEAR_LEVEL_OPTIONS.map((yearLevel) => <option key={yearLevel} value={yearLevel}>{yearLevel}</option>)}
-                      </select>
+                      <Select value={editYearLevel} onValueChange={setEditYearLevel}>
+                        <SelectTrigger id="edit-profile-year-level" className="min-h-11 rounded-2xl border-slate-200 bg-[#f8fafc] px-4 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:bg-white"><SelectValue placeholder="Choose year level" /></SelectTrigger>
+                        <SelectContent className="z-[70] max-h-[var(--radix-select-content-available-height)] w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)] rounded-2xl border-slate-200 bg-white text-slate-900">
+                          {[...new Set([...YEAR_LEVEL_OPTIONS, ...(userData.yearLevel ? [userData.yearLevel] : [])])].map((yearLevel) => <SelectItem key={yearLevel} value={yearLevel} className="min-h-11 rounded-xl text-xs font-semibold focus:bg-blue-50">{yearLevel}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
@@ -378,7 +362,6 @@ export default function DashboardProfilePage() {
                       }}
                       className="w-full rounded-2xl border border-slate-200 bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
                     />
-                    <p className="mt-1.5 text-xs text-slate-500">You must be at least 17 years old.</p>
                   </div>
 
                   {/* Skill Keywords */}

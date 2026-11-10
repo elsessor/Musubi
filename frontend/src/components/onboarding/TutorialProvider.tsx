@@ -193,10 +193,12 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     quietContext.current = contextKey; setMode(null); setRun(null);
   }
   function restartOnboarding() {
-    controlCleanup.current(); controlCleanup.current = () => {};
-    write(restartedTutorialStatus(savedRef.current));
-    quietContext.current = null; setKind("quick"); setIndex(0); setInspectRoute(null);
-    setAutomaticSteps(null); setRun({ context: contextKey, automatic: false, introduction: true }); setMode("started");
+    if (!profile || !identity) return;
+    savedRef.current = restartedTutorialStatus(savedRef.current);
+    setStatusLoaded(identity);
+    quietContext.current = null; setInspectRoute(null);
+    // Save the fresh attempt with its first step, without reopening the introduction.
+    beginOnboarding();
   }
   function inspectPage(route: string) {
     if (!profile || ![...getDashboardNavItems(profile.role).map((item) => item.href), "/dashboard/profile"].includes(route)) return;
@@ -213,6 +215,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     persist("in_progress", first, tour, section); setMode("tour");
   }
   const currentPageTour = profile ? getPageTourForRoute(profile.role, pathname, pageContext) : undefined;
+  const activeGuide = visible && mode === "tour" && (!run?.context || run.context === contextKey) && steps.length > 0;
   const canResume = saved?.status === "in_progress" && saved.tour !== "controls" && profile && getTourSteps(profile.role, saved.tour).length > 0 && (saved.tour !== "page-event-details" || pageContext === "event") && (saved.tour !== "page-member-profile" || memberProfileOpen);
   return <HelpContext.Provider value={(view = "guide", tour) => {
     if (tour && (!profile || !getTourSteps(profile.role, tour).length || (tour === "page-event-details" && pageContext !== "event") || (tour === "page-member-profile" && !memberProfileOpen))) return;
@@ -220,12 +223,12 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     controlCleanup.current(); controlCleanup.current = () => {};
     setInitialHelpTour(tour ?? null); setRun(null); setAutomaticSteps(null); setMode(view);
   }}>
-    <TutorialPreviewContext.Provider value={visible && (mode === "tour" || (mode === "started" && Boolean(run?.introduction)))}>
+    <TutorialPreviewContext.Provider value={activeGuide || (visible && mode === "started" && Boolean(run?.introduction))}>
       {children}
     </TutorialPreviewContext.Provider>
     {visible && inspectRoute && <div role="status" className="fixed bottom-4 right-4 z-[201] rounded-xl bg-white p-4 text-sm text-slate-700 shadow-xl">Opening page guide…</div>}
-    {visible && mode === "tour" && (!run?.context || run.context === contextKey) && steps.length > 0 && <GuidedTour steps={steps} index={Math.min(index, steps.length - 1)} skipUnavailable={run?.automatic} onStep={(step) => { setIndex(step); persist("in_progress", step, kind, run?.section); }} onExit={close} />}
-    {visible && mode === "started" && <GetStarted role={profile!.role} hasOrganization={!preview} onClose={close} onContinue={run?.introduction ? beginOnboarding : undefined} onExploreOwn={run?.introduction ? dismissIntroduction : undefined} onWalkthrough={run?.introduction ? beginOnboarding : () => start("features")} onPageGuide={currentPageTour ? () => start(currentPageTour.id) : undefined} onHelp={() => { setRun(null); setInitialHelpTour(null); setMode("guide"); }} onOrganization={() => { close(); router.push("/dashboard/organization"); }} />}
+    {activeGuide && <GuidedTour steps={steps} index={Math.min(index, steps.length - 1)} skipUnavailable={run?.automatic} onStep={(step) => { setIndex(step); persist("in_progress", step, kind, run?.section); }} onExit={close} />}
+    {visible && mode === "started" && <GetStarted role={profile!.role} hasOrganization={!preview} onClose={close} onContinue={run?.introduction ? beginOnboarding : undefined} onExploreOwn={run?.introduction ? dismissIntroduction : undefined} onWalkthrough={run?.introduction ? beginOnboarding : undefined} onFullWalkthrough={restartOnboarding} onPageGuide={currentPageTour ? () => start(currentPageTour.id) : undefined} onHelp={() => { setRun(null); setInitialHelpTour(null); setMode("guide"); }} onOrganization={() => { close(); router.push("/dashboard/organization"); }} />}
     {visible && mode === "guide" && <HelpCenter key={initialHelpTour ?? "home"} role={profile!.role} preview={preview} eventOpen={pageContext === "event"} memberProfileOpen={memberProfileOpen} initialTour={initialHelpTour} currentPageTour={currentPageTour?.id} resumeTour={canResume && saved ? saved.tour : undefined} localOnly={localOnly} onClose={close} onStart={start} onInspect={inspectPage} onGetStarted={() => { setRun(null); setMode("started"); }} onSidebar={() => startSidebar()} onRestart={restartOnboarding} />}
   </HelpContext.Provider>;
 }

@@ -11,6 +11,7 @@ import { useAuthStore } from "../src/store/authStore";
 import { useAtomizerDraftStore } from "../src/store/atomizerDraftStore";
 import type { AuthUserProfile } from "../src/types/auth";
 import { TutorialPreviewContext } from "../src/components/onboarding/TutorialPreviewContext";
+import { OrganizationMembershipNotice } from "../src/components/dashboard/OrganizationMembershipNotice";
 
 function renderTeaching(element: ReactNode) {
   return renderToStaticMarkup(createElement(TutorialPreviewContext.Provider, { value: true }, element));
@@ -46,6 +47,31 @@ test("event placeholders describe the card layout without becoming selectable re
   const html = renderToStaticMarkup(createElement(EventPlaceholderCard));
   for (const label of ["Event name", "Event status", "Committee", "Start date", "End date", "Members", "Task progress"]) assert.ok(html.includes(label), label);
   assert.doesNotMatch(html, /<button|href=|data-tour="event-card"/);
+});
+
+test("membership cards distinguish pending requests from not having joined an organization", () => {
+  const pending = renderToStaticMarkup(createElement(OrganizationMembershipNotice, { request: { id: "request", organizationId: "club", organizationName: "Campus Arts Club" } }));
+  assert.match(pending, /Join request pending/);
+  assert.match(pending, /Pending approval/);
+  assert.match(pending, /Campus Arts Club/);
+  assert.match(pending, /not a member yet/);
+  assert.match(pending, /View join request/);
+  assert.doesNotMatch(pending, /Find an organization/);
+  const empty = renderToStaticMarkup(createElement(OrganizationMembershipNotice, { request: null }));
+  assert.match(empty, /haven’t joined an organization yet/);
+  assert.match(empty, /Not a member/);
+  assert.match(empty, /Find an organization/);
+  assert.doesNotMatch(empty, /Pending approval/);
+});
+
+test("membership loading and errors keep the status explicit instead of inventing a missing request", () => {
+  const loading = renderToStaticMarkup(createElement(OrganizationMembershipNotice, { request: null, loading: true }));
+  assert.match(loading, /Checking organization status/);
+  assert.doesNotMatch(loading, /Find an organization/);
+  const failed = renderToStaticMarkup(createElement(OrganizationMembershipNotice, { request: null, error: "Unable to refresh", onRetry: () => {} }));
+  assert.match(failed, /request status could not be confirmed/);
+  assert.match(failed, /Try again/);
+  assert.doesNotMatch(failed, /Pending approval/);
 });
 
 test("event placeholders provide a preview action without becoming business records", () => {

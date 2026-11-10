@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, Building2, CalendarDays, ChevronRight, Compass, FileText, LayoutDashboard, ListChecks, MoreHorizontal, PanelLeft, Play, RotateCcw, Route, Search, Settings, ShieldCheck, UserRound, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, Building2, CalendarDays, ChevronRight, Compass, FileText, LayoutDashboard, ListChecks, MoreHorizontal, PanelLeft, Play, Route, Search, Settings, ShieldCheck, UserRound, Users, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getHelpCategories, searchHelp, type HelpCategory, type HelpGuide } from "@/config/helpCenter";
@@ -92,14 +92,13 @@ export function HelpCenter({ role, preview, eventOpen, memberProfileOpen = false
           <div className="flex items-center gap-2">
           <button type="button" onClick={() => onStart("quick")} className={`inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 ${focus}`}><Play aria-hidden="true" className="size-4" />Start Quick Tour</button>
           <DropdownMenu modal={false}><DropdownMenuTrigger asChild><button type="button" aria-label="More help options" className={`flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 ${focus}`}><MoreHorizontal aria-hidden="true" className="size-5" /></button></DropdownMenuTrigger><DropdownMenuContent align="end" className="z-[220] max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-[calc(100vw-2rem)] rounded-xl border-slate-200 bg-white p-1.5 text-slate-700 shadow-lg">
-            <DropdownMenuItem onSelect={onGetStarted} className="min-h-11 rounded-lg"><Compass aria-hidden="true" className={menuIcon} />Get Started</DropdownMenuItem>
             <DropdownMenuItem onSelect={onSidebar} className="min-h-11 rounded-lg"><PanelLeft aria-hidden="true" className={menuIcon} />Replay sidebar introduction</DropdownMenuItem>
-            <DropdownMenuItem onSelect={onRestart} className="min-h-11 rounded-lg"><RotateCcw aria-hidden="true" className={menuIcon} />Restart onboarding</DropdownMenuItem>
             {currentPageTour && <DropdownMenuItem onSelect={() => onStart(currentPageTour)} className="min-h-11 rounded-lg"><FileText aria-hidden="true" className={menuIcon} />Replay this page guide</DropdownMenuItem>}
             {resumeTour && <DropdownMenuItem onSelect={() => onStart(resumeTour, true)} className="min-h-11 rounded-lg"><Play aria-hidden="true" className={menuIcon} />{resumeTour === "quick" || resumeTour === "features" ? "Resume walkthrough" : "Reopen last guide"}</DropdownMenuItem>}
             <DropdownMenuItem onSelect={() => setView({ type: "reference" })} className="min-h-11 rounded-lg"><BookOpen aria-hidden="true" className={menuIcon} />Read the user guide</DropdownMenuItem>
           </DropdownMenuContent></DropdownMenu>
           </div>
+          <button type="button" onClick={onGetStarted} className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 ${focus}`}><Compass aria-hidden="true" className="size-4" />Get Started</button>
         </div>}
       </header>
       <div ref={content} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">

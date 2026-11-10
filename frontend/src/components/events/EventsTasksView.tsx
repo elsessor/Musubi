@@ -2,7 +2,6 @@
 
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { BookOpen, CalendarDays, Plus, X, Zap } from "lucide-react";
 import { AtomizerForm } from "./AtomizerForm";
@@ -24,6 +23,8 @@ import { getOrganizationCommittees, subscribeOrganizationMembersFirestore, type 
 import { prepareTasksForReuse } from "@/utils/taskReuse";
 import { TutorialContextualHelp } from "@/components/onboarding/TutorialProvider";
 import { useTutorialPlaceholders } from "@/components/onboarding/TutorialPreviewContext";
+import { OrganizationMembershipNotice } from "@/components/dashboard/OrganizationMembershipNotice";
+import { useOrganizationJoinStatus } from "@/hooks/useOrganizationJoinStatus";
 
 type Tab = "events" | "atomizer";
 
@@ -39,6 +40,7 @@ export function EventsTasksView() {
 
 function OrganizationEventsTasksView({ organizationId }: { organizationId?: string }) {
   const teaching = useTutorialPlaceholders();
+  const joinStatus = useOrganizationJoinStatus();
   const profile = useAuthStore((state) => state.profile);
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const showToast = useToastStore((state) => state.showToast);
@@ -261,7 +263,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId?: stri
   return (
     <TaskAssigneeMembersContext.Provider value={members}>
     <div className="flex min-h-full min-w-0 flex-col">
-      {!effectiveOrgId && <p className="mb-3 text-xs leading-5 text-slate-500">{teaching ? "Explore the tabs, views, and form fields below. " : ""}<Link href="/dashboard/organization" className="font-semibold text-blue-600 underline underline-offset-2">Join an organization</Link> to view events and work on tasks.</p>}
+      {!effectiveOrgId && <div className="mb-4"><OrganizationMembershipNotice {...joinStatus} onRetry={joinStatus.refresh} />{teaching && <p className="mt-3 text-xs leading-5 text-slate-500">Explore the tabs, views, and form fields during this guide. Sample cards explain where your organization’s information will appear.</p>}</div>}
       {/* Tab navigation */}
       <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
         <TabButton

@@ -1,5 +1,14 @@
 export const YEAR_LEVEL_OPTIONS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
 
+export const LEADER_POSITION_OPTIONS = ["President", "Vice President", "Secretary", "Treasurer", "Finance Officer", "Auditor", "Public Relations Officer", "Committee Chair", "Project Coordinator", "Team Lead"];
+export const MEMBER_POSITION_OPTIONS = ["Organization Member", "Committee Member", "Project Member", "Volunteer", "Staff", "Associate", "Sub-committee Member"];
+
+export function getProfilePositionOptions(role: string, currentPosition = ""): string[] {
+  const options = role === "Student Leader" ? LEADER_POSITION_OPTIONS : role === "Admin" ? ["Administrator"] : MEMBER_POSITION_OPTIONS;
+  // Keep previously saved titles available without changing the account's access role.
+  return [...new Set([...options, ...(currentPosition.trim() ? [currentPosition.trim()] : [])])];
+}
+
 export const PROGRAM_OPTIONS = [
   "Bachelor of Science in Accountancy",
   "Bachelor of Science in Accounting Information Management",

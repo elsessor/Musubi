@@ -27,7 +27,7 @@ function guide(role: string, hasOrganization: boolean, restarting = false) {
   const exports: any = {};
   new Function("exports", "require", code)(exports, (name: string) => name === "react" ? { useState: () => [section, (next: string) => { section = next; }] } : name === "react/jsx-runtime" ? runtime : components);
   const action = (name: string) => () => calls.push(name);
-  const props = { role, hasOrganization, onClose: action("close"), onContinue: restarting ? action("continue") : undefined, onExploreOwn: restarting ? action("independent") : undefined, onWalkthrough: action("walkthrough"), onPageGuide: action("page"), onHelp: action("help"), onOrganization: action("organization") };
+  const props = { role, hasOrganization, onClose: action("close"), onContinue: restarting ? action("continue") : undefined, onExploreOwn: restarting ? action("independent") : undefined, onWalkthrough: restarting ? action("walkthrough") : undefined, onFullWalkthrough: action("full"), onPageGuide: action("page"), onHelp: action("help"), onOrganization: action("organization") };
   return {
     calls, render: () => exports.GetStarted(props),
     click(tree: Node, label: string) {
@@ -38,12 +38,12 @@ function guide(role: string, hasOrganization: boolean, restarting = false) {
   };
 }
 
-test("Get Started offers all sections and connects walkthrough, page guide, Help, and closing actions", () => {
+test("reopened Get Started offers all reference sections and closes without a walkthrough button", () => {
   const app = guide("Organization Member", false);
   let tree = app.render();
   assert.match(text(tree), /Welcome to Musubi/);
   assert.match(text(tree), /before joining/);
-  app.click(tree, "Start walkthrough");
+  assert.doesNotMatch(text(tree), /Start walkthrough/);
   app.click(tree, "Your access"); tree = app.render();
   assert.match(text(tree), /pending join request does not grant membership/);
   assert.match(text(tree), /Claiming tasks, submitting work/);
@@ -51,16 +51,23 @@ test("Get Started offers all sections and connects walkthrough, page guide, Help
   app.click(tree, "Work flow"); tree = app.render();
   assert.match(text(tree), /wait for the leader's approval/);
   app.click(tree, "Page tours"); tree = app.render();
+  assert.doesNotMatch(text(tree), /Start walkthrough/);
+  app.click(tree, "Full Walkthrough");
   app.click(tree, "Replay this page guide");
   app.click(tree, "Help / User Guide");
-  app.click(tree, "I understand");
-  assert.deepEqual(app.calls, ["walkthrough", "organization", "page", "help", "close"]);
+  app.click(tree, "Done");
+  assert.deepEqual(app.calls, ["organization", "full", "page", "help", "close"]);
 });
 
 test("the introduction starts the tour directly and offers independent exploration", () => {
   const app = guide("Student Leader", false, true);
   const tree = app.render();
-  app.click(tree, "Continue to tour");
+  const footer = nodes(tree).find((node) => node.type === "footer")!;
+  assert.equal(nodes(tree).filter((node) => node.type === "button" && text(node) === "Start walkthrough").length, 1);
+  app.click(footer, "Start walkthrough");
+  app.click(tree, "Page tours");
+  const tours = app.render();
+  assert.equal(nodes(tours).filter((node) => node.type === "button" && text(node) === "Start walkthrough").length, 1);
   app.click(tree, "Explore on my own");
   nodes(tree).find((node) => node.type === "Dialog")!.props.onOpenChange(false);
   assert.deepEqual(app.calls, ["continue", "independent", "close"]);

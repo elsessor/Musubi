@@ -23,6 +23,8 @@ import {
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { OrganizationMemberTable } from "@/components/dashboard/OrganizationMemberTable";
 import { OrganizationPreview } from "@/components/dashboard/OrganizationPreview";
+import { OrganizationMembershipNotice } from "@/components/dashboard/OrganizationMembershipNotice";
+import { useOrganizationJoinStatus } from "@/hooks/useOrganizationJoinStatus";
 import { PendingJoinRequests } from "@/components/dashboard/PendingJoinRequests";
 import { OrganizationTypeSelect } from "@/components/dashboard/OrganizationTypeSelect";
 import { useLogout } from "@/hooks/useLogout";
@@ -34,7 +36,6 @@ import { OrganizationSettingsModal, type OrganizationSettings } from "@/componen
 import {
   createOrganizationCommittee,
   getOrganizationCommittees,
-  getMyOrganizationJoinRequest,
   getOrganization,
   getOrganizationJoinRequests,
   getOrganizationMembers,
@@ -42,7 +43,6 @@ import {
   reviewOrganizationJoinRequest,
   subscribeOrganizationMembersFirestore,
   updateOrganizationDetails,
-  type MyOrganizationJoinRequest,
   type OrganizationJoinRequest,
   type OrganizationMember,
   type OrganizationCommitteeRecord,
@@ -93,7 +93,7 @@ export default function OrganizationPage() {
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [committees, setCommittees] = useState<OrganizationCommitteeRecord[]>([]);
   const [joinRequests, setJoinRequests] = useState<OrganizationJoinRequest[]>([]);
-  const [myJoinRequest, setMyJoinRequest] = useState<MyOrganizationJoinRequest | null>(null);
+  const joinStatus = useOrganizationJoinStatus();
   const [reviewingRequestId, setReviewingRequestId] = useState("");
   const [accessModalOpen, setAccessModalOpen] = useState(false);
   const [committeeModalOpen, setCommitteeModalOpen] = useState(false);
@@ -219,11 +219,6 @@ export default function OrganizationPage() {
     void getOrganizationJoinRequests(firebaseUser, profile.organizationId).then(setJoinRequests).catch(() => setJoinRequests([]));
   }, [firebaseUser, profile?.organizationId, profile?.role]);
 
-  useEffect(() => {
-    if (!firebaseUser || profile?.organizationId) { setMyJoinRequest(null); return; }
-    void getMyOrganizationJoinRequest(firebaseUser).then(setMyJoinRequest).catch(() => setMyJoinRequest(null));
-  }, [firebaseUser, profile?.organizationId]);
-
   async function reviewJoinRequest(requestId: string, status: "accepted" | "rejected") {
     if (!firebaseUser || !profile?.organizationId) return;
     setReviewingRequestId(requestId);
@@ -331,7 +326,8 @@ export default function OrganizationPage() {
   return (
     <DashboardLayout tutorialReady={!loading} activeNavId="organization" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems(profile.role)} notificationCount={0} onLogout={logout} user={user}>
       <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
-        <div className="flex items-center justify-between gap-4"><h1 className="text-[21px] font-bold tracking-[-0.02em]">Organization</h1>{profile.role !== "Admin" && firebaseUser ? <button type="button" onClick={() => setAccessModalOpen(true)} className="flex h-9 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4" />{profile.role === "Student Leader" ? "Create or join" : "Join organization"}</button> : null}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-[21px] font-bold tracking-[-0.02em]">Organization</h1>{profile.role !== "Admin" && firebaseUser ? <button type="button" onClick={() => setAccessModalOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4 shrink-0" />{joinStatus.request ? "Organization options" : profile.role === "Student Leader" ? "Create or join" : "Join organization"}</button> : null}</div>
+        {!profile.organizationId?.trim() && profile.role !== "Admin" && <div className="mt-4"><OrganizationMembershipNotice {...joinStatus} onRetry={joinStatus.refresh} action={null} /></div>}
         <div className="mt-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-[#e8eef7] p-1.5">
           <TabButton tourId="overview-tab" active={activeTab === "overview"} icon={BriefcaseBusiness} label="Overview" onClick={() => handleChangeTab("overview")} />
           <TabButton tourId="members-tab" active={activeTab === "members"} icon={UsersRound} label="Members" onClick={() => handleChangeTab("members")} />
@@ -345,7 +341,7 @@ export default function OrganizationPage() {
         ) : error ? (
           <ErrorCard message={error} />
         ) : !organization ? (
-          <OrganizationPreview tab={activeTab} isLeader={profile.role === "Student Leader"} pendingOrganizationName={myJoinRequest?.organizationName} onShowMembers={() => handleChangeTab("members")} />
+          <OrganizationPreview tab={activeTab} isLeader={profile.role === "Student Leader"} onShowMembers={() => handleChangeTab("members")} />
         ) : activeTab === "overview" ? (
           <Overview
             organization={organization}
@@ -399,6 +395,7 @@ export default function OrganizationPage() {
           onClose={() => setAccessModalOpen(false)}
           onComplete={(updatedProfile) => {
             setProfile({ ...profile, ...updatedProfile });
+            joinStatus.refresh();
             setOrganization(null);
             setMembers([]);
             setLoading(true);

@@ -201,23 +201,23 @@ test("unaffiliated accounts can start the full walkthrough and receive a separat
   const app = provider(t, "Student Leader", { pathname: "/dashboard", organizationId: "  " });
   let tree = await app.settle();
   find(tree, (node) => node.type === "GuidedTour")!.props.onExit(true);
-  tree = await app.settle(); tree.props.value("started"); tree = await app.settle();
-  find(tree, (node) => node.type === "GetStarted")!.props.onWalkthrough();
+  tree = await app.settle(); tree.props.value(); tree = await app.settle();
+  find(tree, (node) => node.type === "HelpCenter")!.props.onRestart();
   tree = await app.settle();
   const walkthrough = find(tree, (node) => node.type === "GuidedTour")!;
-  assert.equal(app.writes.at(-1)?.tour, "features");
-  assert.match(walkthrough.props.steps.find((step: tutorial.TourStep) => step.id === "events").description, /Placeholder|placeholder/);
+  assert.equal(app.writes.at(-1)?.tour, "sidebar");
+  assert.ok(walkthrough.props.steps.some((step: tutorial.TourStep) => step.id === "sidebar-events"));
   walkthrough.props.onExit(false);
   await app.settle();
   app.setRoute("/dashboard/organization");
   const organization = find(await app.settle(), (node) => node.type === "GuidedTour")!;
   assert.equal(organization.props.steps[0].id, "organization-overview");
   assert.match(organization.props.steps[0].description, /preview|Preview/);
-  assert.deepEqual(app.writes.at(-1)?.seenPages, ["page-events", "page-dashboard"]);
+  assert.deepEqual(app.writes.at(-1)?.seenPages, []);
   assert.equal(app.writes.at(-1)?.onboarding?.modules?.["page-organization"]?.status, "in_progress");
 });
 
-test("existing accounts keep their page introductions and can reopen Get Started without resetting progress", async (t) => {
+test("existing accounts replay the current page guide without resetting onboarding or reopening Get Started", async (t) => {
   const app = provider(t, "Organization Member", { organizationId: null, pathname: "/dashboard/organization" });
   let tree = await app.settle();
   assert.equal(find(tree, (node) => node.type === "GetStarted"), undefined);
@@ -228,11 +228,61 @@ test("existing accounts keep their page introductions and can reopen Get Started
   const previous = app.writes.at(-1);
   tree.props.value();
   tree = await app.settle();
-  find(tree, (node) => node.type === "HelpCenter")!.props.onGetStarted();
-  const welcome = find(await app.settle(), (node) => node.type === "GetStarted")!;
-  welcome.props.onClose();
+  find(tree, (node) => node.type === "HelpCenter")!.props.onStart("page-organization");
+  tree = await app.settle();
+  assert.equal(find(tree, (node) => node.type === "GetStarted"), undefined);
+  const replay = find(tree, (node) => node.type === "GuidedTour")!;
+  assert.equal(replay.props.index, 0);
+  replay.props.onExit(true);
   await app.settle();
+  assert.deepEqual(app.writes.at(-1)?.onboarding, previous?.onboarding);
+  assert.deepEqual(app.writes.at(-1)?.seenPages, previous?.seenPages);
+  tree = await app.settle(); tree.props.value(); tree = await app.settle();
+  find(tree, (node) => node.type === "HelpCenter")!.props.onGetStarted();
+  tree = await app.settle();
+  const reference = find(tree, (node) => node.type === "GetStarted")!;
+  assert.ok(reference);
+  assert.equal(reference.props.onWalkthrough, undefined);
+  assert.equal(reference.props.onContinue, undefined);
+  assert.equal(reference.props.onExploreOwn, undefined);
+  assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, false);
+  const writes = app.writes.length;
+  reference.props.onClose(); await app.settle();
+  assert.equal(app.writes.length, writes);
+});
+
+test("Get Started remains available as a reference after a new user chooses independent exploration", async (t) => {
+  const app = provider(t, "Organization Member", { pathname: "/dashboard", organizationId: null, saved: null });
+  let tree = await app.settle();
+  find(tree, (node) => node.type === "GetStarted")!.props.onExploreOwn();
+  tree = await app.settle(); tree.props.value(); tree = await app.settle();
+  find(tree, (node) => node.type === "HelpCenter")!.props.onGetStarted();
+  tree = await app.settle();
+  const reference = find(tree, (node) => node.type === "GetStarted")!;
+  assert.equal(reference.props.onWalkthrough, undefined);
+  assert.equal(reference.props.onContinue, undefined);
+  const previous = app.writes.at(-1);
+  reference.props.onClose(); await app.settle();
   assert.equal(app.writes.at(-1), previous);
+  assert.equal(previous?.onboarding?.preference?.mode, "independent");
+});
+
+test("Full Walkthrough from Get Started restarts onboarding directly", async (t) => {
+  const app = provider(t);
+  let tree = await app.settle();
+  tree.props.value(); tree = await app.settle();
+  find(tree, (node) => node.type === "HelpCenter")!.props.onGetStarted();
+  tree = await app.settle();
+  const reference = find(tree, (node) => node.type === "GetStarted")!;
+  assert.equal(reference.props.onContinue, undefined);
+  reference.props.onFullWalkthrough();
+  tree = await app.settle();
+  assert.equal(find(tree, (node) => node.type === "GetStarted"), undefined);
+  const guide = find(tree, (node) => node.type === "GuidedTour")!;
+  assert.equal(guide.props.index, 0);
+  assert.equal(guide.props.steps[0].id, "sidebar-dashboard");
+  assert.ok(app.writes.at(-1)?.onboarding?.restartedAt);
+  assert.deepEqual(app.writes.at(-1)?.seenPages, []);
 });
 
 test("contextual Help opens guide details before invoking the existing walkthrough", async (t) => {
@@ -315,13 +365,6 @@ test("sidebar progress resumes without welcome and Help Center can replay or res
   guide.props.onExit(false); tree = await app.settle(); tree.props.value(); tree = await app.settle();
   find(tree, (node) => node.type === "HelpCenter")!.props.onRestart();
   tree = await app.settle();
-  const started = find(tree, (node) => node.type === "GetStarted")!;
-  assert.ok(started);
-  assert.equal(started.props.role, "Student Leader");
-  assert.equal(started.props.hasOrganization, true);
-  assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding" || node.type === "GuidedTour"), undefined);
-  started.props.onWalkthrough();
-  tree = await app.settle();
   assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding" || node.type === "GetStarted"), undefined);
   guide = find(tree, (node) => node.type === "GuidedTour")!;
   assert.equal(guide.props.index, 0);
@@ -331,43 +374,36 @@ test("sidebar progress resumes without welcome and Help Center can replay or res
   assert.equal(find(await app.settle(), (node) => node.type === "WelcomeOnboarding" || node.type === "GuidedTour"), undefined);
 });
 
-test("restarted Get Started supports opting out while reopening the reference keeps progress", async (t) => {
-  const stamp = "2026-11-10T00:00:00Z";
-  const app = provider(t, "Organization Member", { organizationId: null, saved: { version: 1, tour: "quick", status: "dismissed", step: 0, updatedAt: stamp, onboarding: { version: 1, preference: { mode: "independent", source: "user", updatedAt: stamp } } } });
-  let tree = await app.settle();
-  const teaching = (tree: Node) => find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value;
-  assert.equal(teaching(tree), false);
-  tree.props.value(); tree = await app.settle();
-  find(tree, (node) => node.type === "HelpCenter")!.props.onRestart();
-  tree = await app.settle();
-  let started = find(tree, (node) => node.type === "GetStarted")!;
-  assert.equal(teaching(tree), true);
-  assert.equal(started.props.hasOrganization, false);
-  started.props.onClose();
-  tree = await app.settle();
-  assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding" || node.type === "GuidedTour"), undefined);
-  assert.equal(teaching(tree), false);
-  assert.equal(app.writes.length, 2);
-  assert.equal(app.writes.at(-1)?.onboarding?.preference?.mode, "independent");
-  assert.equal(app.writes[0].acknowledged, false);
-  assert.deepEqual(app.writes[0].seenPages, []);
-  assert.ok(app.writes[0].onboarding?.restartedAt);
-  tree.props.value(); tree = await app.settle();
-  find(tree, (node) => node.type === "HelpCenter")!.props.onGetStarted();
-  tree = await app.settle();
-  started = find(tree, (node) => node.type === "GetStarted")!;
-  assert.equal(teaching(tree), false);
-  assert.equal(started.props.onContinue, undefined);
-  started.props.onClose(); tree = await app.settle();
-  tree.props.value(); tree = await app.settle();
-  find(tree, (node) => node.type === "HelpCenter")!.props.onRestart();
-  tree = await app.settle();
-  assert.equal(teaching(tree), true);
-  find(tree, (node) => node.type === "GetStarted")!.props.onExploreOwn();
-  tree = await app.settle();
-  assert.equal(find(tree, (node) => node.type === "GuidedTour" || node.type === "WelcomeOnboarding"), undefined);
-  assert.equal(app.writes.at(-1)?.onboarding?.preference?.mode, "independent");
-  assert.equal(teaching(tree), false);
+test("Full Walkthrough restarts opted-out accounts directly, while Quick Tour preserves saved progress", async (t) => {
+  for (const role of ["Admin", "Student Leader", "Organization Member"] as const) await t.test(role, async (t) => {
+    const stamp = "2026-11-10T00:00:00Z";
+    const app = provider(t, role, { pathname: role === "Admin" ? "/admin" : "/dashboard", organizationId: null, saved: { version: 1, tour: "quick", status: "dismissed", step: 0, updatedAt: stamp, onboarding: { version: 1, preference: { mode: "independent", source: "user", updatedAt: stamp } } } });
+    let tree = await app.settle();
+    tree.props.value(); tree = await app.settle();
+    find(tree, (node) => node.type === "HelpCenter")!.props.onRestart();
+    tree = await app.settle();
+    assert.equal(find(tree, (node) => node.type === "GetStarted" || node.type === "WelcomeOnboarding"), undefined);
+    let guide = find(tree, (node) => node.type === "GuidedTour")!;
+    assert.equal(guide.props.index, 0);
+    assert.equal(guide.props.steps[0].id, "sidebar-dashboard");
+    const reset = app.writes.at(-1)!;
+    assert.equal(reset.acknowledged, false);
+    assert.deepEqual(reset.seenPages, []);
+    assert.ok(reset.onboarding?.restartedAt);
+    assert.equal(reset.onboarding?.preference?.mode, "guided");
+    assert.equal(reset.onboarding?.welcome?.status, "completed");
+    guide.props.onExit(false); tree = await app.settle();
+    assert.equal(find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value, false);
+    const previous = app.writes.at(-1)!;
+    tree.props.value(); tree = await app.settle();
+    find(tree, (node) => node.type === "HelpCenter")!.props.onStart("quick");
+    tree = await app.settle();
+    guide = find(tree, (node) => node.type === "GuidedTour")!;
+    assert.equal(guide.props.index, 0);
+    assert.deepEqual(app.writes.at(-1)?.onboarding, previous.onboarding);
+    guide.props.onExit(true); await app.settle();
+    assert.deepEqual(app.writes.at(-1)?.onboarding, previous.onboarding);
+  });
 });
 
 test("automatic previews retain controls that mount only after the guide starts and hide samples on exit", async (t) => {
@@ -399,35 +435,39 @@ test("restarting a completed account restores automatic page and event introduct
   const stamp = "2026-11-10T00:00:00Z";
   const complete = { status: "completed", step: 3, updatedAt: stamp } as const;
   const saved: tutorial.TutorialStatus = { version: 1, tour: "page-event-details", status: "completed", step: 8, acknowledged: true, updatedAt: stamp, seenPages: ["page-dashboard", "page-organization", "page-events", "page-event-details"], onboarding: { version: 1, preference: { mode: "guided", source: "user", updatedAt: stamp }, welcome: complete, sidebar: complete, modules: { "page-dashboard": complete, "page-organization": complete, "page-events": complete, "page-event-details": complete } } };
-  const app = provider(t, "Student Leader", { pathname: "/dashboard", saved });
+  const app = provider(t, "Student Leader", { pathname: "/dashboard", organizationId: null, saved });
   let tree = await app.settle();
+  const teaching = (tree: Node) => find(tree, (node) => node.type === "TutorialPreviewProvider")!.props.value;
+  assert.equal(teaching(tree), false);
   assert.equal(find(tree, (node) => node.type === "GuidedTour"), undefined);
   tree.props.value(); tree = await app.settle();
   find(tree, (node) => node.type === "HelpCenter")!.props.onRestart();
   tree = await app.settle();
   const reset = app.writes.at(-1)!;
+  assert.equal(teaching(tree), true);
   assert.ok(reset.onboarding?.restartedAt);
   assert.deepEqual(reset.seenPages, []);
   assert.equal(reset.acknowledged, false);
   assert.equal(reset.onboarding?.modules, undefined);
-  find(tree, (node) => node.type === "GetStarted")!.props.onContinue();
-  tree = await app.settle();
-  assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding"), undefined);
+  assert.equal(find(tree, (node) => node.type === "WelcomeOnboarding" || node.type === "GetStarted"), undefined);
   find(tree, (node) => node.type === "GuidedTour")!.props.onExit(true);
   tree = await app.settle();
   let guide = find(tree, (node) => node.type === "GuidedTour")!;
   assert.equal(guide.props.steps[0].id, "dashboard-overview");
   assert.equal(guide.props.index, 0);
-  guide.props.onExit(true); await app.settle();
+  guide.props.onExit(true); tree = await app.settle();
+  assert.equal(teaching(tree), false, "Completing the dashboard guide removes teaching content");
   app.setRoute("/dashboard/organization"); tree = await app.settle();
   guide = find(tree, (node) => node.type === "GuidedTour")!;
   assert.equal(guide.props.steps[0].id, "organization-overview");
   assert.equal(guide.props.index, 0);
-  guide.props.onExit(true); await app.settle();
+  guide.props.onExit(true); tree = await app.settle();
+  assert.equal(teaching(tree), false, "Completing Organization hides sample committees and announcements");
   app.setRoute("/dashboard/events"); tree = await app.settle();
   guide = find(tree, (node) => node.type === "GuidedTour")!;
   assert.equal(guide.props.steps[0].id, "events-overview");
-  guide.props.onExit(true); await app.settle();
+  guide.props.onExit(true); tree = await app.settle();
+  assert.equal(teaching(tree), false, "Completing Events hides sample event cards");
   app.setEvent("new-attempt-event"); tree = await app.settle();
   guide = find(tree, (node) => node.type === "GuidedTour")!;
   assert.equal(guide.props.steps[0].id, "event-details-summary");
@@ -438,6 +478,8 @@ test("restarting a completed account restores automatic page and event introduct
   tree = await resumed.settle();
   assert.equal(find(tree, (node) => node.type === "GuidedTour")!.props.index, 2);
   assert.equal(resumed.writes.at(-1)?.onboarding?.restartedAt, reset.onboarding?.restartedAt);
+  const completed = provider(t, "Student Leader", { organizationId: null, saved: app.writes.at(-1) });
+  assert.equal(teaching(await completed.settle()), false, "Reloading a completed page keeps samples hidden");
 });
 
 test("automatic introductions wait for workspace readiness and blocking dialogs", async (t) => {

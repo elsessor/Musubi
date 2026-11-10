@@ -9,6 +9,7 @@ import { canInteractWithTourTarget, findTourHighlightTargets, findTourSidebarTar
 import { FieldReference } from "./FieldReference";
 import { closeUntouchedTutorialControls, rememberTutorialEdit, type OpenedTutorialControl } from "./tourCleanup";
 import { createViewDemonstration } from "./tourViewDemo";
+import { getTourPanelPosition } from "./tourPlacement";
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Props = { steps: TourStep[]; index: number; onStep: (index: number) => void; onExit: (complete: boolean) => void; skipUnavailable?: boolean };
@@ -192,31 +193,11 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
   useLayoutEffect(() => {
     const place = () => {
       const viewport = window.visualViewport;
-      const vw = viewport?.width ?? window.innerWidth, vh = viewport?.height ?? window.innerHeight;
-      const originX = viewport?.offsetLeft ?? 0, originY = viewport?.offsetTop ?? 0;
-      const margin = vw < 640 ? 16 : 24;
-      const maxWidth = Math.max(0, vw - margin * 2);
-      const maxHeight = Math.max(0, Math.min(vh - margin * 2, vw < 640 ? Math.max(200, vh * (referenceOpen && step.target !== "custom-status-dialog" ? 0.72 : 0.48)) : vh));
-      const width = Math.min(panel.current?.offsetWidth ?? 320, maxWidth), height = Math.min(panel.current?.offsetHeight ?? 260, maxHeight);
-      const minLeft = originX + margin, minTop = originY + margin;
-      const maxLeft = Math.max(minLeft, originX + vw - width - margin), maxTop = Math.max(minTop, originY + vh - height - margin);
-      let left = originX + (vw - width) / 2, top = originY + (vh - height) / 2;
-      if (vw < 640) {
-        // Use the edge that covers the least of the highlighted form.
-        const overlap = (y: number) => rect ? Math.max(0, Math.min(y + height, rect.y + rect.height) - Math.max(y, rect.y)) : 0;
-        top = rect && overlap(minTop) < overlap(maxTop) ? minTop : maxTop;
-      }
-      else if (rect && step.target === "custom-status-dialog") {
-        left = rect.x + rect.width + 16;
-        top = originY + (vh - height) / 2;
-      }
-      else if (rect) {
-        if (rect.x + rect.width + width + 16 <= originX + vw - margin) { left = rect.x + rect.width + 16; top = rect.y; }
-        else if (rect.y + rect.height + height + 16 <= originY + vh - margin) { left = rect.x; top = rect.y + rect.height + 16; }
-        else if (rect.y - height - 16 >= minTop) { left = rect.x; top = rect.y - height - 16; }
-        else if (rect.x - width - 16 >= minLeft) { left = rect.x - width - 16; top = rect.y; }
-      }
-      setPosition({ left: Math.max(minLeft, Math.min(left, maxLeft)), top: Math.max(minTop, Math.min(top, maxTop)), maxHeight, maxWidth });
+      setPosition(getTourPanelPosition({
+        viewport: { width: viewport?.width ?? window.innerWidth, height: viewport?.height ?? window.innerHeight, offsetLeft: viewport?.offsetLeft, offsetTop: viewport?.offsetTop },
+        panel: { width: panel.current?.offsetWidth ?? 320, height: panel.current?.offsetHeight ?? 260 },
+        target: rect, expanded: referenceOpen, statusDialog: step.target === "custom-status-dialog"
+      }));
     };
     place();
     const observer = new ResizeObserver(place);
@@ -244,7 +225,7 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
         <div className="pointer-events-auto absolute left-0" style={{ top: rect.y, width: rect.x, height: rect.height }} />
         <div className="pointer-events-auto absolute right-0" style={{ top: rect.y, left: rect.x + rect.width, height: rect.height }} />
       </div> : <div aria-hidden="true" className="fixed inset-0 z-[200]" />}
-      <div data-tour-dialog data-tour-target={step.target} role="dialog" aria-modal={!interactive} aria-labelledby={`${maskId}-title`} aria-describedby={`${maskId}-description`} tabIndex={-1} ref={panel} style={position} className="fixed z-[201] flex max-h-[48dvh] w-[min(20rem,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white p-3 text-slate-900 shadow-2xl outline-none [overflow-wrap:anywhere] motion-safe:transition-[left,top] motion-safe:duration-150 sm:max-h-[calc(100dvh-48px)] sm:w-[min(28rem,calc(100vw-48px))] sm:p-5">
+      <div data-tour-dialog data-tour-target={step.target} role="dialog" aria-modal={!interactive} aria-labelledby={`${maskId}-title`} aria-describedby={`${maskId}-description`} tabIndex={-1} ref={panel} style={position} className="fixed z-[201] flex max-h-[48dvh] w-[min(20rem,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white p-3 text-slate-900 shadow-2xl outline-none [overflow-wrap:anywhere] sm:motion-safe:transition-[left,top] sm:motion-safe:duration-150 sm:max-h-[calc(100dvh-48px)] sm:w-[min(28rem,calc(100vw-48px))] sm:p-5">
         <div aria-live="polite" aria-atomic="true" className="shrink-0 pb-2 pr-8 sm:pb-3">
           <p className="mb-1 text-[11px] font-bold text-blue-700 sm:mb-2 sm:text-xs">Step {index + 1} of {steps.length}</p>
           <h2 id={`${maskId}-title`} className="text-[15px] font-bold leading-snug sm:text-lg">{step.title}</h2>

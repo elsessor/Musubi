@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as targets from "../../frontend/src/components/onboarding/tourTargets.js";
 import * as cleanup from "../../frontend/src/components/onboarding/tourCleanup.js";
 import * as viewDemo from "../../frontend/src/components/onboarding/tourViewDemo.js";
+import * as placement from "../../frontend/src/components/onboarding/tourPlacement.js";
 import { getTourSteps, type TourStep } from "../../frontend/src/config/tutorial.js";
 
 function missingTarget(t: TestContext, index: number, automatic: boolean, scenario?: { steps: TourStep[]; width: number; query: (selector: string) => any; queryAll: (selector: string) => any[] }) {
@@ -26,7 +27,7 @@ function missingTarget(t: TestContext, index: number, automatic: boolean, scenar
     restores.push(() => { if (previous) Object.defineProperty(globalThis, key, previous); else Reflect.deleteProperty(globalThis, key); });
   }
   const react = { useCallback: (callback: unknown) => callback, useId: () => "missing-target", useRef: (current: unknown) => ({ current }), useState: (value: unknown) => { const index = states.push(value) - 1; return [value, (next: unknown) => { states[index] = next; }]; }, useEffect: (effect: () => unknown) => effects.push(effect), useLayoutEffect: (effect: () => unknown) => effects.push(effect) };
-  const mocks: Record<string, unknown> = { react, "next/navigation": { usePathname: () => scenario?.steps[0].route ?? "/dashboard", useRouter: () => ({ push: () => assert.fail("No navigation is required") }) }, "./tourTargets": targets, "./tourCleanup": cleanup, "./tourViewDemo": viewDemo };
+  const mocks: Record<string, unknown> = { react, "next/navigation": { usePathname: () => scenario?.steps[0].route ?? "/dashboard", useRouter: () => ({ push: () => assert.fail("No navigation is required") }) }, "./tourTargets": targets, "./tourCleanup": cleanup, "./tourViewDemo": viewDemo, "./tourPlacement": placement };
   const components = new Proxy({}, { get: (_target, name) => String(name) });
   const exports: any = {};
   const code = ts.transpileModule(readFileSync(resolve(__dirname, "../../frontend/src/components/onboarding/GuidedTour.tsx"), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;

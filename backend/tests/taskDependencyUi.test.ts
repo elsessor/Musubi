@@ -36,6 +36,7 @@ function ui(file: string, role = "Student Leader", extraMocks: Record<string, an
   const useToastStore = Object.assign((selector: (value: any) => any) => selector(toast), { getState: () => toast });
   const components = new Proxy({}, { get: (_target, name) => String(name) });
   const mocks: Record<string, any> = {
+    "@/hooks/useOrganizationJoinStatus": { useOrganizationJoinStatus: () => ({ request: null, loading: false, error: "", refresh: () => {} }) },
     "@/components/onboarding/TutorialPreviewContext": { useTutorialPlaceholders: () => true },
     "@/hooks/useTutorialView": { useTutorialView: () => ({ current: null }) },
     react, "react/jsx-runtime": { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }), Fragment: "Fragment" },
