@@ -3,7 +3,7 @@ import type { AuthenticatedRequest } from "../types/auth.types.js";
 import { firestore } from "../config/firebase.js";
 import { AppError } from "../utils/AppError.js";
 import { tutorialStatusSchema } from "../utils/tutorialStatus.js";
-import { mergeOnboarding, normalizeLegacyOnboarding, onboardingSchema } from "../utils/onboardingProgress.js";
+import { mergeOnboarding, normalizeLegacyOnboarding, onboardingSchema, onboardingRunTime } from "../utils/onboardingProgress.js";
 
 // Only the authenticated account's tutorial field is read or updated. Roles
 // come from the stored account, never a role supplied by the browser.
@@ -28,12 +28,18 @@ export async function tutorialController(request: AuthenticatedRequest, response
       const current = await transaction.get(ref);
       if (current.data()?.role !== role) throw new AppError("Account role has changed. Reload your workspace.", 409);
       const previous = current.data()?.tutorials?.[key];
-      const seenPages = [...new Set([...(Array.isArray(previous?.seenPages) ? previous.seenPages : []), ...(progress.seenPages ?? [])])];
       const oldOnboarding = onboardingSchema.safeParse(previous?.onboarding);
-      const onboarding = mergeOnboarding(normalizeLegacyOnboarding(oldOnboarding.success ? oldOnboarding.data : undefined, previous?.tour), progress.onboarding);
-      const nextProgress = { ...progress, ...(seenPages.length ? { seenPages } : {}), ...(onboarding ? { onboarding } : {}), updatedAt: new Date().toISOString() };
+      const oldProgress = normalizeLegacyOnboarding(oldOnboarding.success ? oldOnboarding.data : undefined, previous?.tour);
+      const runDifference = onboardingRunTime(progress.onboarding) - onboardingRunTime(oldProgress);
+      const currentProgress = runDifference < 0 ? previous : progress;
+      const seenPages = runDifference === 0
+        ? [...new Set([...(Array.isArray(previous?.seenPages) ? previous.seenPages : []), ...(progress.seenPages ?? [])])]
+        : currentProgress.seenPages ?? [];
+      const onboarding = mergeOnboarding(oldProgress, progress.onboarding);
+      const nextProgress = { ...currentProgress, seenPages, ...(onboarding ? { onboarding } : {}), updatedAt: new Date().toISOString() };
       // Concurrent devices must retain each other's first-visit acknowledgements.
-      transaction.set(ref, { tutorials: { [key]: nextProgress } }, { merge: true });
+      // Replace this role's map so a restart removes old nested completion fields.
+      transaction.update(ref, { [`tutorials.${key}`]: nextProgress });
       return nextProgress;
     });
     response.json({ role, tutorial });

@@ -1,8 +1,9 @@
 import type { UserRole } from "../types/auth";
 import { compactWorkflowSteps, getWorkflowTours, WORKFLOW_IDS, type WorkflowId } from "./tutorialWorkflows";
 import { getPageTours, PAGE_TOUR_IDS, type PageTourId } from "./tutorialPages";
-import { isOnboardingProgress, type OnboardingProgress } from "./onboardingProgress";
+import { isOnboardingProgress, onboardingRunTime, type OnboardingProgress } from "./onboardingProgress";
 import { getSidebarTourSteps } from "./tutorialSidebar";
+import type { TourViewDemo } from "./tutorialViews";
 
 export const TUTORIAL_VERSION = 1;
 export type TourKind = "quick" | "features" | "controls" | "sidebar" | WorkflowId | PageTourId;
@@ -17,7 +18,7 @@ export type TutorialStatus = {
   seenPages?: PageTourId[];
   onboarding?: OnboardingProgress;
 };
-export type TourStep = { id: string; title: string; description: string; route: string; target: string; sidebarTarget?: string; highlightTargets?: string[]; details?: { title: string; description: string }[]; interaction?: "click"; openOnNext?: string; reveal?: string[]; selector?: string; prepare?: "events" | "ai" | "members" | "committees" | "announcements" };
+export type TourStep = { id: string; title: string; description: string; route: string; target: string; sidebarTarget?: string; tabTarget?: string; highlightTargets?: string[]; details?: { title: string; description: string }[]; interaction?: "click"; openOnNext?: string; reveal?: string[]; closeOnLeave?: string; selector?: string; demoView?: TourViewDemo; prepare?: "events" | "ai" | "members" | "committees" | "announcements" };
 
 export function getTourSteps(role: UserRole, kind: TourKind, preview = false): TourStep[] {
   const steps = getBaseTourSteps(role, kind);
@@ -25,7 +26,7 @@ export function getTourSteps(role: UserRole, kind: TourKind, preview = false): T
   const descriptions: Record<string, string> = {
     dashboard: "Explore the dashboard layout before joining an organization. Task progress, deadlines, and organization activity appear here after your membership is approved and work is recorded.",
     "dashboard-overview": "Explore your workspace before joining an organization. Empty sections show where task progress, deadlines, and organization activity will appear after membership is approved.",
-    events: "Explore event views and placeholder cards to understand schedules, responsibilities, and progress. Organization events and task actions become available after your membership is approved.",
+    events: "Explore event views, placeholder cards, and status labels to understand schedules and progress. Custom Status adds an optional progress label, such as Waiting for Approval. Organization events and task actions become available after your membership is approved.",
     "events-overview": "Preview event cards, schedules, and progress in this workspace. Placeholder cards explain the layout; organization events and task actions become available after your membership is approved.",
     "events-views": "Try the event views and filters to explore the layout. On small screens, open Filters. Results remain empty until you join an organization with recorded events.",
     delegation: "Explore the AI planning form and its fields. Once your membership is approved, you can generate a task proposal, review assignments, and publish the plan.",
@@ -33,6 +34,14 @@ export function getTourSteps(role: UserRole, kind: TourKind, preview = false): T
     "event-details-summary": "This preview shows where an event's purpose, status, schedule, members, and task progress appear. Your organization's event information becomes available after membership approval.",
     "event-details-tools": "Try the task search, committee and status filters, and view selector to explore the layout. There are no task records in this preview.",
     "event-details-tasks": "Review the task layout: instructions, prerequisites, assignee, deadline, and attachments. Updating work and planning tasks become available after membership approval.",
+    "event-custom-status-guide": role === "Student Leader"
+      ? "This preview shows the Custom Status dialog. A status is a progress label, such as Waiting for Approval. Review the name, meaning, color, and position fields. You can save organization labels after joining; this preview does not save changes."
+      : "A status is a label for a stage of work. Your leader may add a label, such as Waiting for Approval. After joining, use the status filters to find events at that stage. A new label does not automatically change progress.",
+    "task-custom-status-guide": role === "Student Leader"
+      ? "This preview shows the Custom Status dialog for tasks. A status is a progress label, such as Waiting for Approval. Review its name, meaning, color, and position. You can save task labels after joining; this preview does not save changes."
+      : "A status is a label for a stage of work. Your leader may add a label, such as Waiting for Approval, for tasks in an event. After joining, use the status filters to find work at that stage. A new label does not automatically change your progress.",
+    "calendar-sync": "You can connect your personal Google Calendar before joining an organization. Once organization records are available, use Sync All Events to add campus schedules. Open Calendar opens Google Calendar in a new tab.",
+    "events-view-calendar": "Explore the calendar layout and its display options. Connect your personal Google Calendar in Settings. Organization schedules and imported Google entries appear here after your membership is approved.",
     organization: "Explore Overview, Members, Committees, and Announcements using preview layouts. Submit a join request or check its status here. Organization information and actions become available after approval.",
     "organization-overview": "Overview previews organization details, members, and events. Use Join organization to submit a request, or check your pending request while waiting for approval.",
     "organization-members": "Preview the member list, including names, roles, skills, and availability. Your organization's member information appears after membership is approved.",
@@ -78,11 +87,11 @@ function getBaseTourSteps(role: UserRole, kind: TourKind): TourStep[] {
     page("organizations", "Registered organizations", "Browse registered organizations and open an entry to review its details and membership.", "/admin/organizations"),
     page("members", "User management", "Find accounts and review their roles, positions, organization assignments, and account status. Verify intended permissions before saving changes.", "/admin/members"),
     page("audit", "Audit logs", "Review recorded administrative actions and platform activity. Use filters to locate relevant records.", "/admin/audit-logs"),
-    page("settings", "Administrator settings", "Review account preferences in Settings. Open your profile from the sidebar or account menu to review and update editable information.", "/admin/settings"), finish];
+    page("settings", "Administrator settings", "Review account preferences and connect Google Calendar in Settings. Open your profile from the sidebar or account menu to review and update editable information.", "/admin/settings"), finish];
   return [dashboard,
     { ...events, description: leader
-      ? "Open an event to review its tasks. Define the expected outcome, responsible member, and deadline when planning work. Use filters to monitor progress."
-      : "Review your assigned task's instructions, deadline, and prerequisites. Update its status and attach supporting work as required." },
+      ? "Open an event to review its tasks. Define the outcome, responsible member, and deadline. Use filters to monitor progress. Custom Status adds an optional progress label, such as Waiting for Approval; it does not change task progress automatically."
+      : "Review your assigned task's instructions, deadline, and prerequisites. Update its status and attach supporting work as required. Your leader may add custom progress labels, such as Waiting for Approval." },
     ...(leader ? [
       page("delegation", "Plan with AI, then review", "Describe your goal to generate a proposed task plan. Review member skills, availability, and workload, then adjust assignments before publishing.", "/dashboard/events", "ai-tab")
     ] : []),
@@ -91,7 +100,7 @@ function getBaseTourSteps(role: UserRole, kind: TourKind): TourStep[] {
       : "Review member profiles, committee responsibilities, and announcements relevant to your organization." },
     ...(leader ? [page("analytics", "Organization analytics", "Review task performance, completion, and workload to assess organization progress and identify areas requiring attention.", "/dashboard/analytics")] : []),
     notifications,
-    page("settings", "Settings and your profile", "Review account preferences in Settings. Open your profile from the sidebar or account menu to review and update editable information.", "/dashboard/settings"), finish];
+    page("settings", "Settings and your profile", "Review account preferences and connect Google Calendar in Settings. Open your profile from the sidebar or account menu to review and update editable information.", "/dashboard/settings"), finish];
 }
 
 export function tutorialKey(uid: string, role: UserRole) {
@@ -108,6 +117,15 @@ export function nextTutorialStatus(previous: TutorialStatus | null, status: Tuto
     acknowledged: status !== "in_progress" || Boolean(previous?.acknowledged) || previous?.status === "completed" || previous?.status === "dismissed",
     ...(previous?.seenPages ? { seenPages: [...previous.seenPages] } : {}),
     ...(previous?.onboarding ? { onboarding: previous.onboarding } : {})
+  };
+}
+
+export function restartedTutorialStatus(previous: TutorialStatus | null): TutorialStatus {
+  const updatedAt = new Date(Math.max(Date.now(), onboardingRunTime(previous?.onboarding) + 1)).toISOString();
+  return {
+    version: TUTORIAL_VERSION, status: "in_progress", step: 0, tour: "quick", updatedAt,
+    acknowledged: false, seenPages: [],
+    onboarding: { version: 1, restartedAt: updatedAt, welcome: { status: "in_progress", step: 0, updatedAt } }
   };
 }
 

@@ -36,6 +36,7 @@ function ui(file: string, role = "Student Leader", extraMocks: Record<string, an
   const useToastStore = Object.assign((selector: (value: any) => any) => selector(toast), { getState: () => toast });
   const components = new Proxy({}, { get: (_target, name) => String(name) });
   const mocks: Record<string, any> = {
+    "@/hooks/useTutorialView": { useTutorialView: () => ({ current: null }) },
     react, "react/jsx-runtime": { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }), Fragment: "Fragment" },
     "react-dom": { createPortal: (node: any) => node }, "lucide-react": components,
     "@/utils/taskDependencies": dependencies, "@/utils/taskAssignment": assignment, "@/utils/dateRange": dates,
@@ -71,6 +72,36 @@ test("opening an event exposes its identity and role-appropriate guide targets",
   }
 });
 
+test("view demonstrations render every event and task layout without changing records", () => {
+  const event = { id: "view-demo", orgId: "org", title: "Campus event", description: "Prepare campus activities", status: "Planning", tasks: allTasks(), memberCount: 1, progress: 0 };
+  const fail = () => assert.fail("A layout demonstration must not open or update a record");
+  for (const role of ["Student Leader", "Organization Member"]) {
+    for (const [file, name, props, layouts] of [
+      ["EventsDashboard.tsx", "EventsDashboard", { events: [event], organizationId: "org", isLeader: role === "Student Leader", onSelectEvent: fail, onNewEvent: fail, onUpdateEvent: fail },
+        { grid: "EventCard", table: "table", expanded: "article", kanban: "GripVertical", calendar: "CalendarView" }],
+      ["KanbanBoard.tsx", "KanbanBoard", { event, isLeader: role === "Student Leader", onBack: fail, onUpdateEvent: fail },
+        { grid: "TaskGridView", table: "TaskTableView", expanded: "TaskExpandedView", kanban: "KanbanColumn", calendar: "TaskCalendarView" }],
+      ["EventWorkspacePreview.tsx", "EventWorkspacePreview", { isLeader: role === "Student Leader", onBack: fail },
+        { grid: "article", table: "table", expanded: "details", kanban: "h3", calendar: "CalendarView" }]
+    ] as const) {
+      let selectView: (mode: string) => void = fail;
+      const render = ui(file, role, { "@/hooks/useTutorialView": { useTutorialView: (select: (mode: string) => void) => { selectView = select; return { current: null }; } } });
+      render.render(name, props);
+      const original = structuredClone(event);
+      for (const [mode, component] of Object.entries(layouts)) {
+        selectView(mode);
+        const tree = render.render(name, props);
+        assert.ok(find(tree, (node) => node.props["data-tour-view"] === mode), `${name}: ${mode}`);
+        const content = find(tree, (node) => node.props["data-tour"] === (name === "EventsDashboard" ? "event-view-content" : "event-task-workspace"));
+        if (name === "EventsDashboard" && mode === "kanban") {
+          assert.ok(find(content, (node) => node.props.className?.includes("overflow-x-auto")));
+        } else assert.ok(find(content, (node) => node.type === component), `${name}: ${component}`);
+        assert.deepEqual(event, original);
+      }
+    }
+  }
+});
+
 test("users without an organization can open and leave the event preview without selecting a record", () => {
   for (const role of ["Student Leader", "Organization Member"]) {
     const profile = { uid: "member", fullName: "Member", role, organizationId: null };
@@ -94,6 +125,75 @@ test("users without an organization can open and leave the event preview without
     preview.props.onBack();
     assert.ok(find(page(), (node) => node.type === "EventsDashboard"));
   }
+});
+
+test("event previews expose the member workspace structure with local filters and disabled write actions", () => {
+  for (const isLeader of [false, true]) {
+    const app = ui("EventWorkspacePreview.tsx");
+    const render = () => app.render("EventWorkspacePreview", { isLeader, onBack: () => {} });
+    let tree = render();
+    const summary = find(tree, (node) => node.type === "button" && node.props["aria-expanded"] === false);
+    summary.props.onClick();
+    tree = render();
+    assert.ok(find(tree, (node) => node.type === "button" && node.props["aria-expanded"] === true));
+    assert.equal(children(tree).filter((node) => node.props["aria-label"] === "Task card layout placeholder").length, 4);
+    for (const title of ["Grid view", "Table view", "Expandable list view", "Kanban view", "Calendar view"]) assert.ok(find(tree, (node) => node.props["aria-label"] === title));
+    const filters = find(tree, (node) => node.props["data-tour"] === "task-status-filter");
+    const progress = find(filters, (node) => node.type === "button" && node.props.children?.includes("In Progress"));
+    progress.props.onClick();
+    tree = render();
+    assert.equal(find(tree, (node) => node.type === "button" && node.props.children?.includes("In Progress")).props["aria-pressed"], true);
+    find(tree, (node) => node.props["aria-label"] === "Table view").props.onClick();
+    find(tree, (node) => node.props["data-tour"] === "task-search").props.onChange({ target: { value: "test" } });
+    tree = render();
+    assert.ok(find(tree, (node) => node.type === "table"));
+    assert.equal(children(tree).filter((node) => node.type === "th").length, 8);
+    find(tree, (node) => node.props["data-tour"] === "task-filter-panel").props.onClick();
+    tree = render();
+    assert.ok(find(tree, (node) => node.type === "dialog"));
+    find(tree, (node) => node.type === "button" && node.props.children === "Clear filters").props.onClick();
+    find(tree, (node) => node.props["data-tour"] === "task-filter-done").props.onClick();
+    tree = render();
+    assert.equal(children(tree).some((node) => node.type === "dialog"), false);
+    assert.equal(find(tree, (node) => node.props["data-tour"] === "task-search").props.value, "");
+    assert.ok(find(tree, (node) => node.type === "table"));
+    for (const button of children(tree).filter((node) => node.type === "button" && node.props.title === "Available after joining an organization")) {
+      assert.equal(button.props.disabled, true);
+      assert.equal(button.props.onClick, undefined);
+    }
+    assert.equal(children(tree).some((node) => node.props["data-tour"] === "task-custom-status"), isLeader);
+    assert.equal(children(tree).some((node) => node.props["data-tour"] === "task-card"), false);
+  }
+});
+
+test("Custom Status opens the real dialog and unaffiliated workspaces use a non-saving preview", () => {
+  const fail = () => assert.fail("Opening the status dialog must not save work");
+  for (const [file, name, props, target, preview] of [
+    ["EventsDashboard.tsx", "EventsDashboard", { events: [], organizationId: null, onSelectEvent: fail, onNewEvent: fail, onUpdateEvent: fail }, "event-custom-status", true],
+    ["EventWorkspacePreview.tsx", "EventWorkspacePreview", { isLeader: true, onBack: fail }, "task-custom-status", true],
+    ["KanbanBoard.tsx", "KanbanBoard", { event: { id: "status-demo", orgId: "org", title: "Event", status: "Planning", tasks: [] }, onBack: fail, onUpdateEvent: fail }, "task-custom-status", false]
+  ] as const) {
+    const app = ui(file);
+    let tree = app.render(name, props);
+    const button = find(tree, (node) => node.props["data-tour"] === target);
+    assert.ok(button);
+    assert.ok(!button.props.disabled);
+    button.props.onClick();
+    tree = app.render(name, props);
+    const modal = find(tree, (node) => node.type === "AddCustomStatusModal");
+    assert.equal(modal.props.isOpen, true);
+    assert.equal(Boolean(modal.props.preview), preview);
+    modal.props.onClose();
+    assert.equal(find(app.render(name, props), (node) => node.type === "AddCustomStatusModal").props.isOpen, false);
+  }
+  const app = ui("AddCustomStatusModal.tsx");
+  const tree = app.render("AddCustomStatusModal", { isOpen: true, preview: true, type: "task", onClose: () => {}, statusOrder: ["To Do", "Completed"], defaultStatuses: ["To Do", "Completed"], onAddStatus: fail, onReorderStatusOrder: fail, onDeleteStatus: fail });
+  find(tree, (node) => node.type === "form").props.onSubmit({ preventDefault() {} });
+  for (const button of children(tree).filter((node) => node.type === "button" && ["Move up", "Move down"].includes(node.props.title))) {
+    assert.equal(button.props.disabled, true);
+    button.props.onClick(); // Even a forced callback cannot write in preview.
+  }
+  assert.equal(find(tree, (node) => node.props.type === "submit").props.disabled, true);
 });
 
 test("task views include deadline indicators and task details offer archive with confirmation", async () => {

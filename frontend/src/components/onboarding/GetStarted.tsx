@@ -9,6 +9,7 @@ type Props = {
   role: UserRole;
   hasOrganization: boolean;
   onClose: () => void;
+  onContinue?: () => void;
   onWalkthrough: () => void;
   onPageGuide?: () => void;
   onHelp: () => void;
@@ -23,7 +24,7 @@ const sections = [
 const action = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:text-sm";
 const card = "rounded-xl border border-slate-200 bg-white p-3 sm:p-4";
 
-export function GetStarted({ role, hasOrganization, onClose, onWalkthrough, onPageGuide, onHelp, onOrganization }: Props) {
+export function GetStarted({ role, hasOrganization, onClose, onContinue, onWalkthrough, onPageGuide, onHelp, onOrganization }: Props) {
   const [section, setSection] = useState<typeof sections[number]["id"]>("welcome");
   const admin = role === "Admin", leader = role === "Student Leader";
   const preview = !admin && !hasOrganization;
@@ -86,7 +87,7 @@ export function GetStarted({ role, hasOrganization, onClose, onWalkthrough, onPa
             </div>
           </>}
         </section>
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-6"><p className="text-[11px] leading-4 text-slate-500">Reopen from Help / User Guide → Get Started.</p><button type="button" onClick={onClose} className={`${action} shrink-0 bg-[#17365c] text-white hover:bg-[#213f68]`}><Check aria-hidden="true" className="size-4" />I understand</button></footer>
+        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-6"><p className="text-[11px] leading-4 text-slate-500">Reopen from Help / User Guide → Get Started.</p><button type="button" onClick={onContinue ?? onClose} className={`${action} shrink-0 bg-[#17365c] text-white hover:bg-[#213f68]`}><Check aria-hidden="true" className="size-4" />I understand</button></footer>
       </div>
     </DialogContent>
   </Dialog>;

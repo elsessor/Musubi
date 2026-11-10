@@ -7,5 +7,5 @@
       "@/*": ["../../frontend/src/*"]
     }
   },
-  "include": ["taskSelfAssignment.test.ts", "taskDependencyUi.test.ts", "announcementSubscription.test.ts", "taskOverdue.test.ts", "taskReminderDispatch.test.ts", "deadlineNotifications.test.ts", "nudgeEmailContent.test.ts", "getStarted.test.ts", "tutorialEventLifecycle.test.ts", "helpCenter.test.ts", "helpCenterUi.test.ts", "onboardingProgress.test.ts", "onboardingApi.test.ts", "welcomeOnboarding.test.ts", "tutorialMissingTarget.test.ts"]
+  "include": ["taskSelfAssignment.test.ts", "taskDependencyUi.test.ts", "announcementSubscription.test.ts", "taskOverdue.test.ts", "taskReminderDispatch.test.ts", "deadlineNotifications.test.ts", "nudgeEmailContent.test.ts", "getStarted.test.ts", "tutorialEventLifecycle.test.ts", "helpCenter.test.ts", "helpCenterUi.test.ts", "onboardingProgress.test.ts", "onboardingApi.test.ts", "welcomeOnboarding.test.ts", "tutorialMissingTarget.test.ts", "tutorialViews.test.ts"]
 }

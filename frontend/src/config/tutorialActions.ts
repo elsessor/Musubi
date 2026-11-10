@@ -3,6 +3,10 @@
 export const TUTORIAL_ACTIONS: Record<string, { expected?: string; close?: string }> = {
   "navigation-open": { expected: "nav-dashboard", close: "navigation-close" }, "navigation-close": {},
   "overview-tab": {},
+  "event-custom-status": { expected: "custom-status-dialog", close: "custom-status-close" },
+  "task-custom-status": { expected: "custom-status-dialog", close: "custom-status-close" },
+  "custom-status-close": {},
+  "task-filter-panel": { expected: "task-filter-done", close: "task-filter-done" }, "task-filter-done": {},
   "create-event": { expected: "event-title", close: "event-cancel" },
   "event-cancel": {}, "events-tab": {}, "event-filter-panel": { expected: "event-filter-done", close: "event-filter-done" }, "event-filter-done": {},
   "event-card": { expected: "add-task" }, "task-card": { expected: "task-close", close: "task-close" },

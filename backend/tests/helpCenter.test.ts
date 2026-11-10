@@ -5,6 +5,8 @@ import { getTourSteps } from "../../frontend/src/config/tutorial.js";
 import { getPageTours } from "../../frontend/src/config/tutorialPages.js";
 import { getWorkflowTours } from "../../frontend/src/config/tutorialWorkflows.js";
 import { getDashboardNavItems } from "../../frontend/src/utils/routes.js";
+import { findTourHighlightTargets, openTutorialControl } from "../../frontend/src/components/onboarding/tourTargets.js";
+import { describeControl } from "../../frontend/src/components/onboarding/controlGuide.js";
 
 const roles = ["Admin", "Student Leader", "Organization Member"] as const;
 
@@ -74,4 +76,53 @@ test("unaffiliated accounts retain all their guides with preview-specific page d
   assert.deepEqual(categories.map((category) => category.guides.map((guide) => guide.id)), joined.map((category) => category.guides.map((guide) => guide.id)));
   assert.match(categories.find((category) => category.id === "organization")!.description, /preview|Preview/);
   assert.match(categories.find((category) => category.id === "dashboard")!.description, /membership is approved/);
+});
+
+test("Google Calendar instructions are discoverable for every role and before organization membership", () => {
+  for (const role of roles) for (const preview of [false, true]) {
+    const route = role === "Admin" ? "/admin/settings" : "/dashboard/settings";
+    const results = searchHelp(getHelpCategories(role, preview), "google calendar");
+    assert.ok(results.some((result) => result.category.id === "settings" && result.guide?.tour === "google-calendar"));
+    const steps = getTourSteps(role, "google-calendar", preview);
+    assert.equal(steps.length, 3);
+    assert.ok(steps.every((step) => step.route === route && !step.interaction && !step.openOnNext && !step.prepare));
+    assert.deepEqual(getTourSteps(role, "page-settings", preview).slice(1).map(({ id, description, highlightTargets }) => ({ id, description, highlightTargets })), steps.map(({ id, description, highlightTargets }) => ({ id, description, highlightTargets })));
+    assert.match(steps[0].description, /permissions.*Connected.*email/);
+    assert.match(steps[1].description, preview && role !== "Admin" ? /before joining an organization/ : /Sync All Events.*Archived.*Open Calendar/);
+    assert.match(steps[2].description, /existing Google Calendar entries remain.*permission error/);
+  }
+  const calendar = getTourSteps("Organization Member", "page-events").find((step) => step.demoView?.mode === "calendar")!;
+  assert.match(calendar.description, /Settings.*Show Google Calendar.*Open a Google entry/);
+});
+
+test("calendar guides keep visible highlights in both connection states and never authorize or sync", (t) => {
+  let connected = false, clicks = 0;
+  const element = () => ({ getBoundingClientRect: () => ({ width: 200, height: 40, left: 10, right: 210 }), click: () => { clicks++; }, matches: () => false });
+  const card = element(), actions = element(), account = element(), connect = element(), sync = element(), open = element(), disconnect = element();
+  const values = {
+    window: { innerWidth: 375 },
+    getComputedStyle: () => ({ visibility: "visible" }),
+    document: { querySelectorAll: (selector: string) => {
+      const controls: Record<string, object> = { "settings-calendar": card, "settings-calendar-actions": actions,
+        ...(connected ? { "settings-calendar-account": account, "settings-calendar-sync": sync, "settings-calendar-open": open, "settings-calendar-disconnect": disconnect } : { "settings-calendar-connect": connect }) };
+      const target = selector.match(/data-tour="([^"]+)"/)?.[1];
+      return target && controls[target] ? [controls[target]] : [];
+    } }
+  };
+  for (const [key, value] of Object.entries(values)) {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+    t.after(() => previous ? Object.defineProperty(globalThis, key, previous) : Reflect.deleteProperty(globalThis, key));
+  }
+  for (const state of [false, true]) {
+    connected = state;
+    const steps = getTourSteps("Organization Member", "google-calendar");
+    assert.deepEqual(findTourHighlightTargets(steps[0]), connected ? [card, account] : [card, connect]);
+    assert.deepEqual(findTourHighlightTargets(steps[1]), connected ? [actions, sync, open] : [actions]);
+    assert.deepEqual(findTourHighlightTargets(steps[2]), connected ? [actions, disconnect] : [actions]);
+    for (const target of ["settings-calendar-connect", "settings-calendar-sync", "settings-calendar-open", "settings-calendar-disconnect"]) assert.deepEqual(openTutorialControl(target), { opened: false });
+  }
+  assert.equal(clicks, 0);
+  assert.match(describeControl("Show Google Calendar", "input", "checkbox", null), /does not disconnect/);
+  assert.match(describeControl("Sync All Events", "button", "button", null), /Archived items are excluded/);
 });

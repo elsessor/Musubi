@@ -35,12 +35,51 @@ test("workflow IDs are consistent between browser storage and strict API validat
 
 test("members never receive leader or admin workflows or management-only steps", () => {
   const member = getWorkflowTours("Organization Member");
-  assert.deepEqual(member.map((tour) => tour.id).sort(), ["announcements", "event-browse", "membership", "notifications", "preferences", "task-progress"].sort());
+  assert.deepEqual(member.map((tour) => tour.id).sort(), ["announcements", "event-browse", "membership", "notifications", "preferences", "task-progress", "google-calendar"].sort());
   const forbidden = new Set(["announcement-create", "announcement-submit", "member-remove", "join-requests", "event-custom-status"]);
   assert.ok(member.every((tour) => tour.steps.every((step) => !forbidden.has(step.target) && step.route.startsWith("/dashboard/"))));
   assert.deepEqual(getTourSteps("Organization Member", "request-review"), []);
   assert.deepEqual(getTourSteps("Student Leader", "user-manage"), []);
   assert.ok(getWorkflowTours("Admin").every((tour) => tour.route.startsWith("/admin/")));
+});
+
+test("event and task introductions explain custom statuses without creating or changing work", (t) => {
+  for (const role of ["Student Leader", "Organization Member"] as const) for (const preview of [false, true]) {
+    for (const [guide, prefix] of [["page-events", "event"], ["page-event-details", "task"]] as const) {
+      const step = getTourSteps(role, guide, preview).find((item) => item.id === `${prefix}-custom-status-guide`)!;
+      assert.ok(step);
+      assert.equal(step.target, role === "Student Leader" ? "custom-status-dialog" : `${prefix}-status-filter`);
+      assert.match(step.description, /label.*Waiting for Approval/);
+      assert.equal(step.interaction, undefined);
+      assert.equal(step.openOnNext, undefined);
+      if (role === "Student Leader") {
+        assert.deepEqual(step.reveal, [`${prefix}-filter-panel`, `${prefix}-custom-status`]);
+        assert.equal(step.closeOnLeave, "custom-status-close");
+        assert.equal(step.details?.length, 5);
+        const reference = step.details!.map((detail) => detail.description).join(" ");
+        assert.match(reference, /priority.*position.*immediately.*without undoing/);
+      } else assert.equal(step.details, undefined);
+    }
+  }
+  let opened = false;
+  const element = { getBoundingClientRect: () => ({ width: 100, height: 40, right: 140, left: 40 }), matches: () => false };
+  const opener = { ...element, click: () => { opened = true; } }, closer = { ...element, click: () => { opened = false; } };
+  const values = { window: { innerWidth: 375 }, document: { querySelectorAll: (selector: string) => selector.includes('custom-status-dialog') ? opened ? [element] : [] : selector.includes('custom-status-close') ? opened ? [closer] : [] : selector.includes('custom-status') ? [opener] : [] }, getComputedStyle: () => ({ visibility: "visible" }) };
+  for (const [key, value] of Object.entries(values)) {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { value, configurable: true });
+    t.after(() => previous ? Object.defineProperty(globalThis, key, previous) : Reflect.deleteProperty(globalThis, key));
+  }
+  for (const guide of ["page-events", "page-event-details"] as const) {
+    const step = getTourSteps("Student Leader", guide).find((item) => item.id.endsWith("custom-status-guide"))!;
+    assert.deepEqual(findTourHighlightTargets(step), []);
+    assert.deepEqual(openTutorialControl(step.reveal!.at(-1)!), { opened: true, close: "custom-status-close" });
+    assert.deepEqual(findTourHighlightTargets(step), [element]);
+    assert.deepEqual(openTutorialControl(step.target), { opened: false });
+    for (const action of ["status-add", "status-delete", "status-save"]) assert.deepEqual(openTutorialControl(action), { opened: false });
+    openTutorialControl(step.closeOnLeave!);
+    assert.equal(opened, false);
+  }
 });
 
 test("only safe opening and navigation steps can run automatically", () => {

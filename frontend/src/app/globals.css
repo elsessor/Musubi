@@ -4,6 +4,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep the status form visible beside its walkthrough on wider screens. */
+@media (min-width: 640px) {
+  body:has([data-tour-dialog]) [data-tour="custom-status-dialog"] {
+    margin-right: auto;
+    max-width: min(28rem, calc(50vw - 2rem));
+  }
+
+  body:has([data-tour="custom-status-dialog"]) [data-tour-dialog] {
+    width: min(28rem, calc(50vw - 2rem));
+  }
+}
+
 @layer base {
   :root {
     color-scheme: light;

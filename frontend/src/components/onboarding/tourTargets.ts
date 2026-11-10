@@ -15,6 +15,7 @@ export function findTourHighlightTargets(step: TourStep): HTMLElement[] {
 }
 
 export function findTourSidebarTarget(step: TourStep): HTMLElement | null {
+  if (step.tabTarget) return findTourTarget({ ...step, target: step.tabTarget, selector: undefined });
   if (!step.sidebarTarget) return null;
   return findTourTarget({ ...step, target: step.sidebarTarget, selector: undefined })
     ?? findTourTarget({ ...step, selector: 'button[aria-label="Open navigation"]' });
@@ -54,6 +55,12 @@ export function openTutorialControl(target: string): { opened: boolean; close?: 
   if (!action) return { opened: false };
   const probe = (name: string) => findTourTarget({ id: name, target: name, title: "", description: "", route: "" });
   if (action.expected && probe(action.expected)) return { opened: false };
+  // Organization tabs can sit outside a phone's horizontally scrolling tab bar.
+  if (["overview-tab", "members-tab", "committees-tab", "announcements-tab"].includes(target)) {
+    const tab = document.querySelector<HTMLElement>(`[data-tour="${target}"]`);
+    const bounds = tab?.getBoundingClientRect();
+    if (tab && bounds && bounds.width > 0 && bounds.height > 0) tab.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+  }
   const element = probe(target);
   if (!element || element.matches(':disabled, [aria-disabled="true"], [type="submit"]')) return { opened: false };
   element.click();

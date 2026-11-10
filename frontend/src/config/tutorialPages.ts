@@ -1,5 +1,8 @@
 import type { UserRole } from "../types/auth";
 import type { TourStep, TutorialStatus } from "./tutorial";
+import { getViewTourSteps } from "./tutorialViews";
+import { getCalendarConnectionSteps } from "./tutorialCalendar";
+import { getCustomStatusStep } from "./tutorialStatuses";
 
 export const PAGE_TOUR_IDS = ["page-dashboard", "page-events", "page-organization", "page-notifications", "page-settings", "page-analytics", "page-audit", "page-requests", "page-organizations", "page-members", "page-profile", "page-event-details"] as const;
 export type PageTourId = typeof PAGE_TOUR_IDS[number];
@@ -15,6 +18,10 @@ export function getPageTours(role: UserRole): PageTour[] {
     id, title, description, target,
     // Page introductions highlight the content, rather than its sidebar link.
     ...(target === "workspace" ? { selector: '[data-tour="workspace"]' } : {})
+  });
+  const organizationStep = (id: string, title: string, description: string, tab: string): Omit<TourStep, "route"> => ({
+    ...step(id, title, description, `organization-${tab}-panel`),
+    tabTarget: `${tab}-tab`, reveal: [`${tab}-tab`]
   });
 
   return [
@@ -37,28 +44,32 @@ export function getPageTours(role: UserRole): PageTour[] {
           : "Review event tasks, claim eligible unassigned work, and update your assigned tasks. Check prerequisites before starting and attach supporting work when required."), prepare: "events" },
         { ...step("events-views", "Find and monitor work", "On small screens, open Filters for committee and status options. Choose a grid, table, or calendar view to review schedules and progress.", "event-status-filter"),
           highlightTargets: ["event-filter-panel", "event-committee-filter", "event-status-filter", "event-view"] },
+        getCustomStatusStep("events", leader),
+        ...getViewTourSteps("events", "/dashboard/events"),
         ...(leader ? [step("events-ai", "Plan with AI, then review", "AI Task Atomizer proposes tasks from your goal. Review task details, member skills, availability, and workload before confirming assignments and publishing.", "ai-tab")] : [])
       ]),
       tour("page-event-details", "Event workspace introduction", "/dashboard/events", [
         step("event-details-summary", "Event details and progress", "Review the event's status, schedule, and overall task progress. On small screens, use Show event details to view the complete summary.", "event-summary"),
         { ...step("event-details-tools", "Find and organize tasks", "Search tasks and filter by committee or status. On small screens, open Filters. Choose a grid, table, list, board, or calendar view.", "task-view"),
           highlightTargets: ["task-filter-panel", "task-committee-filter", "task-status-filter", "task-search", "task-view"] },
+        getCustomStatusStep("tasks", leader),
+        ...getViewTourSteps("tasks", "/dashboard/events"),
         { ...step("event-details-tasks", leader ? "Review and plan event tasks" : "Review your responsibilities", leader
           ? "Open tasks to review instructions, assignments, and progress. Use Add Task or Reuse Tasks to plan active events. Archived events remain read-only."
           : "Open a task to review its instructions and prerequisites. Update your assigned work or claim eligible unassigned tasks after confirmation.", "event-task-workspace"),
           ...(leader ? { highlightTargets: ["event-task-workspace", "task-create-actions"] } : {}) }
       ]),
       tour("page-organization", "Organization introduction", "/dashboard/organization", [
-        step("organization-overview", "Your organization at a glance", "Review organization details and activity in Overview. Before joining, explore each tab's layout and check your membership request status.", "overview-tab"),
-        step("organization-members", "Members and responsibilities", leader
+        organizationStep("organization-overview", "Your organization at a glance", "Review organization details and activity in Overview. Before joining, explore each tab's layout and check your membership request status.", "overview"),
+        organizationStep("organization-members", "Members and responsibilities", leader
           ? "Search members, review profiles, and manage join requests. Confirm membership decisions carefully, as they determine organization access."
-          : "Search the member list and open profiles to review available information. Your role determines which details and actions are accessible.", "members-tab"),
-        step("organization-committees", "Teams and committees", leader
+          : "Search the member list and open profiles to review available information. Your role determines which details and actions are accessible.", "members"),
+        organizationStep("organization-committees", "Teams and committees", leader
           ? "Organize responsibilities into committees. Define each team's purpose, optionally appoint a head, and select its members."
-          : "Review the organization's committees, their responsibilities, and the members assigned to each team.", "committees-tab"),
-        step("organization-announcements", "Stay informed", leader
+          : "Review the organization's committees, their responsibilities, and the members assigned to each team.", "committees"),
+        organizationStep("organization-announcements", "Stay informed", leader
           ? "Read organization updates or prepare an announcement. Select the intended audience and review the message before posting."
-          : "Read announcements shared with your organization or committee. Open a message to review its full content.", "announcements-tab")
+          : "Read announcements shared with your organization or committee. Open a message to review its full content.", "announcements")
       ]),
       tour("page-notifications", "Notifications introduction", "/dashboard/notifications", [
         step("notifications-overview", "Your updates in one place", "Review assignments, deadlines, and organization updates. The bell indicates unread notifications; select All to view the complete feed.", "notifications-all"),
@@ -93,7 +104,7 @@ export function getPageTours(role: UserRole): PageTour[] {
     ])] : []),
     tour("page-settings", "Settings introduction", `${home}/settings`, [
       step("settings-overview", "Manage your preferences", "Review your profile and preferences. Update the fields permitted for your account and verify changes before saving.", "settings-profile"),
-      step("settings-calendar", "Calendar and account connections", "Connect your calendar through the authorization screen. Review permissions before connecting, syncing events, or disconnecting your account.", "settings-calendar")
+      ...getCalendarConnectionSteps(`${home}/settings`)
     ]),
     tour("page-profile", "Profile introduction", "/dashboard/profile", [
       step("profile-overview", "Your profile and availability", "Review personal account information and availability. Use the profile editor to update the details permitted for your account.", "profile-details"),

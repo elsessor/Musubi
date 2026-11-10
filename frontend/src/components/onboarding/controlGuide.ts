@@ -11,6 +11,12 @@ export function controlDetails(role: UserRole, route: string, marker: string): T
 }
 
 export function describeControl(label: string, tag: string, type: string, role: string | null): string {
+  if (/^(custom status|manage statuses)$/i.test(label)) return "Add an optional progress label, such as Waiting for Approval, when the existing stages do not fit your team's needs. Choose its name, meaning, color, and position. Adding or reordering labels applies immediately; it does not automatically change anyone's progress.";
+  if (/^connect google calendar$/i.test(label)) return "Choose your Google account and review the requested calendar permissions. After authorization, return to Settings and check the Connected label and linked email.";
+  if (/^sync all events$/i.test(label)) return "Add or update campus events and tasks in your connected Google calendar. Archived items are excluded. Review the synchronization result before checking your calendar.";
+  if (/^open calendar$/i.test(label)) return "Open Google Calendar in a new tab to review entries in your connected account.";
+  if (/^disconnect$/i.test(label)) return "Stop future access to the connected account. Existing Google Calendar entries remain. Connect again to change accounts or grant updated permissions.";
+  if (/^show google calendar$/i.test(label)) return "Show or hide imported Google Calendar entries in this calendar view. This display option does not disconnect your account or remove entries.";
   if (tag === "input" && type === "file") return "Select a file that meets the attachment requirements. The guide never uploads files; close it before uploading your work.";
   if (tag === "input" && type === "checkbox") return "Select or clear this option. Review selected items before applying a bulk action or saving changes.";
   if (/search/i.test(label)) return "Enter a search term to narrow the records displayed. Clear the search to restore the list.";

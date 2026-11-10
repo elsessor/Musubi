@@ -1,7 +1,7 @@
 import type { User } from "firebase/auth";
 import type { UserRole } from "../types/auth";
 import { isTutorialStatus, tutorialKey, type TutorialStatus } from "../config/tutorial";
-import { mergeOnboarding } from "../config/onboardingProgress";
+import { mergeOnboarding, onboardingRunTime } from "../config/onboardingProgress";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 const memory = new Map<string, TutorialStatus>();
@@ -22,6 +22,18 @@ function cache(uid: string, role: UserRole, status: TutorialStatus) {
   try { localStorage.setItem(key, JSON.stringify(status)); } catch { /* Session fallback. */ }
 }
 
+function mergeTutorialProgress(remote: TutorialStatus | null, local: TutorialStatus | null, preferLocal = false): TutorialStatus | null {
+  if (!remote) return local;
+  if (!local) return remote;
+  const runDifference = onboardingRunTime(local.onboarding) - onboardingRunTime(remote.onboarding);
+  let latest = preferLocal || local.updatedAt > remote.updatedAt ? local : remote;
+  if (runDifference > 0) latest = local;
+  else if (runDifference < 0) latest = remote;
+  const seenPages = runDifference === 0 ? [...new Set([...(remote.seenPages ?? []), ...(local.seenPages ?? [])])] : latest.seenPages ?? [];
+  const onboarding = mergeOnboarding(remote.onboarding, local.onboarding);
+  return { ...latest, seenPages, ...(onboarding ? { onboarding } : {}) };
+}
+
 async function request(user: User, role: UserRole, method: "GET" | "PUT", status?: TutorialStatus) {
   const token = await user.getIdToken();
   const response = await fetch(`${API_BASE_URL}/auth/tutorial`, {
@@ -40,18 +52,17 @@ export async function loadTutorial(user: User, role: UserRole): Promise<{ status
     const result = await request(user, role, "GET");
     if (result.role !== role) return { status: local, localOnly: true };
     const remote = isTutorialStatus(result.tutorial) ? result.tutorial : null;
-    const seenPages = [...new Set([...(remote?.seenPages ?? []), ...(local?.seenPages ?? [])])];
-    const latest = local && (!remote || local.updatedAt > remote.updatedAt) ? local : remote;
-    const onboarding = mergeOnboarding(remote?.onboarding, local?.onboarding);
-    const merged = latest ? { ...latest, ...(seenPages.length ? { seenPages } : {}), ...(onboarding ? { onboarding } : {}) } : latest;
+    const currentLocal = localTutorial(user.uid, role) ?? local;
+    const merged = mergeTutorialProgress(remote, currentLocal);
     // A local dismissal/completion during an outage should survive a stale server record.
-    if (merged && (!remote || (local && local.updatedAt > remote.updatedAt) || JSON.stringify(onboarding) !== JSON.stringify(remote.onboarding) || seenPages.some((id) => !remote.seenPages?.includes(id)))) {
+    if (merged && (!remote || (currentLocal && currentLocal.updatedAt > remote.updatedAt) || JSON.stringify(merged.onboarding) !== JSON.stringify(remote.onboarding) || merged.seenPages?.some((id) => !remote.seenPages?.includes(id)))) {
       cache(user.uid, role, merged);
       const saved = await request(user, role, "PUT", merged);
       if (saved.role !== role) return { status: merged, localOnly: true };
       if (isTutorialStatus(saved.tutorial)) {
-        cache(user.uid, role, saved.tutorial);
-        return { status: saved.tutorial, localOnly: false };
+        const synced = mergeTutorialProgress(saved.tutorial, localTutorial(user.uid, role) ?? merged, true)!;
+        cache(user.uid, role, synced);
+        return { status: synced, localOnly: false };
       }
       return { status: merged, localOnly: false };
     }
@@ -61,7 +72,7 @@ export async function loadTutorial(user: User, role: UserRole): Promise<{ status
 }
 
 export function saveTutorial(user: User, role: UserRole, status: TutorialStatus): Promise<boolean> {
-  cache(user.uid, role, status);
+  cache(user.uid, role, mergeTutorialProgress(localTutorial(user.uid, role), status, true)!);
   const key = tutorialKey(user.uid, role);
   // Serialize writes so rapid Next/Skip clicks cannot overwrite final status.
   const job = (pending.get(key) ?? Promise.resolve()).then(async () => {
@@ -70,9 +81,7 @@ export function saveTutorial(user: User, role: UserRole, status: TutorialStatus)
       if (result.role !== role) return false;
       if (isTutorialStatus(result.tutorial)) {
         const latest = localTutorial(user.uid, role) ?? status;
-        const onboarding = mergeOnboarding(result.tutorial.onboarding, latest.onboarding);
-        const seenPages = [...new Set([...(result.tutorial.seenPages ?? []), ...(latest.seenPages ?? [])])];
-        cache(user.uid, role, { ...latest, ...(onboarding ? { onboarding } : {}), ...(seenPages.length ? { seenPages } : {}) });
+        cache(user.uid, role, mergeTutorialProgress(result.tutorial, latest, true)!);
       }
       return true;
     } catch { return false; }

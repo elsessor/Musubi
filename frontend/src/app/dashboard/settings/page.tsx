@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { TutorialContextualHelp } from "@/components/onboarding/TutorialProvider";
 import { getFirebaseDb } from "@/firebase/config";
 import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
@@ -601,7 +602,7 @@ export default function DashboardSettingsPage() {
         </div>
 
         {/* Card 2: Preferences */}
-        <div data-tour="settings-calendar" className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8 space-y-6">
+        <div data-tour="settings-preferences" className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8 space-y-6">
           <h2 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
             PREFERENCES
           </h2>
@@ -685,7 +686,7 @@ export default function DashboardSettingsPage() {
         </div>
 
         {/* Card 3: Google Calendar Integration */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8 space-y-6">
+        <div data-tour="settings-calendar" className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_2px_8px_rgba(15,23,42,0.03)] sm:p-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -702,6 +703,7 @@ export default function DashboardSettingsPage() {
               <h2 className="text-[17px] font-bold text-slate-900 flex items-center gap-2 pt-0.5">
                 <Calendar className="size-5 text-[#2563eb]" />
                 Google Calendar Sync
+                <TutorialContextualHelp tour="google-calendar" label="Help with Google Calendar integration" />
               </h2>
               <p className="text-[13px] font-medium text-slate-500 max-w-xl leading-relaxed">
                 Connect your personal Google Calendar to automatically synchronize campus event schedules and deadlines directly to your calendar app on web and mobile.
@@ -709,10 +711,11 @@ export default function DashboardSettingsPage() {
             </div>
 
             {/* Action buttons */}
-            <div className="shrink-0 flex items-center gap-2 pt-1 sm:pt-0">
+            <div data-tour="settings-calendar-actions" className="min-w-0 flex items-center gap-2 pt-1 sm:pt-0">
               {calendarStatus.connected ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
+                    data-tour="settings-calendar-sync"
                     type="button"
                     disabled={syncingEvents}
                     onClick={handleSyncAllEvents}
@@ -723,6 +726,7 @@ export default function DashboardSettingsPage() {
                   </button>
 
                   <a
+                    data-tour="settings-calendar-open"
                     href="https://calendar.google.com"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -733,6 +737,7 @@ export default function DashboardSettingsPage() {
                   </a>
 
                   <button
+                    data-tour="settings-calendar-disconnect"
                     type="button"
                     disabled={calendarLoading}
                     onClick={handleDisconnectCalendar}
@@ -744,6 +749,7 @@ export default function DashboardSettingsPage() {
                 </div>
               ) : (
                 <button
+                  data-tour="settings-calendar-connect"
                   type="button"
                   disabled={calendarLoading}
                   onClick={handleConnectCalendar}
@@ -762,7 +768,7 @@ export default function DashboardSettingsPage() {
 
           {/* Details Bar when connected */}
           {calendarStatus.connected && (
-            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+            <div data-tour="settings-calendar-account" className="min-w-0 break-words rounded-xl border border-slate-100 bg-slate-50/70 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
                 <span>

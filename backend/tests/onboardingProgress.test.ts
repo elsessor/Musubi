@@ -3,7 +3,7 @@ import test from "node:test";
 import { isOnboardingProgress, isFinished, mergeOnboarding, onboardingProgress, updateSection, type OnboardingProgress } from "../../frontend/src/config/onboardingProgress.js";
 import { getSidebarTourSteps } from "../../frontend/src/config/tutorialSidebar.js";
 import { getDashboardNavItems } from "../../frontend/src/utils/routes.js";
-import { isTutorialStatus, nextTutorialStatus, type TutorialStatus } from "../../frontend/src/config/tutorial.js";
+import { isTutorialStatus, nextTutorialStatus, restartedTutorialStatus, type TutorialStatus } from "../../frontend/src/config/tutorial.js";
 import { loadTutorial, localTutorial, saveTutorial } from "../../frontend/src/services/tutorial.service.js";
 import { mergeOnboarding as mergeServer, normalizeLegacyOnboarding, onboardingSchema } from "../src/utils/onboardingProgress.js";
 import { tutorialStatusSchema } from "../src/utils/tutorialStatus.js";
@@ -53,6 +53,28 @@ test("each section retains its own completed, dismissed, and in-progress states 
   assert.deepEqual(progress, original);
   assert.equal(progress.modules?.["page-organization"], undefined); // Absent means not started.
   assert.deepEqual(nextTutorialStatus(state({ onboarding: progress }), "in_progress", 0, "features").onboarding, progress);
+});
+
+test("explicit restarts reset completion while ordinary replay retains it in both browser and API merges", () => {
+  const completed = state({ acknowledged: true, status: "completed", seenPages: ["page-dashboard"], onboarding: { version: 1, preference: { mode: "independent", source: "user", updatedAt: stamp }, welcome: section("completed"), sidebar: section("completed", 7), modules: { "page-dashboard": section("completed", 3) } } });
+  const reset = restartedTutorialStatus(completed);
+  assert.equal(reset.acknowledged, false);
+  assert.deepEqual(reset.seenPages, []);
+  assert.ok(isOnboardingProgress(reset.onboarding));
+  assert.ok(onboardingSchema.safeParse(reset.onboarding).success);
+  for (const merge of [mergeOnboarding, mergeServer]) {
+    assert.deepEqual(merge(completed.onboarding, reset.onboarding), reset.onboarding);
+    assert.deepEqual(merge(reset.onboarding, completed.onboarding), reset.onboarding);
+  }
+  const started = updateSection(reset.onboarding!, "page-dashboard", "in_progress", 0);
+  assert.equal(started.modules?.["page-dashboard"]?.status, "in_progress");
+  const next = restartedTutorialStatus(reset);
+  assert.ok(Date.parse(next.onboarding!.restartedAt!) > Date.parse(reset.onboarding!.restartedAt!));
+  for (const merge of [mergeOnboarding, mergeServer]) assert.deepEqual(merge(reset.onboarding, next.onboarding), next.onboarding);
+  for (const restartedAt of ["invalid", null, 5]) {
+    assert.equal(isOnboardingProgress({ ...reset.onboarding, restartedAt }), false);
+    assert.equal(onboardingSchema.safeParse({ ...reset.onboarding, restartedAt }).success, false);
+  }
 });
 
 test("browser and API merge preserve concurrent module completions and the latest opt-out", () => {
@@ -156,4 +178,63 @@ test("account sync combines per-module progress from another device and keeps us
   assert.equal(result.status?.onboarding?.modules?.["page-events"]?.status, "completed");
   assert.equal(localTutorial(user.uid, "Student Leader"), null);
   assert.equal(localTutorial("another-account", "Organization Member"), null);
+});
+
+test("offline restart survives reload and synchronization with a stale completed account record", async (t) => {
+  const user = { uid: "offline-restart", getIdToken: async () => "token" } as Parameters<typeof saveTutorial>[0];
+  const completed = state({ status: "completed", acknowledged: true, seenPages: ["page-events"], onboarding: { version: 1, modules: { "page-events": section("completed", 8) } } });
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("offline"); });
+  await saveTutorial(user, "Organization Member", completed);
+  await saveTutorial(user, "Student Leader", completed);
+  const reset = restartedTutorialStatus(completed);
+  assert.equal(await saveTutorial(user, "Organization Member", reset), false);
+  assert.deepEqual((await loadTutorial(user, "Organization Member")).status, reset);
+  assert.equal(localTutorial(user.uid, "Student Leader")?.status, "completed");
+  t.mock.restoreAll();
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    const value = init.method === "GET" ? { ...completed, updatedAt: "2099-01-01T00:00:00.000Z" } : { ...JSON.parse(init.body as string), updatedAt: new Date().toISOString() };
+    if (init.method === "PUT") {
+      assert.equal(value.acknowledged, false);
+      assert.deepEqual(value.seenPages, []);
+      assert.equal(value.onboarding.modules, undefined);
+      assert.equal(value.onboarding.restartedAt, reset.onboarding!.restartedAt);
+    }
+    return new Response(JSON.stringify({ role: "Organization Member", tutorial: value }), { status: 200 });
+  });
+  const synced = await loadTutorial(user, "Organization Member");
+  assert.equal(synced.localOnly, false);
+  assert.equal(synced.status?.acknowledged, false);
+  assert.equal(synced.status?.onboarding?.modules, undefined);
+  assert.deepEqual(synced.status?.seenPages, []);
+});
+
+test("remote restart wins over stale local completions and late responses cannot undo a local restart", async (t) => {
+  const user = { uid: "late-restart-response", getIdToken: async () => "token" } as Parameters<typeof saveTutorial>[0];
+  const completed = state({ status: "completed", acknowledged: true, seenPages: ["page-dashboard"], onboarding: { version: 1, sidebar: section("completed", 7), modules: { "page-dashboard": section("completed", 3) } } });
+  let release!: () => void, entered!: () => void;
+  const waiting = new Promise<void>((resolve) => { release = resolve; });
+  const received = new Promise<void>((resolve) => { entered = resolve; });
+  let requests = 0;
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    const value = JSON.parse(init.body as string);
+    if (++requests === 1) { entered(); await waiting; }
+    return new Response(JSON.stringify({ role: "Organization Member", tutorial: { ...value, updatedAt: "2099-01-01T00:00:00.000Z" } }), { status: 200 });
+  });
+  const oldSave = saveTutorial(user, "Organization Member", completed);
+  await received;
+  const reset = restartedTutorialStatus(completed);
+  const resetSave = saveTutorial(user, "Organization Member", reset);
+  release();
+  await oldSave; await resetSave;
+  assert.equal(localTutorial(user.uid, "Organization Member")?.onboarding?.restartedAt, reset.onboarding!.restartedAt);
+  assert.deepEqual(localTutorial(user.uid, "Organization Member")?.seenPages, []);
+  t.mock.restoreAll();
+  const remoteReset = restartedTutorialStatus(reset);
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ role: "Organization Member", tutorial: remoteReset }), { status: 200 }));
+  assert.equal((await loadTutorial(user, "Organization Member")).status?.onboarding?.restartedAt, remoteReset.onboarding!.restartedAt);
+  t.mock.restoreAll();
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("offline stale tab"); });
+  await saveTutorial(user, "Organization Member", completed);
+  assert.equal(localTutorial(user.uid, "Organization Member")?.onboarding?.restartedAt, remoteReset.onboarding!.restartedAt);
+  assert.deepEqual(localTutorial(user.uid, "Organization Member")?.seenPages, []);
 });

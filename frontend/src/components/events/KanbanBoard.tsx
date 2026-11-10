@@ -19,6 +19,7 @@ import {
   Users
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTutorialView } from "@/hooks/useTutorialView";
 import type { Event, EventStatus, Task, TaskPriority, TaskStatus } from "./types";
 import type { OrganizationMember } from "@/services/auth.service";
 import { AddTaskModal, mapOrgMemberToItem, type OrgMemberItem } from "./AddTaskModal";
@@ -97,6 +98,7 @@ export function KanbanBoard({
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const tutorialViewRef = useTutorialView(setViewMode);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const mobileFiltersRef = useRef<HTMLDialogElement>(null);
@@ -615,7 +617,7 @@ export function KanbanBoard({
   return (
     <TaskDependencyTasksContext.Provider value={tasks}>
       <TaskSelfAssignmentContext.Provider value={{ event: currentEvent, assigning: claimingTask, onRequestAssignment: requestTaskClaim }}>
-        <div data-tour="event-workspace" data-event-id={currentEvent.id} className="flex min-h-full min-w-0 flex-col animate-in fade-in duration-200">
+        <div ref={tutorialViewRef} data-tour-view-scope="tasks" data-tour-view={viewMode} data-tour="event-workspace" data-event-id={currentEvent.id} className="flex min-h-full min-w-0 flex-col animate-in fade-in duration-200">
           {/* Breadcrumb Navigation */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-slate-500">
@@ -831,10 +833,11 @@ export function KanbanBoard({
                 {/* + Add Custom Status Button for Leaders */}
                 {isLeader && (
                   <button
+                    data-tour="task-custom-status"
                     type="button"
                     onClick={() => setIsAddStatusModalOpen(true)}
                     className="flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
-                    title="Add or rearrange custom task statuses"
+                    title="Add an optional progress label, such as Waiting for Approval"
                   >
                     <Plus size={13} />
                     <span>Custom Status</span>
@@ -1035,7 +1038,7 @@ export function KanbanBoard({
             <dialog ref={mobileFiltersRef} onCancel={() => setMobileFiltersOpen(false)} aria-labelledby="mobile-task-filters-title" className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40 sm:hidden">
               <div className="mb-5 flex items-center justify-between">
                 <h2 id="mobile-task-filters-title" className="text-lg font-bold">Filter tasks</h2>
-                <button type="button" onClick={() => setMobileFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
+                <button data-tour="task-filter-done" type="button" onClick={() => setMobileFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
               </div>
               <div className="space-y-4">
                 <div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Committee</p>
@@ -1046,7 +1049,7 @@ export function KanbanBoard({
                 </div>
                 <div className="flex flex-wrap justify-between gap-2">
                   <button type="button" onClick={() => { setSelectedCommittee("All"); setStatusFilter("All"); setSearch(""); }} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
-                  {isLeader && <button type="button" onClick={() => { setMobileFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600">Manage statuses</button>}
+                  {isLeader && <button data-tour="task-custom-status" type="button" onClick={() => { setMobileFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600">Manage statuses</button>}
                 </div>
               </div>
             </dialog>

@@ -8,6 +8,7 @@ import type { TourStep } from "@/config/tutorial";
 import { canInteractWithTourTarget, findTourHighlightTargets, findTourSidebarTarget, getTourHighlightRect, openTutorialControl } from "./tourTargets";
 import { FieldReference } from "./FieldReference";
 import { closeUntouchedTutorialControls, rememberTutorialEdit, type OpenedTutorialControl } from "./tourCleanup";
+import { createViewDemonstration } from "./tourViewDemo";
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Props = { steps: TourStep[]; index: number; onStep: (index: number) => void; onExit: (complete: boolean) => void; skipUnavailable?: boolean };
@@ -22,6 +23,7 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
   const content = useRef<HTMLDivElement>(null);
   const targetRef = useRef<HTMLElement | null>(null);
   const openedControls = useRef<OpenedTutorialControl[]>([]);
+  const viewDemonstration = useRef(createViewDemonstration());
   const openControl = useCallback((target: string) => {
     if (openedControls.current.some((control) => control.target === target && control.dirty)) return;
     const result = openTutorialControl(target);
@@ -39,9 +41,11 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
 
   useEffect(() => {
     const returnFocus = document.activeElement as HTMLElement | null;
+    const demonstration = viewDemonstration.current;
     const edited = (event: Event) => rememberTutorialEdit(openedControls.current, event, panel.current);
     for (const name of ["pointerdown", "input", "change"]) document.addEventListener(name, edited, true);
     return () => {
+      demonstration.restore();
       for (const name of ["pointerdown", "input", "change"]) document.removeEventListener(name, edited, true);
       closeUntouchedTutorialControls(openedControls.current, openTutorialControl);
       openedControls.current = [];
@@ -49,6 +53,10 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
       (returnFocus?.isConnected ? returnFocus : help)?.focus();
     };
   }, []);
+
+  useEffect(() => {
+    if (!step.demoView) viewDemonstration.current.restore();
+  }, [step.demoView]);
 
   useEffect(() => {
     setReferenceOpen(false);
@@ -87,6 +95,7 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
     const deadline = Date.now() + 3000;
     let scrolled = false;
     let prepared = false;
+    let demonstratedView: HTMLElement | null = null;
     const revealed = new Set<string>();
     let timer: number;
     let advanceTimer: number | undefined;
@@ -115,11 +124,16 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
       if (!prepared && workspace?.getAttribute("data-tutorial-ready") === "true" && step.prepare === "events") {
         window.dispatchEvent(new Event("musubi:tutorial:prepare-events")); prepared = true;
       }
-      let targets = findTourHighlightTargets(step);
+      if (!prepared && step.tabTarget && workspace?.getAttribute("data-tutorial-ready") === "true") {
+        openControl(step.tabTarget); revealed.add(step.tabTarget); prepared = true;
+      }
+      if (step.demoView && !demonstratedView && workspace?.getAttribute("data-tutorial-ready") === "true") demonstratedView = viewDemonstration.current.show(step.demoView);
+      const viewReady = !step.demoView || demonstratedView?.getAttribute("data-tour-view") === step.demoView.mode;
+      let targets = viewReady ? findTourHighlightTargets(step) : [];
       let el = targets[0] ?? null;
       if (!el && workspace?.getAttribute("data-tutorial-ready") === "true") {
         const opener = step.reveal?.find((target) => !revealed.has(target));
-        if (opener) { revealed.add(opener); openControl(opener); targets = findTourHighlightTargets(step); el = targets[0] ?? null; }
+        if (opener) { revealed.add(opener); openControl(opener); targets = viewReady ? findTourHighlightTargets(step) : []; el = targets[0] ?? null; }
       }
       targetRef.current = el;
       const box = el?.getBoundingClientRect();
@@ -160,11 +174,20 @@ export function GuidedTour({ steps, index, onStep, onExit, skipUnavailable = fal
     let mutationTimer: number | undefined;
     // A late loaded record, dialog, or responsive control can replace the target.
     const observer = new MutationObserver(() => { window.clearTimeout(mutationTimer); mutationTimer = window.setTimeout(measure, 50); });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-tour-view"] });
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
     document.addEventListener("transitionend", measure, true);
-    return () => { detach(); observer.disconnect(); window.clearTimeout(mutationTimer); window.clearTimeout(advanceTimer); window.clearInterval(timer); window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); document.removeEventListener("transitionend", measure, true); };
+    return () => {
+      detach(); observer.disconnect(); window.clearTimeout(mutationTimer); window.clearTimeout(advanceTimer); window.clearInterval(timer); window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); document.removeEventListener("transitionend", measure, true);
+      if (step.closeOnLeave) {
+        const opened = openedControls.current.find((control) => control.target === step.closeOnLeave);
+        if (opened && !opened.dirty) {
+          openTutorialControl(opened.target);
+          openedControls.current = openedControls.current.filter((control) => control !== opened);
+        }
+      }
+    };
   }, [step, pathname, index, openControl, skipUnavailable]);
 
   useLayoutEffect(() => {

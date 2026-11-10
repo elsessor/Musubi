@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, Building2, CalendarDays, ChevronRight, Compass, LayoutDashboard, ListChecks, MoreHorizontal, Play, Search, Settings, ShieldCheck, UserRound, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, Building2, CalendarDays, ChevronRight, Compass, FileText, LayoutDashboard, ListChecks, MoreHorizontal, PanelLeft, Play, RotateCcw, Route, Search, Settings, ShieldCheck, UserRound, Users, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getHelpCategories, searchHelp, type HelpCategory, type HelpGuide } from "@/config/helpCenter";
@@ -26,6 +26,7 @@ type Props = {
 };
 const focus = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600";
 const primary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 ${focus}`;
+const menuIcon = "size-4 shrink-0 text-slate-500";
 const icons: Record<string, typeof BookOpen> = { dashboard: LayoutDashboard, events: CalendarDays, organization: Users, organizations: Building2, "org-requests": ListChecks, members: Users, analytics: BarChart3, "audit-logs": ShieldCheck, notifications: Bell, settings: Settings, profile: UserRound };
 
 function TopicRow({ title, description, icon, onClick }: { title: string; description?: string; icon?: ReactNode; onClick: () => void }) {
@@ -88,13 +89,13 @@ export function HelpCenter({ role, preview, eventOpen, initialTour, currentPageT
         {view.type === "home" && <div className="mt-3 flex items-center gap-2">
           <button type="button" onClick={() => onStart("quick")} className={`${primary} flex-1`}><Play aria-hidden="true" className="size-4" />Start Quick Tour</button>
           <DropdownMenu modal={false}><DropdownMenuTrigger asChild><button type="button" aria-label="More help options" className={`flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 ${focus}`}><MoreHorizontal aria-hidden="true" className="size-5" /></button></DropdownMenuTrigger><DropdownMenuContent align="end" className="z-[220] max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-[calc(100vw-2rem)] rounded-xl border-slate-200 bg-white p-1.5 text-slate-700 shadow-lg">
-            <DropdownMenuItem onSelect={onGetStarted} className="min-h-11 rounded-lg"><Compass aria-hidden="true" />Get Started</DropdownMenuItem>
-            <DropdownMenuItem onSelect={onSidebar} className="min-h-11 rounded-lg">Replay sidebar introduction</DropdownMenuItem>
-            <DropdownMenuItem onSelect={onRestart} className="min-h-11 rounded-lg">Restart onboarding</DropdownMenuItem>
-            {currentPageTour && <DropdownMenuItem onSelect={() => onStart(currentPageTour)} className="min-h-11 rounded-lg">Replay this page guide</DropdownMenuItem>}
-            <DropdownMenuItem onSelect={() => onStart("features")} className="min-h-11 rounded-lg">Full Walkthrough</DropdownMenuItem>
-            {resumeTour && <DropdownMenuItem onSelect={() => onStart(resumeTour, true)} className="min-h-11 rounded-lg">{resumeTour === "quick" || resumeTour === "features" ? "Resume walkthrough" : "Reopen last guide"}</DropdownMenuItem>}
-            <DropdownMenuItem onSelect={() => setView({ type: "reference" })} className="min-h-11 rounded-lg">Read the user guide</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onGetStarted} className="min-h-11 rounded-lg"><Compass aria-hidden="true" className={menuIcon} />Get Started</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onSidebar} className="min-h-11 rounded-lg"><PanelLeft aria-hidden="true" className={menuIcon} />Replay sidebar introduction</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onRestart} className="min-h-11 rounded-lg"><RotateCcw aria-hidden="true" className={menuIcon} />Restart onboarding</DropdownMenuItem>
+            {currentPageTour && <DropdownMenuItem onSelect={() => onStart(currentPageTour)} className="min-h-11 rounded-lg"><FileText aria-hidden="true" className={menuIcon} />Replay this page guide</DropdownMenuItem>}
+            <DropdownMenuItem onSelect={() => onStart("features")} className="min-h-11 rounded-lg"><Route aria-hidden="true" className={menuIcon} />Full Walkthrough</DropdownMenuItem>
+            {resumeTour && <DropdownMenuItem onSelect={() => onStart(resumeTour, true)} className="min-h-11 rounded-lg"><Play aria-hidden="true" className={menuIcon} />{resumeTour === "quick" || resumeTour === "features" ? "Resume walkthrough" : "Reopen last guide"}</DropdownMenuItem>}
+            <DropdownMenuItem onSelect={() => setView({ type: "reference" })} className="min-h-11 rounded-lg"><BookOpen aria-hidden="true" className={menuIcon} />Read the user guide</DropdownMenuItem>
           </DropdownMenuContent></DropdownMenu>
         </div>}
       </header>

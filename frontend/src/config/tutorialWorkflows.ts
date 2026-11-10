@@ -1,8 +1,10 @@
 import type { UserRole } from "../types/auth";
 import type { TourStep } from "./tutorial";
 import { TUTORIAL_ACTIONS } from "./tutorialActions";
+import { getViewTourSteps } from "./tutorialViews";
+import { getCalendarConnectionSteps } from "./tutorialCalendar";
 
-export const WORKFLOW_IDS = ["event-create", "event-browse", "task-create", "task-progress", "ai-delegation", "ai-review", "committees", "membership", "announcements", "request-review", "organization-manage", "user-manage", "audit-filters", "notifications", "preferences"] as const;
+export const WORKFLOW_IDS = ["event-create", "event-browse", "task-create", "task-progress", "ai-delegation", "ai-review", "committees", "membership", "announcements", "request-review", "organization-manage", "user-manage", "audit-filters", "notifications", "preferences", "google-calendar"] as const;
 export type WorkflowId = typeof WORKFLOW_IDS[number];
 export type WorkflowTour = { id: WorkflowId; title: string; description: string; roles: UserRole[]; route: string; steps: TourStep[] };
 
@@ -48,8 +50,9 @@ export const WORKFLOW_TOURS: WorkflowTour[] = [
     s("event-committee-filter", "Committee filter", "Select a committee to view its events. All Committees displays every event available to your account."),
     s("event-status-filter", "Status filters", "Filter events by status and review the matching counts. Select All for active records or Archived for archived events."),
     s("event-view", "View controls", "Choose a grid, table, expanded list, Kanban board, or calendar to review the same events in different layouts."),
-    s("event-custom-status", "Custom statuses", "Leaders can customize event status names, colors, and order to match the organization's workflow."),
-    s("event-filter-done", "Close filters", "Select Done to close the mobile filters and return to the event list.", "click"), event
+    s("event-custom-status", "Custom Status: an extra progress label", "Add an optional progress label, such as Waiting for Approval, when your team needs an extra stage. Choose its name, meaning, color, and position. Adding a label does not change progress. The page introduction shows the dialog without saving changes."),
+    s("event-filter-done", "Close filters", "Select Done to close the mobile filters and return to the event list.", "click"),
+    ...getViewTourSteps("events", E), event
   ]),
   flow("task-create", "Create a task", "Define the work, select an assignee, and review prerequisites and dates before saving.", leader, E, [event,
     s("add-task", "Add Task", "Select Next to open the task form within the selected event.", "click"),
@@ -164,6 +167,7 @@ export const WORKFLOW_TOURS: WorkflowTour[] = [
     s("notifications-ratings", "Ratings", "Review notifications about recorded performance ratings."),
     s("notifications-read-all", "Mark all as read", "Mark all as read clears the unread status of your notifications. Review the updates and close the guide before using it.")
   ]),
+  flow("google-calendar", "Google Calendar integration", "Connect your Google account, sync campus events and tasks, review calendar entries, and manage or reconnect the integration.", all, "/dashboard/settings", getCalendarConnectionSteps("/dashboard/settings")),
   flow("preferences", "Settings and account preferences", "Review profile information, account preferences, and calendar connections.", all, "/dashboard/settings", [
     s("settings-profile", "Profile settings", "Review your name, role, position, and profile information. Update only the fields available for editing."),
     s("settings-calendar", "Calendar connection", "Connect your calendar through the authorization screen. Review permissions before connecting, syncing, or disconnecting."),

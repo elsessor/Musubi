@@ -28,6 +28,7 @@ import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { CalendarView } from "./CalendarView";
 import { EventPlaceholderCard } from "./EventPlaceholderCard";
+import { useTutorialView } from "@/hooks/useTutorialView";
 
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
@@ -79,6 +80,7 @@ export function EventsDashboard({
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const tutorialViewRef = useTutorialView(setViewMode);
   const [smallScreen, setSmallScreen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersDialogRef = useRef<HTMLDialogElement>(null);
@@ -421,7 +423,7 @@ export function EventsDashboard({
   });
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
+    <div ref={tutorialViewRef} data-tour-view-scope="events" data-tour-view={viewMode} className="flex min-w-0 flex-col gap-4">
       {settingsError ? <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{settingsError}</p> : null}
       {/* Summary bar */}
       {compactMobile && (
@@ -561,7 +563,7 @@ export function EventsDashboard({
             {isLeader && (
               <button data-tour="event-custom-status"
                 type="button"
-                disabled={!settingsReady}
+                disabled={!preview && !settingsReady}
                 onClick={() => setIsAddStatusModalOpen(true)}
                 className="flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
                 title="Add or rearrange custom event statuses"
@@ -574,9 +576,9 @@ export function EventsDashboard({
         </div>
 
         {/* 5 View Mode Toggles */}
-        <div className="flex items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+        <div data-tour="event-view" className="flex items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
           {VIEW_MODES.map(({ mode, title, icon: Icon }) => (
-            <button data-tour="event-view"
+            <button
               key={mode}
               type="button"
               title={title}
@@ -594,6 +596,7 @@ export function EventsDashboard({
       </div>
 
       {/* 1. Grid View */}
+      <div data-tour="event-view-content" className="flex min-w-0 flex-col gap-4">
       {preview && onPreviewEvent && viewMode !== "grid" && viewMode !== "expanded" && <button type="button" onClick={onPreviewEvent} className="mb-4 min-h-11 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Explore event workspace</button>}
       {viewMode === "grid" && (
         <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-3">
@@ -968,7 +971,7 @@ export function EventsDashboard({
             <div className={compactMobile ? "w-full min-w-0" : "w-[280px] min-w-[280px] shrink-0"}>
               <button data-tour="event-custom-status"
                 type="button"
-                disabled={!settingsReady}
+                disabled={!preview && !settingsReady}
                 onClick={() => setIsAddStatusModalOpen(true)}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 px-4 py-4 text-xs font-bold text-slate-600 hover:border-blue-400 hover:bg-blue-50/60 hover:text-blue-700 transition-all shadow-2xs"
               >
@@ -1020,6 +1023,8 @@ export function EventsDashboard({
         </div>
       )}
 
+      </div>
+
       {/* Add & Manage Custom Event Status Modal */}
       {filtersOpen && (
         <dialog ref={filtersDialogRef} onCancel={() => setFiltersOpen(false)} aria-labelledby="mobile-event-filters-title" className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40">
@@ -1036,13 +1041,14 @@ export function EventsDashboard({
             </div>
             <div className="flex flex-wrap justify-between gap-2">
               <button type="button" onClick={() => { setFilter("All"); setSelectedCommittee("All"); }} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
-              {isLeader && <button type="button" disabled={!settingsReady} onClick={() => { setFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600 disabled:opacity-50">Manage statuses</button>}
+              {isLeader && <button data-tour="event-custom-status" type="button" disabled={!preview && !settingsReady} onClick={() => { setFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600 disabled:opacity-50">Manage statuses</button>}
             </div>
           </div>
         </dialog>
       )}
       <AddCustomStatusModal
         isOpen={isAddStatusModalOpen}
+        preview={preview}
         onClose={() => setIsAddStatusModalOpen(false)}
         type="event"
         customStatuses={customStatuses}

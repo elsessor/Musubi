@@ -24,13 +24,15 @@ test("new accounts can start a dashboard introduction directly and get a separat
   }
   const organization = getPageTourForRoute("Organization Member", "/dashboard/organization")!;
   assert.ok(shouldShowPageTour(progress({ status: "completed" }), organization.id));
-  assert.deepEqual(organization.steps.map((step) => step.target), ["overview-tab", "members-tab", "committees-tab", "announcements-tab"]);
+  assert.deepEqual(organization.steps.map((step) => step.target), ["organization-overview-panel", "organization-members-panel", "organization-committees-panel", "organization-announcements-panel"]);
+  assert.deepEqual(organization.steps.map((step) => step.tabTarget), ["overview-tab", "members-tab", "committees-tab", "announcements-tab"]);
 });
 
 test("page introductions stay on existing role-appropriate routes and never submit business actions", () => {
   for (const role of roles) for (const tour of getPageTours(role)) {
     assert.ok(existsSync(fileURLToPath(new URL(`../../frontend/src/app${tour.route}/page.tsx`, import.meta.url))), tour.route);
-    assert.ok(tour.steps.length > 0 && tour.steps.length <= 4);
+    assert.ok(tour.steps.length > 0 && tour.steps.filter((step) => !step.demoView).length <= 4);
+    assert.ok(tour.steps.filter((step) => step.demoView).length === 0 || tour.steps.filter((step) => step.demoView).length === 5);
     assert.deepEqual(getTourSteps(role, tour.id), tour.steps);
     assert.equal(new Set(tour.steps.map((step) => step.id)).size, tour.steps.length);
     assert.ok(tour.steps.every((step) => step.route === tour.route && !step.openOnNext && !step.interaction && step.description));
@@ -49,13 +51,13 @@ test("opening an event selects its own introduction without resetting the select
     const details = getPageTourForRoute(role, "/dashboard/events", "event")!;
     assert.equal(listing.id, "page-events");
     assert.equal(details.id, "page-event-details");
-    assert.equal(details.steps.length, 3);
+    assert.equal(details.steps.length, 9);
     assert.ok(details.steps.every((step) => step.route === "/dashboard/events" && !step.prepare && !step.openOnNext && !step.interaction));
     const previous = progress({ seenPages: ["page-events"], status: "completed" });
     assert.ok(shouldShowPageTour(previous, details.id));
     assert.equal(shouldShowPageTour({ ...previous, seenPages: ["page-events", "page-event-details"] }, details.id), false);
     assert.ok(details.steps[1].highlightTargets?.includes("task-filter-panel"));
-    assert.equal(details.steps[2].highlightTargets?.includes("task-create-actions") ?? false, role === "Student Leader");
+    assert.equal(details.steps.at(-1)?.highlightTargets?.includes("task-create-actions") ?? false, role === "Student Leader");
   }
   assert.equal(getPageTourForRoute("Admin", "/dashboard/events", "event"), undefined);
 });

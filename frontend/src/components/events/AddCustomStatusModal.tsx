@@ -8,6 +8,7 @@ import { CustomSelect } from "@/components/ui/CustomSelect";
 
 export type AddCustomStatusModalProps = {
   isOpen: boolean;
+  preview?: boolean;
   onClose: () => void;
   type: "event" | "task";
   customStatuses?: CustomStatusConfig[];
@@ -20,6 +21,7 @@ export type AddCustomStatusModalProps = {
 
 export function AddCustomStatusModal({
   isOpen,
+  preview = false,
   onClose,
   type,
   customStatuses = [],
@@ -44,6 +46,7 @@ export function AddCustomStatusModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (preview) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Please enter a status name.");
@@ -75,6 +78,7 @@ export function AddCustomStatusModal({
   }
 
   function handleMoveUp(index: number) {
+    if (preview) return;
     if (index <= 0) return;
     const updated = [...statusOrder];
     const temp = updated[index];
@@ -84,6 +88,7 @@ export function AddCustomStatusModal({
   }
 
   function handleMoveDown(index: number) {
+    if (preview) return;
     if (index >= statusOrder.length - 1) return;
     const updated = [...statusOrder];
     const temp = updated[index];
@@ -104,6 +109,7 @@ export function AddCustomStatusModal({
   }
 
   function handleDrop(targetIndex: number) {
+    if (preview) return;
     if (draggedIdx === null || draggedIdx === targetIndex) {
       setDraggedIdx(null);
       setDragOverIdx(null);
@@ -118,6 +124,7 @@ export function AddCustomStatusModal({
   }
 
   function handleDelete(statusName: string) {
+    if (preview) return;
     if (confirmDelete === statusName) {
       onDeleteStatus?.(statusName);
       setConfirmDelete(null);
@@ -128,7 +135,7 @@ export function AddCustomStatusModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md animate-in fade-in zoom-in duration-150 rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl space-y-4">
+      <div data-tour="custom-status-dialog" data-status-type={type} className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain animate-in fade-in zoom-in duration-150 rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl space-y-4">
         {/* Modal Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -138,6 +145,8 @@ export function AddCustomStatusModal({
             <h3 className="text-base font-bold text-slate-900">Manage Statuses</h3>
           </div>
           <button
+            data-tour="custom-status-close"
+            aria-label="Close status dialog"
             type="button"
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
@@ -147,6 +156,8 @@ export function AddCustomStatusModal({
         </div>
 
         {/* Status Workflow Order List */}
+        {preview && <p role="status" className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-800">Preview only. Explore these fields before joining an organization. Adding, reordering, and deleting labels are unavailable in this preview.</p>}
+        <p className="text-xs leading-5 text-slate-500">Statuses describe a stage of work. Add an optional label, such as Waiting for Approval, when your team needs an extra stage for {type === "event" ? "events" : "tasks"}. Creating a label does not change progress.</p>
         <div className="space-y-2">
           <div className="max-h-48 space-y-1.5 overflow-y-auto pr-0.5">
             {statusOrder.map((statusName, idx) => {
@@ -158,7 +169,7 @@ export function AddCustomStatusModal({
               return (
                 <div
                   key={statusName}
-                  draggable
+                  draggable={!preview}
                   onDragStart={() => handleDragStart(idx)}
                   onDragOver={(e) => handleDragOver(e, idx)}
                   onDragEnd={() => {
@@ -210,7 +221,7 @@ export function AddCustomStatusModal({
                     <button
                       type="button"
                       onClick={() => handleMoveUp(idx)}
-                      disabled={idx === 0}
+                      disabled={preview || idx === 0}
                       title="Move up"
                       className="rounded-lg p-1 text-slate-300 hover:text-slate-600 disabled:opacity-20"
                     >
@@ -219,7 +230,7 @@ export function AddCustomStatusModal({
                     <button
                       type="button"
                       onClick={() => handleMoveDown(idx)}
-                      disabled={idx === statusOrder.length - 1}
+                      disabled={preview || idx === statusOrder.length - 1}
                       title="Move down"
                       className="rounded-lg p-1 text-slate-300 hover:text-slate-600 disabled:opacity-20"
                     >
@@ -228,6 +239,7 @@ export function AddCustomStatusModal({
                     {!isDefault && onDeleteStatus && (
                       <button
                         type="button"
+                        disabled={preview}
                         onClick={() => handleDelete(statusName)}
                         title={confirmDelete === statusName ? "Confirm delete" : "Delete status"}
                         className={`rounded-lg p-1 transition ${
@@ -317,6 +329,7 @@ export function AddCustomStatusModal({
 
           <button
             type="submit"
+            disabled={preview}
             className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-blue-200/80 py-2.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-300"
           >
             <Plus size={14} />
@@ -337,6 +350,7 @@ export function AddCustomStatusModal({
               </button>
               <button
                 type="button"
+                disabled={preview}
                 onClick={() => handleDelete(confirmDelete)}
                 className="rounded-lg bg-rose-600 px-2.5 py-1 font-semibold text-white shadow-xs hover:bg-rose-700"
               >
@@ -347,6 +361,7 @@ export function AddCustomStatusModal({
         )}
 
         {/* Modal Action Buttons */}
+        {!preview && <p className="text-[11px] leading-5 text-slate-500">Adding, reordering, and deleting labels apply immediately. Closing this window does not undo those changes.</p>}
         <div className="flex items-center justify-end gap-3 pt-2">
           <button
             type="button"
@@ -360,7 +375,7 @@ export function AddCustomStatusModal({
             onClick={onClose}
             className="rounded-2xl bg-[#1E293B] px-8 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-slate-800"
           >
-            Save
+            {preview ? "Done" : "Save"}
           </button>
         </div>
       </div>

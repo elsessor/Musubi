@@ -339,6 +339,7 @@ export default function OrganizationPage() {
           <TabButton tourId="announcements-tab" active={activeTab === "announcements"} icon={Bell} label="Announcements" onClick={() => handleChangeTab("announcements")} />
         </div>
 
+        <div data-tour={`organization-${activeTab}-panel`} className="min-w-0">
         {loading ? (
           <LoadCard message="Loading organization profile..." />
         ) : error ? (
@@ -389,6 +390,7 @@ export default function OrganizationPage() {
         ) : (
           <EmptyPanel tab={activeTab} />
         )}
+        </div>
       </section>
       {accessModalOpen && firebaseUser && profile.role !== "Admin" ? (
         <OrganizationAccessModal

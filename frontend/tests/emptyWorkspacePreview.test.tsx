@@ -55,7 +55,13 @@ test("event workspace previews expose guide targets without enabling organizatio
     for (const target of ["event-workspace", "event-summary", "task-view", "task-committee-filter", "task-status-filter", "task-search", "event-task-workspace"]) assert.ok(html.includes(`data-tour="${target}"`), target);
     assert.match(html, /data-event-id="workspace-preview"/);
     assert.match(html, /Task title/);
+    assert.match(html, /aria-label="Task views"/);
+    assert.match(html, /aria-label="Filter tasks by status"/);
+    for (const label of ["All Tasks", "To Do", "In Progress", "In Review", "Completed", "Archived"]) assert.ok(html.includes(label), label);
+    assert.equal((html.match(/aria-label="Task card layout placeholder"/g) ?? []).length, 4);
+    assert.match(html, /Show event details/);
     assert.equal(html.includes("Add Task"), isLeader);
+    assert.equal(html.includes('data-tour="task-custom-status"'), isLeader);
     if (isLeader) assert.match(html, /disabled=""/);
     assert.doesNotMatch(html, /type="submit"|data-tour="task-card"/);
   }

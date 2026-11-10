@@ -4,6 +4,7 @@ import { PAGE_TOUR_IDS, type PageTourId } from "./tutorialPages";
 export type SectionProgress = { status: "in_progress" | "completed" | "dismissed"; step: number; updatedAt: string };
 export type OnboardingProgress = {
   version: 1;
+  restartedAt?: string;
   preference?: { mode: "guided" | "independent"; updatedAt: string; source?: "user" | "legacy" };
   welcome?: SectionProgress;
   sidebar?: SectionProgress;
@@ -11,6 +12,7 @@ export type OnboardingProgress = {
 };
 export type OnboardingSection = "welcome" | "sidebar" | PageTourId;
 export const isFinished = (section?: SectionProgress) => section?.status === "completed" || section?.status === "dismissed";
+export const onboardingRunTime = (progress?: OnboardingProgress) => progress?.restartedAt ? Date.parse(progress.restartedAt) : 0;
 
 export function onboardingProgress(saved: TutorialStatus | null): OnboardingProgress {
   if (saved?.onboarding) {
@@ -52,6 +54,7 @@ export function updateSection(progress: OnboardingProgress, section: OnboardingS
 export function mergeOnboarding(a?: OnboardingProgress, b?: OnboardingProgress): OnboardingProgress | undefined {
   if (!a) return b;
   if (!b) return a;
+  if (onboardingRunTime(a) !== onboardingRunTime(b)) return onboardingRunTime(a) > onboardingRunTime(b) ? a : b;
   const rank = { in_progress: 0, dismissed: 1, completed: 2 };
   const merge = (left?: SectionProgress, right?: SectionProgress) => !left ? right : !right ? left : rank[left.status] !== rank[right.status] ? rank[left.status] > rank[right.status] ? left : right : left.updatedAt > right.updatedAt ? left : right;
   const preference = !a.preference ? b.preference : !b.preference ? a.preference : a.preference.updatedAt > b.preference.updatedAt ? a.preference : b.preference;
@@ -60,7 +63,7 @@ export function mergeOnboarding(a?: OnboardingProgress, b?: OnboardingProgress):
     const merged = merge(a.modules?.[id], b.modules?.[id]);
     if (merged) modules[id] = merged;
   }
-  return { version: 1, ...(preference ? { preference } : {}), ...(merge(a.welcome, b.welcome) ? { welcome: merge(a.welcome, b.welcome) } : {}), ...(merge(a.sidebar, b.sidebar) ? { sidebar: merge(a.sidebar, b.sidebar) } : {}), ...(Object.keys(modules).length ? { modules } : {}) };
+  return { version: 1, ...(a.restartedAt ? { restartedAt: a.restartedAt } : {}), ...(preference ? { preference } : {}), ...(merge(a.welcome, b.welcome) ? { welcome: merge(a.welcome, b.welcome) } : {}), ...(merge(a.sidebar, b.sidebar) ? { sidebar: merge(a.sidebar, b.sidebar) } : {}), ...(Object.keys(modules).length ? { modules } : {}) };
 }
 
 export function isOnboardingProgress(value: unknown): value is OnboardingProgress {
@@ -72,7 +75,7 @@ export function isOnboardingProgress(value: unknown): value is OnboardingProgres
     const s = item as SectionProgress;
     return ["in_progress", "completed", "dismissed"].includes(s.status) && Number.isInteger(s.step) && s.step >= 0 && s.step <= 500 && stamp(s.updatedAt);
   };
-  return progress.version === 1 && (progress.preference === undefined || (progress.preference !== null && ["guided", "independent"].includes(progress.preference.mode) && stamp(progress.preference.updatedAt) && (progress.preference.source === undefined || ["user", "legacy"].includes(progress.preference.source))))
+  return progress.version === 1 && (progress.restartedAt === undefined || stamp(progress.restartedAt)) && (progress.preference === undefined || (progress.preference !== null && ["guided", "independent"].includes(progress.preference.mode) && stamp(progress.preference.updatedAt) && (progress.preference.source === undefined || ["user", "legacy"].includes(progress.preference.source))))
     && (progress.welcome === undefined || section(progress.welcome)) && (progress.sidebar === undefined || section(progress.sidebar))
     && (progress.modules === undefined || (progress.modules !== null && typeof progress.modules === "object" && !Array.isArray(progress.modules) && Object.entries(progress.modules).every(([id, state]) => PAGE_TOUR_IDS.includes(id as PageTourId) && section(state))));
 }

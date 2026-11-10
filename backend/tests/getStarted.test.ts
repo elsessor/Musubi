@@ -16,7 +16,7 @@ function text(value: any): string {
   return value?.props ? text(value.props.children) : "";
 }
 
-function guide(role: string, hasOrganization: boolean) {
+function guide(role: string, hasOrganization: boolean, restarting = false) {
   let section = "welcome";
   const calls: string[] = [];
   const components = new Proxy({}, { get: (_target, name) => String(name) });
@@ -27,7 +27,7 @@ function guide(role: string, hasOrganization: boolean) {
   const exports: any = {};
   new Function("exports", "require", code)(exports, (name: string) => name === "react" ? { useState: () => [section, (next: string) => { section = next; }] } : name === "react/jsx-runtime" ? runtime : components);
   const action = (name: string) => () => calls.push(name);
-  const props = { role, hasOrganization, onClose: action("close"), onWalkthrough: action("walkthrough"), onPageGuide: action("page"), onHelp: action("help"), onOrganization: action("organization") };
+  const props = { role, hasOrganization, onClose: action("close"), onContinue: restarting ? action("continue") : undefined, onWalkthrough: action("walkthrough"), onPageGuide: action("page"), onHelp: action("help"), onOrganization: action("organization") };
   return {
     calls, render: () => exports.GetStarted(props),
     click(tree: Node, label: string) {
@@ -55,6 +55,14 @@ test("Get Started offers all sections and connects walkthrough, page guide, Help
   app.click(tree, "Help / User Guide");
   app.click(tree, "I understand");
   assert.deepEqual(app.calls, ["walkthrough", "organization", "page", "help", "close"]);
+});
+
+test("restart acknowledgement continues onboarding while dismissing the dialog only closes it", () => {
+  const app = guide("Student Leader", false, true);
+  const tree = app.render();
+  app.click(tree, "I understand");
+  nodes(tree).find((node) => node.type === "Dialog")!.props.onOpenChange(false);
+  assert.deepEqual(app.calls, ["continue", "close"]);
 });
 
 test("access instructions distinguish pending leaders, joined members, and administrators", () => {
