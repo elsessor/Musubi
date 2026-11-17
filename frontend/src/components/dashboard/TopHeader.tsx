@@ -450,7 +450,7 @@ export function TopHeader({
 
           {menuOpen ? (
             <div
-              className="absolute right-0 z-30 mt-3 w-72 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xl animate-in fade-in zoom-in-95 duration-150"
+              className="absolute right-0 z-30 mt-3 max-h-[calc(100dvh-6rem)] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xl animate-in fade-in zoom-in-95 duration-150"
               role="menu"
             >
               {/* User Header Info */}

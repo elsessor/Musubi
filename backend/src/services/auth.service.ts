@@ -25,6 +25,8 @@ import {
 } from "./calendar.service.js";
 import { sendEventPublishedNotificationEmail } from "./email.service.js";
 import { runDueNudgesCheck } from "../controllers/email.controller.js";
+import { acceptTestOrganizationJoin, prepareTestAccountLogin } from "./testAccounts.service.js";
+import { provisionedTestAccount, TEST_ACCOUNT_SUITE, TEST_ORGANIZATION_ID } from "../config/testAccounts.js";
 
 export function invalidateUserCache(uid: string) {
   appCache.delete("user_profile:" + uid);
@@ -71,6 +73,7 @@ function normalizeUserDocument(uid: string, data: FirebaseFirestore.DocumentData
     availability: validAvail,
     status: validAvail,
     onboardingCompleted: data.onboardingCompleted === true,
+    isTestAccount: Boolean(provisionedTestAccount(uid, data)),
     createdAt: data.createdAt ?? firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     lastLogin: data.lastLogin ?? firebaseAdmin.firestore.FieldValue.serverTimestamp()
   };
@@ -175,6 +178,7 @@ export async function loginWithFirebaseToken(idToken: string, clientFullName?: s
   }
 
   const decodedToken = await firebaseAuth.verifyIdToken(idToken);
+  await prepareTestAccountLogin(decodedToken.uid, decodedToken.email, decodedToken.auth_time);
   const user = await getOrCreateUserDocument(decodedToken.uid, clientFullName, true);
 
   const payload: JwtPayload = {
@@ -215,7 +219,8 @@ export async function loginWithFirebaseToken(idToken: string, clientFullName?: s
       skills: user.skills,
       availability: user.availability,
       status: user.status,
-      onboardingCompleted: user.onboardingCompleted
+      onboardingCompleted: user.onboardingCompleted,
+      isTestAccount: user.isTestAccount
     }
   };
 }
@@ -308,7 +313,8 @@ export async function getCurrentUser(uid: string, forceFresh = false): Promise<L
     skills: user.skills,
     availability: user.availability,
     status: user.status,
-    onboardingCompleted: user.onboardingCompleted
+    onboardingCompleted: user.onboardingCompleted,
+    isTestAccount: user.isTestAccount
   };
 
   appCache.set(cacheKey, profile, 120_000);
@@ -500,6 +506,17 @@ export async function joinOrganization(uid: string, organizationId: string) {
     throw new AppError("This organization is not available to join.", 404);
   }
   const orgName = typeof organization.data()?.name === "string" ? organization.data()!.name : "Unknown Organization";
+  const accepted = await acceptTestOrganizationJoin(uid, organizationId);
+  if (accepted) {
+    invalidateUserCache(uid);
+    appCache.deletePrefix("members:");
+    appCache.delete("admin_member_directory");
+    const user = await getCurrentUser(uid);
+    writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role,
+      action: "Test organization membership accepted automatically", actionCategory: "Organization",
+      targetType: "Organization", targetName: orgName, orgId: organizationId });
+    return { id: accepted.id, status: "accepted" as const, user };
+  }
   const user = await getCurrentUser(uid);
   if (user.organizationId === organizationId) throw new AppError("You already belong to this organization.", 409);
   const existing = await firestore.collection("organization_join_requests").where("organizationId", "==", organizationId).where("requestedByUID", "==", uid).where("status", "==", "pending").limit(1).get();
@@ -1007,6 +1024,15 @@ export async function completeUserOnboarding(
     throw new AppError("Complete the required onboarding details.", 400);
   }
 
+  const userRef = firestore.collection("users").doc(uid);
+  const storedProfile = (await userRef.get()).data() ?? {};
+  const testAccount = provisionedTestAccount(uid, storedProfile);
+  if (testAccount) {
+    const organization = await firestore.collection("organizations").doc(TEST_ORGANIZATION_ID).get();
+    if (organization.data()?.status !== "active" || organization.data()?.testAccountSuite !== TEST_ACCOUNT_SUITE) throw new AppError("The test organization is unavailable.", 503);
+    input = { ...input, organizationId: TEST_ORGANIZATION_ID, organizationRequest: undefined };
+  }
+
   let orgName: string | null = null;
   if (input.organizationRequest?.orgName) {
     orgName = input.organizationRequest.orgName.trim();
@@ -1021,7 +1047,6 @@ export async function completeUserOnboarding(
     }
   }
 
-  const userRef = firestore.collection("users").doc(uid);
   await userRef.set({
     role: input.role,
     position: input.position.trim(),
@@ -1031,8 +1056,11 @@ export async function completeUserOnboarding(
     program: input.program,
     skills: input.skills,
     onboardingCompleted: true,
+    ...(testAccount ? { committeeId: testAccount.committeeId, committeeName: testAccount.committeeName } : {}),
     lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
+  invalidateUserCache(uid);
+  appCache.deletePrefix("members:");
 
   if (input.organizationRequest) {
     const currentUser = await getCurrentUser(uid);

@@ -18,6 +18,7 @@ import {
 
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { TutorialContextualHelp } from "@/components/onboarding/TutorialProvider";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { getFirebaseDb } from "@/firebase/config";
 import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
@@ -598,6 +599,14 @@ export default function DashboardSettingsPage() {
           </h2>
 
           <div className="space-y-6">
+            <div data-theme-preference className="flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-bold text-slate-900">Appearance</p>
+                <p className="mt-0.5 text-[13px] font-medium text-slate-400">Choose light or dark mode for this browser.</p>
+              </div>
+              <ThemeToggle />
+            </div>
+
             {/* Email Notifications */}
             <div className="flex items-center justify-between gap-4">
               <div>

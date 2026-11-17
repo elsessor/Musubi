@@ -40,7 +40,16 @@ export function OrganizationAccessModal({ role, user, onClose, onComplete }: Pro
     if (mode === "create" && (!name.trim() || !type.trim() || !description.trim())) { setError("Complete the organization name, type, and description."); return; }
     setSaving(true);
     try {
-      if (mode === "join") { await joinOrganization(user, selectedId); onComplete({ organizationId: null }); setSubmitted(true); return; }
+      if (mode === "join") {
+        const { request } = await joinOrganization(user, selectedId);
+        if (request.status === "accepted") {
+          onComplete(request.user);
+          showToast({ title: "Organization joined", description: `You are now a member of ${request.user.organizationName || "Musubi Test Organization"}.`, tone: "success" });
+          onClose();
+          return;
+        }
+        onComplete({ organizationId: null }); setSubmitted(true); return;
+      }
       const result = await createOrganization(user, { name, type, description });
       onComplete(result.user);
       showToast({ title: "Organization created", description: "Your organization has been saved successfully.", tone: "success" });

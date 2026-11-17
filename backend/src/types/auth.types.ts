@@ -18,6 +18,7 @@ export type FirestoreUser = {
   availability?: string | null;
   status?: string | null;
   onboardingCompleted: boolean;
+  isTestAccount?: boolean;
   createdAt: FirebaseFirestore.Timestamp | FirebaseFirestore.FieldValue;
   lastLogin: FirebaseFirestore.Timestamp | FirebaseFirestore.FieldValue;
 };

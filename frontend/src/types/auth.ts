@@ -22,6 +22,7 @@ export type AuthUserProfile = {
   program?: string | null;
   birthdate?: string | null;
   onboardingCompleted: boolean;
+  isTestAccount?: boolean;
 };
 
 export type AuthUserDocument = AuthUserProfile & {

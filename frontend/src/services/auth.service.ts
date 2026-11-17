@@ -190,7 +190,8 @@ export async function exchangeFirebaseSession(user: User, fullName?: string): Pr
       skills,
       availability: typeof backendUser.availability === "string" ? backendUser.availability : null,
       status: typeof backendUser.status === "string" ? backendUser.status : null,
-      onboardingCompleted
+      onboardingCompleted,
+      isTestAccount: backendUser.isTestAccount === true
     }
   };
 }
@@ -269,7 +270,8 @@ function normalizeMyProfile(value: unknown): AuthUserProfile {
     skills: normalizeStringArray(record.skills),
     availability: typeof record.availability === "string" ? record.availability : null,
     status: typeof record.status === "string" ? record.status : null,
-    onboardingCompleted: record.onboardingCompleted === true
+    onboardingCompleted: record.onboardingCompleted === true,
+    isTestAccount: record.isTestAccount === true
   };
 }
 
@@ -345,7 +347,7 @@ export async function completeOnboarding(user: User, payload: {
 // ── Organizations ─────────────────────────────────────────────────────────────
 
 export function joinOrganization(user: User, organizationId: string) {
-  return organizationRequest<{ request: { id: string; status: "pending" } }>(user, "/auth/organizations/join", {
+  return organizationRequest<{ request: { id: string; status: "pending" } | { id: string; status: "accepted"; user: AuthUserProfile } }>(user, "/auth/organizations/join", {
     method: "POST",
     body: JSON.stringify({ organizationId })
   });

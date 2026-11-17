@@ -72,6 +72,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const profile = useAuthStore((state) => state.profile);
+  const isTestAccount = profile?.isTestAccount === true;
   const setProfile = useAuthStore((state) => state.setProfile);
   const [stage, setStage] = useState<Stage>("role");
   const [onboardingSuccess, setOnboardingSuccess] = useState<{ title: string; description: string; actionLabel: string; destination: "pending" | "dashboard" } | null>(null);
@@ -124,10 +125,10 @@ export default function OnboardingPage() {
   const completedSteps = stage === "role" ? 1 : stage === "leader-check" || stage === "organization" || stage === "details" ? 2 : 3;
 
   useEffect(() => {
-    if (!firebaseUser) return;
+    if (!firebaseUser || isTestAccount) return;
     setOrganizationsLoading(true);
     void getOrganizationDirectory(firebaseUser).then(setOrganizations).catch(() => setOrganizations([])).finally(() => setOrganizationsLoading(false));
-  }, [firebaseUser]);
+  }, [firebaseUser, isTestAccount]);
 
   function toggleSkill(skill: string) {
     setSelectedSkills((current) => current.includes(skill) ? current.filter((item) => item !== skill) : [...current, skill]);
@@ -156,7 +157,7 @@ export default function OnboardingPage() {
   function continueFromRole() {
     if (!role) return;
     setError("");
-    setStage(role === "leader" ? "leader-check" : "organization");
+    setStage(isTestAccount ? "details" : role === "leader" ? "leader-check" : "organization");
   }
 
   function continueFromOrganization() {
@@ -193,7 +194,7 @@ export default function OnboardingPage() {
       ? `new-${organizationName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`
       : null;
 
-    if (!onboardingOrganizationId && !isJoiningOrganizationLater && !selectedOrganization) {
+    if (!isTestAccount && !onboardingOrganizationId && !isJoiningOrganizationLater && !selectedOrganization) {
       setError("We could not determine your organization. Please go back and try again.");
       return;
     }
@@ -218,12 +219,16 @@ export default function OnboardingPage() {
         skills: selectedSkills
       });
 
-      if (!isNewOrganization && !isJoiningOrganizationLater && selectedOrganization) {
-        await joinOrganization(firebaseUser, selectedOrganization.id);
+      let updatedUser = session.user;
+      let pendingJoin = false;
+      if (!isTestAccount && !isNewOrganization && !isJoiningOrganizationLater && selectedOrganization) {
+        const { request } = await joinOrganization(firebaseUser, selectedOrganization.id);
+        if (request.status === "accepted") updatedUser = request.user;
+        else pendingJoin = true;
       }
 
-      setProfile(session.user);
-      if (isNewOrganization || selectedOrganization) {
+      setProfile(updatedUser);
+      if (isNewOrganization || pendingJoin) {
         setOnboardingSuccess({
           title: "Request submitted",
           description: isNewOrganization
@@ -235,7 +240,7 @@ export default function OnboardingPage() {
       } else {
         setOnboardingSuccess({
           title: "Onboarding complete",
-          description: "Your profile is ready. Continue to your dashboard to get started.",
+          description: isTestAccount ? "Your profile is ready, and you have joined Musubi Test Organization. Continue to your dashboard to explore the guides and practice tasks." : "Your profile is ready. Continue to your dashboard to get started.",
           actionLabel: "Go to dashboard",
           destination: "dashboard"
         });
@@ -258,7 +263,7 @@ export default function OnboardingPage() {
     else if (destination === "dashboard") router.replace("/dashboard");
   }
 
-  const isNewOrganization = role === "leader" && orgPath === "create";
+  const isNewOrganization = !isTestAccount && role === "leader" && orgPath === "create";
   const displayOrganization = isNewOrganization ? organizationName : isJoiningOrganizationLater ? "Not joined yet" : selectedOrganization?.name;
   const firstName = (profile?.fullName ?? firebaseUser?.displayName ?? "there").trim().split(/\s+/)[0];
 
@@ -272,6 +277,7 @@ export default function OnboardingPage() {
         </header>
 
         {stage !== "pending" && <Stepper active={completedSteps} />}
+        {isTestAccount && <p className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-900">Choose your role and complete your profile. You will join Musubi Test Organization automatically after setup.</p>}
 
         <section className="rounded-[20px] border border-[#e0e5ed] bg-white p-5 shadow-[0_2px_3px_rgba(20,35,55,.13)] sm:p-6">
           {stage === "role" && <>
@@ -347,7 +353,7 @@ export default function OnboardingPage() {
               </div>
             </div>
             <ErrorMessage message={error} />
-            <div className="mt-7 flex gap-3"><SecondaryButton onClick={() => setStage("organization")}>Back</SecondaryButton><PrimaryButton onClick={submitDetails}>{isNewOrganization ? "Submit for review" : isJoiningOrganizationLater ? "Complete setup" : "Submit request"} <span aria-hidden>→</span></PrimaryButton></div>
+            <div className="mt-7 flex gap-3"><SecondaryButton onClick={() => setStage(isTestAccount ? "role" : "organization")}>Back</SecondaryButton><PrimaryButton onClick={submitDetails}>{isTestAccount || isJoiningOrganizationLater ? "Complete setup" : isNewOrganization ? "Submit for review" : "Submit request"} <span aria-hidden>→</span></PrimaryButton></div>
           </>}
 
           {stage === "pending" && <div className="py-3 text-center"><div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-amber-100 text-2xl">◷</div><span className="mt-5 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Pending review</span><h2 className="mt-4 text-2xl font-extrabold text-slate-950">{isNewOrganization ? "Your organization is under review" : "Your request was submitted"}</h2><p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">{isNewOrganization ? "A Musubi administrator will review your organization registration and notify you when it is approved." : "Your organization leader will review your request to join and notify you of their decision."}</p><div className="mt-6 rounded-xl bg-slate-50 p-4 text-left"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Submission summary</p><div className="mt-3 flex justify-between text-sm"><span className="text-slate-500">Organization</span><span className="font-bold text-slate-800">{displayOrganization}</span></div><div className="mt-2 flex justify-between text-sm"><span className="text-slate-500">Status</span><span className="font-bold text-amber-700">Pending</span></div></div><ErrorMessage message={error} /><PrimaryButton className="mt-7" disabled={isCompleting} onClick={finishOnboarding}>{isCompleting ? "Saving your profile..." : "Enter dashboard"}</PrimaryButton><p className="mt-3 text-xs text-slate-400">You&apos;ll have limited access until your request is approved.</p></div>}

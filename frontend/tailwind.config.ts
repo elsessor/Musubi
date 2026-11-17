@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -15,13 +16,13 @@ const config: Config = {
         brand: {
           DEFAULT: "#1F3A68",
           deep: "#1B335C",
-          soft: "#E8EEF7"
+          soft: "var(--theme-brand-soft)"
         },
         accent: {
           DEFAULT: "#3B82F6",
           soft: "#DBEAFE"
         },
-        page: "#F5F7FA"
+        page: "var(--theme-page)"
       },
       boxShadow: {
         soft: "0 12px 32px rgba(31, 58, 104, 0.08)",

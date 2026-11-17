@@ -4,6 +4,8 @@
   "private": true,
   "main": "dist/server.js",
   "scripts": {
+    "seed:test-accounts": "tsx scripts/seedTestAccounts.ts",
+    "check:deployment": "tsx scripts/checkDeployment.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
