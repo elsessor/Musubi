@@ -514,14 +514,38 @@ export async function joinOrganization(uid: string, organizationId: string) {
     const user = await getCurrentUser(uid);
     writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role,
       action: "Test organization membership accepted automatically", actionCategory: "Organization",
-      targetType: "Organization", targetName: orgName, orgId: organizationId });
+      targetType: "Organization", targetName: orgName, orgId: organizationId }, { notify: false });
     return { id: accepted.id, status: "accepted" as const, user };
   }
   const user = await getCurrentUser(uid);
-  if (user.organizationId === organizationId) throw new AppError("You already belong to this organization.", 409);
-  const existing = await firestore.collection("organization_join_requests").where("organizationId", "==", organizationId).where("requestedByUID", "==", uid).where("status", "==", "pending").limit(1).get();
-  if (!existing.empty) throw new AppError("You already have a pending request for this organization.", 409);
-  const request = await firestore.collection("organization_join_requests").add({ organizationId, requestedByUID: uid, name: user.fullName, email: user.email, position: user.position, skills: user.skills, status: "pending", submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() });
+  if (user.organizationId?.trim()) throw new AppError("You already belong to an organization. You can only belong to one organization at a time.", 409);
+  const request = firestore.collection("organization_join_requests").doc();
+  const userRef = firestore.collection("users").doc(uid);
+  await firestore.runTransaction(async (transaction) => {
+    const currentUser = await transaction.get(userRef);
+    if (currentUser.data()?.organizationId?.trim()) throw new AppError("You already belong to an organization. You can only belong to one organization at a time.", 409);
+    const existing = await transaction.get(firestore.collection("organization_join_requests")
+      .where("requestedByUID", "==", uid).where("status", "==", "pending").limit(1));
+    if (!existing.empty) throw new AppError("You already have a pending request. Cancel it or wait for it to be declined before requesting another organization.", 409);
+    const members = await transaction.get(firestore.collection("users").where("organizationId", "==", organizationId));
+    const createdAt = firebaseAdmin.firestore.FieldValue.serverTimestamp();
+    transaction.create(request, {
+      organizationId, requestedByUID: uid, name: user.fullName, email: user.email,
+      position: user.position, skills: user.skills, status: "pending", submittedAt: createdAt
+    });
+    // Serialize all membership changes through the applicant's user document.
+    transaction.update(userRef, { pendingOrganizationJoinRequestId: request.id });
+    for (const leader of members.docs) {
+      if (leader.data().role !== "Student Leader" || leader.id === uid) continue;
+      transaction.create(firestore.collection("notifications").doc(`org_join_${request.id}_${leader.id}`), {
+        orgId: organizationId, recipientUID: leader.id, joinRequestId: request.id, requestedByUID: uid,
+        membershipEvent: "join-request", updatedAt: createdAt,
+        title: "New organization join request",
+        description: `${user.fullName} requested to join ${orgName}. Review the request in Organization → Members.`,
+        type: "organization", read: false, readBy: [], createdAt
+      });
+    }
+  });
   writeAuditLog({
     actorUID: uid,
     actorName: user.fullName,
@@ -531,7 +555,7 @@ export async function joinOrganization(uid: string, organizationId: string) {
     targetType: "Organization",
     targetName: orgName,
     orgId: organizationId
-  });
+  }, { notify: false });
   return { id: request.id, status: "pending" as const };
 }
 
@@ -550,23 +574,72 @@ export async function getMyOrganizationJoinRequest(uid: string) {
   return { id: request.id, organizationId: request.data().organizationId, organizationName: organization.exists && typeof organization.data()?.name === "string" ? organization.data()?.name : "this organization" };
 }
 
+export async function cancelOrganizationJoinRequest(uid: string, requestId: string) {
+  const userRef = firestore.collection("users").doc(uid);
+  const ref = firestore.collection("organization_join_requests").doc(requestId);
+  const cancelled = await firestore.runTransaction(async (transaction) => {
+    const user = await transaction.get(userRef);
+    const snapshot = await transaction.get(ref);
+    const request = snapshot.data();
+    if (!snapshot.exists || request?.requestedByUID !== uid) throw new AppError("Join request was not found.", 404);
+    if (request.status === "cancelled") return null;
+    if (request.status !== "pending") throw new AppError("This request has already been reviewed. Refresh your organization status.", 409);
+    const notices = await transaction.get(firestore.collection("notifications").where("joinRequestId", "==", requestId));
+    transaction.update(ref, { status: "cancelled", cancelledAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), cancelledByUID: uid });
+    transaction.update(userRef, { pendingOrganizationJoinRequestId: user.data()?.pendingOrganizationJoinRequestId === requestId ? null : user.data()?.pendingOrganizationJoinRequestId ?? null });
+    for (const notice of notices.docs) transaction.update(notice.ref, {
+      title: "Join request cancelled", description: `${request.name || "A user"} cancelled their request to join your organization.`, read: true,
+      updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+    });
+    return request;
+  });
+  if (cancelled) writeAuditLog({ actorUID: uid, actorName: cancelled.name, action: "Cancelled organization join request",
+    actionCategory: "Organization", targetType: "Organization", orgId: cancelled.organizationId,
+    changes: { field: "status", from: "pending", to: "cancelled" } }, { notify: false });
+}
+
 export async function reviewOrganizationJoinRequest(uid: string, organizationId: string, requestId: string, status: "accepted" | "rejected") {
   const leader = await getCurrentUser(uid);
   if (leader.role !== "Student Leader" || leader.organizationId !== organizationId) throw new AppError("Only organization leaders can review join requests.", 403);
   const ref = firestore.collection("organization_join_requests").doc(requestId);
-  const snapshot = await ref.get();
-  const request = snapshot.data();
-  if (!snapshot.exists || request?.organizationId !== organizationId || request.status !== "pending" || typeof request.requestedByUID !== "string") throw new AppError("Join request was not found.", 404);
-  await ref.update({ status, reviewedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), reviewedByUID: uid });
+  const request = await firestore.runTransaction(async (transaction) => {
+    const currentLeader = await transaction.get(firestore.collection("users").doc(uid));
+    if (currentLeader.data()?.role !== "Student Leader" || currentLeader.data()?.organizationId !== organizationId) throw new AppError("Only organization leaders can review join requests.", 403);
+    const snapshot = await transaction.get(ref);
+    const request = snapshot.data();
+    if (!snapshot.exists || request?.organizationId !== organizationId || request.status !== "pending" || typeof request.requestedByUID !== "string") throw new AppError("This join request is no longer pending. Refresh the requests list.", 409);
+    const applicantRef = firestore.collection("users").doc(request.requestedByUID);
+    const applicant = await transaction.get(applicantRef);
+    if (!applicant.exists) throw new AppError("The applicant account was not found.", 404);
+    if (status === "accepted" && applicant.data()?.organizationId?.trim()) throw new AppError("This user already belongs to an organization.", 409);
+    const orgDoc = await transaction.get(firestore.collection("organizations").doc(organizationId));
+    const notices = await transaction.get(firestore.collection("notifications").where("joinRequestId", "==", requestId));
+    const reviewedAt = firebaseAdmin.firestore.FieldValue.serverTimestamp();
+    transaction.update(ref, { status, reviewedAt, reviewedByUID: uid });
+    transaction.update(applicantRef, {
+      ...(status === "accepted" ? { organizationId, organizationName: orgDoc.data()?.name ?? null } : {}),
+      pendingOrganizationJoinRequestId: applicant.data()?.pendingOrganizationJoinRequestId === requestId ? null : applicant.data()?.pendingOrganizationJoinRequestId ?? null
+    });
+    for (const notice of notices.docs) transaction.update(notice.ref, {
+      title: status === "accepted" ? "Join request accepted" : "Join request declined",
+      description: `${request.name || "The applicant"}'s join request has been ${status === "accepted" ? "accepted" : "declined"}.`, read: true, updatedAt: reviewedAt
+    });
+    const orgName = typeof orgDoc.data()?.name === "string" ? orgDoc.data()!.name : "the organization";
+    transaction.create(firestore.collection("notifications").doc(`org_join_result_${requestId}_${request.requestedByUID}`), {
+      recipientUID: request.requestedByUID, orgId: organizationId, joinRequestId: requestId,
+      membershipEvent: status === "accepted" ? "join-accepted" : "join-rejected",
+      title: status === "accepted" ? "Your join request was accepted" : "Your join request was declined",
+      description: status === "accepted"
+        ? `You are now a member of ${orgName}. Your organization's events, tasks, and updates are available.`
+        : `${orgName} declined your join request. You can now request to join another organization.`,
+      type: "organization", read: false, readBy: [], createdAt: reviewedAt, updatedAt: reviewedAt
+    });
+    return request;
+  });
+  invalidateUserCache(request.requestedByUID);
   if (status === "accepted") {
-    const orgDoc = await firestore.collection("organizations").doc(organizationId).get();
-    const orgName = orgDoc.exists && typeof orgDoc.data()?.name === "string" ? orgDoc.data()?.name : null;
-    await firestore.collection("users").doc(request.requestedByUID).set({ organizationId, ...(orgName ? { organizationName: orgName } : {}) }, { merge: true });
-    invalidateUserCache(request.requestedByUID);
     appCache.deletePrefix("members:");
     appCache.delete("admin_member_directory");
-  } else {
-    invalidateUserCache(request.requestedByUID);
   }
   writeAuditLog({
     actorUID: uid,
@@ -578,24 +651,34 @@ export async function reviewOrganizationJoinRequest(uid: string, organizationId:
     targetName: typeof request?.name === "string" ? request.name : request?.requestedByUID,
     orgId: organizationId,
     changes: { field: "status", from: "pending", to: status }
-  });
+  }, { notify: false });
 }
 
 export async function createOrganization(uid: string, input: { name: string; type: string; description: string }) {
   const user = await getCurrentUser(uid);
   if (user.role !== "Student Leader") throw new AppError("Only student leaders can create organizations.", 403);
   const ref = firestore.collection("organizations").doc();
-  await ref.set({
-    name: input.name.trim(), type: input.type.trim(), description: input.description.trim(), status: "pending", requestedByUID: uid,
-    organizationConfig: {}, createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  const reviewRef = firestore.collection("org_requests").doc();
+  const userRef = firestore.collection("users").doc(uid);
+  await firestore.runTransaction(async (transaction) => {
+    const current = await transaction.get(userRef);
+    if (current.data()?.role !== "Student Leader") throw new AppError("Only student leaders can create organizations.", 403);
+    if (current.data()?.organizationId?.trim()) throw new AppError("You already belong to an organization. You can only belong to one organization at a time.", 409);
+    const pending = await transaction.get(firestore.collection("organization_join_requests").where("requestedByUID", "==", uid).where("status", "==", "pending").limit(1));
+    if (!pending.empty) throw new AppError("Cancel your pending join request or wait for it to be declined before creating an organization.", 409);
+    const createdAt = firebaseAdmin.firestore.FieldValue.serverTimestamp();
+    transaction.create(ref, {
+      name: input.name.trim(), type: input.type.trim(), description: input.description.trim(), status: "pending", requestedByUID: uid,
+      organizationConfig: {}, createdAt, updatedAt: createdAt
+    });
+    transaction.update(userRef, { organizationId: ref.id, organizationName: input.name.trim(), pendingOrganizationJoinRequestId: null });
+    transaction.create(reviewRef, {
+      organizationId: ref.id, orgName: input.name.trim(), orgType: input.type.trim(), description: input.description.trim(), status: "pending", rejectionReason: null,
+      submittedAt: createdAt, requestedBy: { uid, name: user.fullName, email: user.email }
+    });
   });
-  await firestore.collection("users").doc(uid).set({ organizationId: ref.id, organizationName: input.name.trim() }, { merge: true });
   invalidateUserCache(uid);
   appCache.deletePrefix("members:");
-  await firestore.collection("org_requests").add({
-    organizationId: ref.id, orgName: input.name.trim(), orgType: input.type.trim(), description: input.description.trim(), status: "pending", rejectionReason: null,
-    submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), requestedBy: { uid, name: user.fullName, email: user.email }
-  });
   writeAuditLog({
     actorUID: uid,
     actorName: user.fullName,
@@ -1047,34 +1130,48 @@ export async function completeUserOnboarding(
     }
   }
 
-  await userRef.set({
-    role: input.role,
-    position: input.position.trim(),
-    organizationId: input.organizationId,
-    ...(orgName ? { organizationName: orgName } : {}),
-    yearLevel: input.yearLevel,
-    program: input.program,
-    skills: input.skills,
-    onboardingCompleted: true,
-    ...(testAccount ? { committeeId: testAccount.committeeId, committeeName: testAccount.committeeName } : {}),
-    lastLogin: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-  }, { merge: true });
+  const reviewRef = input.organizationRequest ? firestore.collection("org_requests").doc() : null;
+  await firestore.runTransaction(async (transaction) => {
+    const current = await transaction.get(userRef);
+    const existingOrg = typeof current.data()?.organizationId === "string" ? current.data()!.organizationId.trim() : "";
+    if (existingOrg && (input.organizationRequest || input.organizationId && input.organizationId !== existingOrg)) {
+      throw new AppError("You already belong to an organization. You can only belong to one organization at a time.", 409);
+    }
+    const pending = await transaction.get(firestore.collection("organization_join_requests").where("requestedByUID", "==", uid).where("status", "==", "pending"));
+    if (testAccount && pending.docs.some((request) => request.data().organizationId !== TEST_ORGANIZATION_ID)) {
+      throw new AppError("Cancel your pending join request or wait for it to be declined before choosing another organization.", 409);
+    }
+    if (!existingOrg && input.organizationId && !pending.empty && (!testAccount || pending.docs.some((request) => request.data().organizationId !== TEST_ORGANIZATION_ID))) {
+      throw new AppError("Cancel your pending join request or wait for it to be declined before choosing another organization.", 409);
+    }
+    if (!existingOrg && input.organizationId && !testAccount && input.organizationRequest?.organizationId !== input.organizationId) {
+      throw new AppError("Submit a join request before joining an existing organization.", 400);
+    }
+    if (input.organizationRequest && (input.role !== "Student Leader" || input.organizationRequest.organizationId !== input.organizationId)) {
+      throw new AppError("Only student leaders can register a new organization.", 403);
+    }
+    const now = firebaseAdmin.firestore.FieldValue.serverTimestamp();
+    transaction.set(userRef, {
+      role: input.role, position: input.position.trim(), organizationId: existingOrg || input.organizationId,
+      ...(!existingOrg && orgName ? { organizationName: orgName } : {}),
+      yearLevel: input.yearLevel, program: input.program, skills: input.skills, onboardingCompleted: true,
+      ...(testAccount ? { committeeId: testAccount.committeeId, committeeName: testAccount.committeeName, pendingOrganizationJoinRequestId: null } : {}),
+      lastLogin: now
+    }, { merge: true });
+    if (testAccount) for (const request of pending.docs) transaction.update(request.ref, { status: "accepted", reviewedAt: now, reviewedByUID: "test-account-auto-accept" });
+    if (testAccount && !existingOrg) transaction.set(firestore.collection("notifications").doc(`org_join_result_${uid}_${uid}_${current.data()?.testAccountAuthTime || "current"}`), {
+      recipientUID: uid, orgId: TEST_ORGANIZATION_ID, joinRequestId: uid, membershipEvent: "join-accepted",
+      title: "Your join request was accepted", description: `You are now a member of ${orgName || "Musubi Test Organization"}. Your organization's events, tasks, and updates are available.`,
+      type: "organization", read: false, readBy: [], createdAt: now, updatedAt: now
+    });
+    if (reviewRef && input.organizationRequest) transaction.create(reviewRef, {
+      organizationId: input.organizationRequest.organizationId, orgName: input.organizationRequest.orgName,
+      orgType: input.organizationRequest.orgType, description: input.organizationRequest.description, status: "pending", rejectionReason: null,
+      submittedAt: now, requestedBy: { uid, name: storedProfile.fullName || "Campus Member", email: storedProfile.email || "" }
+    });
+  });
   invalidateUserCache(uid);
   appCache.deletePrefix("members:");
-
-  if (input.organizationRequest) {
-    const currentUser = await getCurrentUser(uid);
-    await firestore.collection("org_requests").add({
-      organizationId: input.organizationRequest.organizationId,
-      orgName: input.organizationRequest.orgName,
-      orgType: input.organizationRequest.orgType,
-      description: input.organizationRequest.description,
-      status: "pending",
-      rejectionReason: null,
-      submittedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      requestedBy: { uid, name: currentUser.fullName, email: currentUser.email }
-    });
-  }
 
   const user = await getCurrentUser(uid);
   writeAuditLog({

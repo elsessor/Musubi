@@ -103,7 +103,7 @@ export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean;
   const activeFilterCount = Number(status !== "All") + Number(committee !== "All") + Number(assigneeScope !== "all");
   return <div ref={tutorialViewRef} data-tour-view-scope="tasks" data-tour-view={view} data-tour="event-workspace" data-event-id="workspace-preview" className="flex min-h-full min-w-0 flex-col">
     <nav aria-label="Event breadcrumb" className="mb-4 flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-slate-500">
-      <button type="button" onClick={onBack} aria-label="Back to events" className={`inline-flex min-h-9 items-center gap-1 font-bold text-slate-700 hover:text-blue-600 ${focus}`}><ChevronLeft aria-hidden="true" className="size-4" />Events &amp; Tasks</button><span aria-hidden="true">/</span><span className="truncate font-semibold text-slate-900">Event name</span><div className="ml-auto hidden sm:block">{createActions()}</div>
+      <button type="button" onClick={onBack} aria-label="Back to events" className={`inline-flex min-h-9 items-center gap-1 font-bold text-slate-700 hover:text-blue-600 ${focus}`}><ChevronLeft aria-hidden="true" className="size-4" />Events &amp; Tasks</button><span aria-hidden="true">/</span><span className="truncate font-semibold text-slate-900">Event name</span>
     </nav>
     <p className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">Event workspace preview. This layout follows the organization workspace. Placeholders show where event details and tasks will appear after you join.</p>
     <section data-tour="event-summary" className="mb-3 min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs sm:mb-5 sm:p-6">
@@ -139,7 +139,7 @@ export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean;
       </div>
         <div data-tour="task-status-filter" role="group" aria-label="Filter tasks by status" className="flex min-w-0 flex-wrap items-center gap-2">
           {statusOptions.map(({ value, label }) => { const active = status === value; const theme = getStatusTheme(value); return <button key={value} type="button" aria-pressed={active} onClick={() => setStatus(value)} className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium ${focus} ${active ? value === "All" ? "bg-slate-900 text-white shadow-sm" : theme.active : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>{value !== "All" && <span aria-hidden="true" className={`size-1.5 rounded-full ${theme.dot}`} />}{label}<span aria-label="Count unavailable" className="opacity-60">—</span></button>; })}
-          {customStatusButton()}
+          <div role="group" aria-label="Task actions" className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{customStatusButton()}{createActions()}</div>
         </div>
     </div>
 

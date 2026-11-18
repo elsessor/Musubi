@@ -82,6 +82,12 @@ export type MyOrganizationJoinRequest = {
   organizationName: string;
 };
 
+export const ORGANIZATION_JOIN_STATUS_CHANGED = "musubi:organization-join-status-changed";
+
+function notifyOrganizationJoinStatusChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(ORGANIZATION_JOIN_STATUS_CHANGED));
+}
+
 export type OrganizationRecord = OrganizationDirectoryOption;
 
 export type OrganizationCommitteeRecord = {
@@ -280,6 +286,17 @@ export async function getMyProfile(user: User): Promise<AuthUserProfile> {
   return normalizeMyProfile(response.user);
 }
 
+export async function getNotificationRecords(user: User, signal?: AbortSignal): Promise<unknown[]> {
+  const response = await organizationRequest<{ notifications?: unknown[] }>(user, "/auth/notifications", { signal });
+  return Array.isArray(response.notifications) ? response.notifications : [];
+}
+
+export async function readNotificationRecords(user: User, ids: string[]) {
+  for (let index = 0; index < ids.length; index += 200) await organizationRequest<void>(user, "/auth/notifications/read", {
+    method: "PATCH", body: JSON.stringify({ ids: ids.slice(index, index + 200) })
+  });
+}
+
 export async function updateMyProfile(user: User, input: {
   fullName: string;
   position: string;
@@ -346,11 +363,13 @@ export async function completeOnboarding(user: User, payload: {
 
 // ── Organizations ─────────────────────────────────────────────────────────────
 
-export function joinOrganization(user: User, organizationId: string) {
-  return organizationRequest<{ request: { id: string; status: "pending" } | { id: string; status: "accepted"; user: AuthUserProfile } }>(user, "/auth/organizations/join", {
+export async function joinOrganization(user: User, organizationId: string) {
+  const result = await organizationRequest<{ request: { id: string; status: "pending" } | { id: string; status: "accepted"; user: AuthUserProfile } }>(user, "/auth/organizations/join", {
     method: "POST",
     body: JSON.stringify({ organizationId })
   });
+  notifyOrganizationJoinStatusChanged();
+  return result;
 }
 
 export async function getOrganizations(user: User): Promise<OrganizationDirectoryRecord[]> {
@@ -526,6 +545,11 @@ export function reviewOrganizationJoinRequest(user: User, organizationId: string
     method: "PATCH",
     body: JSON.stringify({ status })
   });
+}
+
+export async function cancelOrganizationJoinRequest(user: User, requestId: string) {
+  await organizationRequest<void>(user, `/auth/organizations/join-requests/${encodeURIComponent(requestId)}`, { method: "DELETE" });
+  notifyOrganizationJoinStatusChanged();
 }
 
 export async function getOrganizationManagementDetail(user: User, organizationId: string): Promise<OrganizationManagementDetail> {

@@ -3,10 +3,13 @@ import { collection, doc, onSnapshot, query, updateDoc, arrayUnion, limit, where
 import { getFirebaseDb } from "../firebase/config";
 import { subscribeAnnouncementsFirestore } from "./announcements.service";
 import { useAuthStore } from "@/store/authStore";
+import { getNotificationRecords, readNotificationRecords } from "./auth.service";
 
 export type NotificationRecord = {
   id: string;
   recipientUID?: string | null;
+  joinRequestId?: string;
+  membershipEvent?: "join-request" | "join-accepted" | "join-rejected";
   orgId?: string | null;
   title: string;
   description: string;
@@ -14,6 +17,7 @@ export type NotificationRecord = {
   unread: boolean;
   time: string;
   createdAt?: string | null;
+  updatedAt?: string | null;
   isPinned?: boolean;
   authorName?: string;
   nudgeCategory?: "deadline" | "followup" | "system";
@@ -29,7 +33,7 @@ const ALL_READ_TIMESTAMP_KEY = "musubi_all_read_timestamp";
 const NOTIF_READ_EVENT = "musubi_notif_read_change";
 
 // In-memory registry of all notification IDs seen across all subscriptions in the current session
-const allKnownNotifIds = new Set<string>();
+const allKnownNotifIds = new Map<string, Set<string>>();
 
 // Active subscriber callbacks across the entire app
 const subscribers = new Set<() => void>();
@@ -65,13 +69,6 @@ function getReadNotifIdsFromStorage(uid?: string | null): string[] {
     const key = getStorageKey(uid);
     const raw = localStorage.getItem(key);
     const list: string[] = raw ? JSON.parse(raw) : [];
-    if (key !== READ_NOTIFS_STORAGE_KEY) {
-      const globalRaw = localStorage.getItem(READ_NOTIFS_STORAGE_KEY);
-      if (globalRaw) {
-        const globalList: string[] = JSON.parse(globalRaw);
-        list.push(...globalList);
-      }
-    }
     return Array.from(new Set(list));
   } catch {
     return [];
@@ -83,13 +80,7 @@ function getAllReadTimestamp(uid?: string | null): number {
   try {
     const key = getTimestampKey(uid);
     const raw = localStorage.getItem(key);
-    let val = raw ? parseInt(raw, 10) || 0 : 0;
-    if (key !== ALL_READ_TIMESTAMP_KEY) {
-      const globalRaw = localStorage.getItem(ALL_READ_TIMESTAMP_KEY);
-      const globalVal = globalRaw ? parseInt(globalRaw, 10) || 0 : 0;
-      val = Math.max(val, globalVal);
-    }
-    return val;
+    return raw ? parseInt(raw, 10) || 0 : 0;
   } catch {
     return 0;
   }
@@ -103,7 +94,6 @@ function addReadNotifIdToStorage(id: string, uid?: string | null): void {
     if (!current.includes(id)) {
       current.push(id);
       localStorage.setItem(key, JSON.stringify(current));
-      localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(current));
     }
   } catch {
     // ignore storage errors
@@ -117,7 +107,6 @@ function addMultipleReadNotifIdsToStorage(ids: string[], uid?: string | null): v
     const current = getReadNotifIdsFromStorage(uid);
     const updated = Array.from(new Set([...current, ...ids]));
     localStorage.setItem(key, JSON.stringify(updated));
-    localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(updated));
   } catch {
     // ignore storage errors
   }
@@ -128,7 +117,6 @@ function setAllReadTimestamp(ts: number, uid?: string | null): void {
   try {
     const key = getTimestampKey(uid);
     localStorage.setItem(key, String(ts));
-    localStorage.setItem(ALL_READ_TIMESTAMP_KEY, String(ts));
   } catch {
     // ignore storage errors
   }
@@ -162,17 +150,57 @@ export function formatRelativeTime(dateInput: any): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
 }
 
-export function subscribeNotificationsFirestore(
+type NotificationStream = { listeners: Set<(items: NotificationRecord[]) => void>; last: NotificationRecord[]; stop: () => void };
+const notificationStreams = new Map<string, NotificationStream>();
+
+export function subscribeNotificationsFirestore(user: User | null, orgId: string | null | undefined, onData: (items: NotificationRecord[]) => void): () => void {
+  if (!user?.uid) { onData([]); return () => {}; }
+  const profile = useAuthStore.getState().profile;
+  const key = JSON.stringify([user.uid, orgId || "", profile?.role, profile?.committeeId]);
+  let stream = notificationStreams.get(key);
+  if (!stream) {
+    stream = { listeners: new Set(), last: [], stop: () => {} };
+    notificationStreams.set(key, stream);
+    const current = stream;
+    current.listeners.add(onData);
+    current.stop = startNotificationStream(user, orgId, (items) => {
+      current.last = items;
+      for (const listener of current.listeners) listener(items);
+    });
+  } else { stream.listeners.add(onData); onData(stream.last); }
+  const current = stream;
+  return () => {
+    current.listeners.delete(onData);
+    if (!current.listeners.size) { current.stop(); notificationStreams.delete(key); }
+  };
+}
+
+function normalizeNotification(id: string, data: Record<string, any>, uid: string): NotificationRecord {
+  const date = (value: any) => value ? typeof value.toDate === "function" ? value.toDate().toISOString() : String(value) : null;
+  return {
+    id, recipientUID: data.recipientUID ?? null, orgId: data.orgId ?? null,
+    title: typeof data.title === "string" ? data.title : "Notification", description: typeof data.description === "string" ? data.description : "",
+    type: ["announcement", "nudge", "task", "ai", "organization", "event", "system"].includes(data.type) ? data.type : "system",
+    joinRequestId: typeof data.joinRequestId === "string" ? data.joinRequestId : undefined,
+    membershipEvent: ["join-request", "join-accepted", "join-rejected"].includes(data.membershipEvent) ? data.membershipEvent : undefined,
+    unread: !data.read && !(Array.isArray(data.readBy) && data.readBy.includes(uid)),
+    nudgeCategory: data.nudgeCategory, dueDate: data.dueDate,
+    time: formatRelativeTime(data.createdAt), createdAt: date(data.createdAt), updatedAt: date(data.updatedAt)
+  };
+}
+
+function startNotificationStream(
   user: User | null,
   orgId: string | null | undefined,
   onData: (notifications: NotificationRecord[]) => void
 ): () => void {
-  const db = getFirebaseDb();
+  let db: ReturnType<typeof getFirebaseDb> | null = null;
+  try { db = getFirebaseDb(); } catch { /* Authenticated refresh can deliver without a client Firestore connection. */ }
   const currentUid = user?.uid;
   const targetOrgId = orgId && orgId.trim() ? orgId.trim() : null;
 
   let announcementNotifs: NotificationRecord[] = [];
-  let directNotifs: NotificationRecord[] = [];
+  let personalNotifs: NotificationRecord[] = [], organizationNotifs: NotificationRecord[] = [], apiNotifs: NotificationRecord[] = [];
   let auditNotifs: NotificationRecord[] = [];
 
   function emitMerged() {
@@ -199,9 +227,13 @@ export function subscribeNotificationsFirestore(
     });
 
     // 2. Direct Notifications
-    directNotifs.forEach((item) => {
+    [...apiNotifs, ...organizationNotifs, ...personalNotifs].forEach((item) => {
       const isRead = checkIsRead(item.id, item.createdAt, !item.unread);
-      map.set(item.id, { ...item, unread: !isRead });
+      const candidate = { ...item, unread: !isRead }, previous = map.get(item.id);
+      if (!previous) { map.set(item.id, candidate); return; }
+      const version = (record: NotificationRecord) => Date.parse(record.updatedAt || record.createdAt || "") || 0;
+      const newest = version(candidate) >= version(previous) ? candidate : previous;
+      map.set(item.id, { ...newest, unread: candidate.createdAt === previous.createdAt ? candidate.unread && previous.unread : newest.unread });
     });
 
     // 4. Audit Logs
@@ -216,13 +248,16 @@ export function subscribeNotificationsFirestore(
 
     // Register all seen notification IDs
     merged.forEach((item) => {
-      allKnownNotifIds.add(item.id);
+      if (currentUid) {
+        const known = allKnownNotifIds.get(currentUid) ?? new Set<string>();
+        known.add(item.id); allKnownNotifIds.set(currentUid, known);
+      }
     });
 
     // Deduplicate merged array by type + title + description to eliminate duplicate notifications
     const dedupMap = new Map<string, NotificationRecord>();
     merged.forEach((item) => {
-      const key = item.nudgeCategory === "deadline" ? item.id : `${item.type}_${(item.title || "").trim().toLowerCase()}_${(item.description || "").trim().toLowerCase()}`;
+      const key = item.nudgeCategory === "deadline" || item.joinRequestId ? item.id : `${item.type}_${(item.title || "").trim().toLowerCase()}_${(item.description || "").trim().toLowerCase()}`;
       if (!dedupMap.has(key)) {
         dedupMap.set(key, item);
       } else {
@@ -285,57 +320,71 @@ export function subscribeNotificationsFirestore(
     emitMerged();
   });
 
-  // Deadline alerts come from the backend's durable notification records.
-  // An unordered limit can exclude newly created alerts, so load the org feed.
-  const notifQuery = targetOrgId
-    ? query(collection(db, "notifications"), where("orgId", "==", targetOrgId))
-    : query(collection(db, "notifications"), where("recipientUID", "==", currentUid || "__signed_out__"));
-  const unsubNotifs = onSnapshot(
-    notifQuery,
-    (snapshot) => {
-      directNotifs = [];
-      snapshot.docs.forEach((docSnap) => {
-        const data = docSnap.data();
-        const recipientUID = data.recipientUID ?? null;
-        const itemOrgId = data.orgId ?? null;
-
-        const isForUser = Boolean(currentUid && recipientUID === currentUid);
-        const isForOrg = Boolean(targetOrgId && itemOrgId === targetOrgId);
-
-        if (recipientUID ? isForUser : isForOrg) {
-          const readBy = Array.isArray(data.readBy) ? data.readBy : [];
-          const isRead = Boolean(data.read) || (currentUid ? readBy.includes(currentUid) : false);
-
-          directNotifs.push({
-            id: docSnap.id,
-            recipientUID,
-            orgId: itemOrgId,
-            title: typeof data.title === "string" ? data.title : "Notification",
-            description: typeof data.description === "string" ? data.description : "",
-            type: (["announcement", "nudge", "task", "ai", "organization", "event", "system"].includes(data.type) ? data.type : "system") as any,
-            unread: !isRead,
-            nudgeCategory: data.nudgeCategory,
-            dueDate: typeof data.dueDate === "string" ? data.dueDate : undefined,
-            time: formatRelativeTime(data.createdAt),
-            createdAt: data.createdAt ? (typeof data.createdAt.toDate === "function" ? data.createdAt.toDate().toISOString() : String(data.createdAt)) : null
-          });
-        }
+  let stopped = false, refreshing = false, refreshAgain = false;
+  let fallbackInterval: number | undefined;
+  let controller: AbortController | undefined;
+  const refreshBackend = async () => {
+    if (stopped || typeof window === "undefined" || document.hidden || !user) return;
+    if (refreshing) { refreshAgain = true; return; }
+    refreshing = true;
+    controller = new AbortController();
+    const timeout = window.setTimeout(() => controller?.abort(), 15000);
+    try {
+      const records = await getNotificationRecords(user, controller.signal);
+      if (stopped) return;
+      apiNotifs = records.flatMap((record) => {
+        if (!record || typeof record !== "object") return [];
+        const data = record as Record<string, any>;
+        return typeof data.id === "string" ? [normalizeNotification(data.id, data, currentUid!)] : [];
       });
       emitMerged();
-    },
-    (err) => {
-      emitMerged();
+    } catch (error) {
+      if (!stopped && fallbackInterval) console.warn("Notification refresh failed; retrying shortly.", error);
+    } finally {
+      window.clearTimeout(timeout); refreshing = false;
+      if (refreshAgain && !stopped) { refreshAgain = false; void refreshBackend(); }
     }
-  );
+  };
+  const startApiFallback = () => {
+    if (typeof window === "undefined" || fallbackInterval) return;
+    console.warn("Live notification access is unavailable; using authenticated notification refresh.");
+    fallbackInterval = window.setInterval(() => { void refreshBackend(); }, 10000);
+    void refreshBackend();
+  };
+  // Personal updates remain available before joining, after rejection, and after switching organizations.
+  const unsubPersonal = db ? onSnapshot(query(collection(db, "notifications"), where("recipientUID", "==", currentUid)), (snapshot) => {
+    if (stopped) return;
+    personalNotifs = snapshot.docs.flatMap((document) => document.data().recipientUID === currentUid ? [normalizeNotification(document.id, document.data(), currentUid!)] : []);
+    emitMerged();
+  }, startApiFallback) : () => {};
+  const unsubOrganization = db && targetOrgId ? onSnapshot(query(collection(db, "notifications"), where("orgId", "==", targetOrgId), where("recipientUID", "==", null)), (snapshot) => {
+    if (stopped) return;
+    organizationNotifs = snapshot.docs.flatMap((document) => {
+      const data = document.data();
+      return !data.recipientUID && data.orgId === targetOrgId ? [normalizeNotification(document.id, data, currentUid!)] : [];
+    });
+    emitMerged();
+  }, startApiFallback) : () => {};
+  if (!db) startApiFallback();
+  const refresh = () => { void refreshBackend(); };
+  if (typeof window !== "undefined") {
+    void refreshBackend();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+  }
 
   return () => {
+    stopped = true; controller?.abort();
     subscribers.delete(emitMerged);
     if (typeof window !== "undefined") {
       window.removeEventListener(NOTIF_READ_EVENT, handleGlobalReadChange);
       window.removeEventListener("storage", handleGlobalReadChange);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      if (fallbackInterval) window.clearInterval(fallbackInterval);
     }
     unsubAnnouncements();
-    unsubNotifs();
+    unsubPersonal(); unsubOrganization();
   };
 }
 
@@ -346,6 +395,10 @@ export async function markNotificationAsRead(user: User | null, notificationId: 
 
   if (!authUser || !notificationId || notificationId.startsWith("audit_") || notificationId.startsWith("event_") || notificationId.startsWith("announcement_")) return;
 
+  try {
+    await readNotificationRecords(authUser, [notificationId]);
+    return;
+  } catch { /* Older deployments can still persist reads through Firestore. */ }
   try {
     const db = getFirebaseDb();
     const docRef = doc(db, "notifications", notificationId);
@@ -362,12 +415,14 @@ export async function markAllNotificationsAsRead(user: User | null, notification
   const now = Date.now();
   setAllReadTimestamp(now, authUser?.uid);
 
-  const allIds = Array.from(new Set([...(notificationIds || []), ...allKnownNotifIds]));
+  const allIds = Array.from(new Set(notificationIds ?? (authUser ? allKnownNotifIds.get(authUser.uid) ?? [] : [])));
   addMultipleReadNotifIdsToStorage(allIds, authUser?.uid);
   notifyNotifSubscribers();
 
   const directIds = allIds.filter((id) => !id.startsWith("audit_") && !id.startsWith("event_") && !id.startsWith("announcement_"));
   if (authUser && directIds.length > 0) {
+    try { await readNotificationRecords(authUser, directIds); return; }
+    catch { /* Preserve compatibility with deployments that only support SDK writes. */ }
     await Promise.all(
       directIds.map(async (id) => {
         try {

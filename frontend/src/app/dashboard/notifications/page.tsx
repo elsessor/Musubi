@@ -21,6 +21,7 @@ import {
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/store/authStore";
+import { membershipNotificationAction } from "@/utils/membershipNotifications";
 import { getDashboardNavItems } from "@/utils/routes";
 import {
   subscribeNotificationsFirestore,
@@ -83,6 +84,7 @@ export default function NotificationsPage() {
   }
 
   const isLeader = profile.role === "Student Leader" || profile.role === "Admin";
+  const selectedAction = selectedNotif ? membershipNotificationAction(selectedNotif, profile.role) : null;
 
   const unreadCount = notifications.filter((n) => n.unread).length;
   const announcementsCount = notifications.filter((n) => n.type === "announcement").length;
@@ -515,7 +517,11 @@ export default function NotificationsPage() {
               {selectedNotif.content || selectedNotif.description || selectedNotif.title}
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              {selectedAction && <button type="button" onClick={() => {
+                setSelectedNotif(null);
+                router.push(selectedAction.href);
+              }} className="min-h-11 rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-blue-700">{selectedAction.label}</button>}
               <button
                 type="button"
                 onClick={() => setSelectedNotif(null)}

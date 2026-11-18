@@ -18,6 +18,7 @@ import {
   getAnnouncementsController,
   getEventsController,
   joinOrganizationController,
+  cancelOrganizationJoinRequestController,
   loginController,
   meController,
   membersController,
@@ -48,12 +49,15 @@ import { requireAuth } from "../middleware/auth.middleware.js";
 import { workflowRouter } from "./workflow.routes.js";
 import { taskRouter } from "./task.routes.js";
 import { tutorialController } from "../controllers/tutorial.controller.js";
+import { notificationsController, readNotificationsController } from "../controllers/notifications.controller.js";
 
 export const authRouter = Router();
 
 authRouter.post("/login", loginController);
 authRouter.post("/onboarding", onboardingController);
 authRouter.get("/me", requireAuth, meController);
+authRouter.get("/notifications", notificationsController);
+authRouter.patch("/notifications/read", readNotificationsController);
 authRouter.get("/tutorial", requireAuth, tutorialController);
 authRouter.put("/tutorial", requireAuth, tutorialController);
 authRouter.patch("/profile", requireAuth, updateProfileController);
@@ -76,6 +80,7 @@ authRouter.post("/organizations/join", joinOrganizationController);
 authRouter.post("/organizations", createOrganizationController);
 authRouter.get("/organizations", organizationsController);
 authRouter.get("/organizations/join-requests/me", myOrganizationJoinRequestController);
+authRouter.delete("/organizations/join-requests/:requestId", cancelOrganizationJoinRequestController);
 
 authRouter.get("/members", adminMembersController);
 authRouter.get("/members/stream", adminMembersStreamController);

@@ -672,28 +672,7 @@ export function KanbanBoard({
             </div>
 
 
-            {isLeader && currentEvent.status !== "Archived" ? (
-              <div data-tour="task-create-actions" className="hidden items-center gap-1.5 sm:flex">
-                <button
-                  type="button"
-                  onClick={() => setShowTaskReuseModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                  title="Reuse tasks from a previous event"
-                >
-                  <Repeat size={13} className="text-blue-600" />
-                  <span>Reuse Tasks</span>
-                </button>
-                <button
-                  type="button"
-                  data-tour="add-task"
-                  onClick={() => setShowAddTaskModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition-colors"
-                >
-                  <Plus size={14} />
-                  <span>Add Task</span>
-                </button>
-              </div>
-            ) : null}
+
           </div>
 
           {/* Leader Unrated Tasks Review Banner */}
@@ -920,6 +899,7 @@ export function KanbanBoard({
                 })}
 
                 {/* Status definitions remain readable without edit permission. */}
+                <div role="group" aria-label="Task actions" className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                   <button
                     data-tour="task-custom-status"
                     type="button"
@@ -930,6 +910,29 @@ export function KanbanBoard({
                     {isLeader && currentEvent.status !== "Archived" && <Plus size={13} />}
                     <span>{isLeader && currentEvent.status !== "Archived" ? "Custom Status" : "Status guide"}</span>
                   </button>
+                {isLeader && currentEvent.status !== "Archived" ? (
+                  <div data-tour="task-create-actions" className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowTaskReuseModal(true)}
+                      className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                      title="Reuse tasks from a previous event"
+                    >
+                      <Repeat size={13} className="text-blue-600" />
+                      <span>Reuse Tasks</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-tour="add-task"
+                      onClick={() => setShowAddTaskModal(true)}
+                      className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus size={14} />
+                      <span>Add Task</span>
+                    </button>
+                  </div>
+                ) : null}
+                </div>
               </div>
           </div>
 

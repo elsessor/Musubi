@@ -255,7 +255,7 @@ export function TopHeader({
 
   useEffect(() => {
     const authUser = firebaseUser ?? useAuthStore.getState().firebaseUser;
-    const targetOrgId = liveUser.organizationId || profile?.organizationId || null;
+    const targetOrgId = profile?.uid === authUser?.uid ? profile?.organizationId || null : null;
     const unsubscribe = subscribeNotificationsFirestore(
       authUser,
       targetOrgId,
@@ -269,7 +269,7 @@ export function TopHeader({
     return () => {
       if (typeof unsubscribe === "function") unsubscribe();
     };
-  }, [firebaseUser, liveUser.organizationId, profile?.organizationId]);
+  }, [firebaseUser, profile?.uid, profile?.organizationId, profile?.role, profile?.committeeId]);
 
   const bellCount = liveUnreadCount !== null ? notifications.filter((item) => item.unread).length : (notificationCount || 0);
 

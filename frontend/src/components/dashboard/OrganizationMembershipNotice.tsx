@@ -5,11 +5,13 @@ import { ArrowRight, Building2, Clock3, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { MyOrganizationJoinRequest } from "@/services/auth.service";
 
-export function OrganizationMembershipNotice({ request, loading = false, error = "", onRetry, action }: {
+export function OrganizationMembershipNotice({ request, loading = false, error = "", onRetry, onCancel, cancelling = false, action }: {
   request: MyOrganizationJoinRequest | null;
   loading?: boolean;
   error?: string;
   onRetry?: () => void;
+  onCancel?: () => void;
+  cancelling?: boolean;
   action?: ReactNode;
 }) {
   const pending = Boolean(request);
@@ -24,6 +26,8 @@ export function OrganizationMembershipNotice({ request, loading = false, error =
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2"><h2 className="text-sm font-semibold text-slate-900">{title}</h2><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${pending ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{badge}</span></div>
         <p className="mt-2 text-xs leading-5 text-slate-600 sm:text-sm">{request ? <>Your request to join <strong className="font-semibold text-slate-800">{request.organizationName.trim() || "the organization"}</strong> has been submitted. You are not a member yet. Events and tasks become available after your request is accepted.</> : checking ? "You are not currently in an organization. We’re checking whether you have a pending join request." : error ? "You are not currently in an organization. Your request status could not be confirmed." : "Join an organization to access its events, tasks, members, and updates."}</p>
         {error && <p className="mt-2 text-xs leading-5 text-amber-800">{error}</p>}
+        {pending && <p className="mt-2 text-xs leading-5 text-slate-600">You can have one organization or one pending request at a time. Cancel this request or wait for it to be declined before requesting another organization.</p>}
+        {pending && onCancel && <button type="button" onClick={onCancel} disabled={cancelling || loading} className="mt-3 min-h-11 rounded-xl border border-rose-200 bg-white px-4 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60">{cancelling ? "Cancelling request..." : "Cancel join request"}</button>}
       </div>
     </div>
     {(action !== null || Boolean(error && onRetry)) && <div className="flex shrink-0 flex-wrap items-center gap-2">

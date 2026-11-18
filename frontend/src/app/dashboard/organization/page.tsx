@@ -2,9 +2,9 @@
 
 import { getStatusTheme, type CustomStatusConfig } from "@/components/events/statusUtils";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Bell,
   BriefcaseBusiness,
@@ -64,6 +64,19 @@ import {
 
 type OrganizationTab = "overview" | "members" | "committees" | "announcements";
 
+function OrganizationRouteSync({ onTab, onRequest }: {
+  onTab: (tab: OrganizationTab) => void;
+  onRequest: (id: string) => void;
+}) {
+  const params = useSearchParams();
+  useEffect(() => {
+    const tab = params.get("tab");
+    onTab(tab === "members" || tab === "committees" || tab === "announcements" ? tab : "overview");
+    onRequest(params.get("request") || "");
+  }, [params, onTab, onRequest]);
+  return null;
+}
+
 type MemberRow = { profilePicture?: string | null; id: string; initials: string; name: string; role: string; committee: string; skills: string[]; workload: number; reliability: string; availability: string };
 type GoalRow = { title: string; progress: number; due: string; status: string };
 
@@ -89,6 +102,7 @@ export default function OrganizationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<OrganizationTab>("overview");
+  const [routeRequestId, setRouteRequestId] = useState("");
   const [memberSearch, setMemberSearch] = useState("");
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [committees, setCommittees] = useState<OrganizationCommitteeRecord[]>([]);
@@ -111,16 +125,6 @@ export default function OrganizationPage() {
     });
     return () => unsubscribe();
   }, [authLoading, firebaseUser?.uid, profile?.uid, profile?.organizationId, profile?.role, profile?.committeeId]);
-
-  useEffect(() => {
-    function restoreTab() {
-      const tab = new URLSearchParams(window.location.search).get("tab");
-      setActiveTab(tab === "members" || tab === "committees" || tab === "announcements" ? tab : "overview");
-    }
-    restoreTab();
-    window.addEventListener("popstate", restoreTab);
-    return () => window.removeEventListener("popstate", restoreTab);
-  }, []);
 
   function handleChangeTab(tab: OrganizationTab) {
     setActiveTab(tab);
@@ -216,8 +220,22 @@ export default function OrganizationPage() {
 
   useEffect(() => {
     if (!firebaseUser || profile?.role !== "Student Leader" || !profile.organizationId) { setJoinRequests([]); return; }
-    void getOrganizationJoinRequests(firebaseUser, profile.organizationId).then(setJoinRequests).catch(() => setJoinRequests([]));
-  }, [firebaseUser, profile?.organizationId, profile?.role]);
+    let cancelled = false, inFlight = false;
+    const load = async () => {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      try {
+        const requests = await getOrganizationJoinRequests(firebaseUser, profile.organizationId!);
+        if (!cancelled) setJoinRequests(requests);
+      } catch { /* Keep the last known list until the next refresh. */ }
+      finally { inFlight = false; }
+    };
+    void load();
+    const refresh = () => { void load(); };
+    window.addEventListener("focus", refresh);
+    const interval = activeTab === "members" ? window.setInterval(refresh, 30000) : null;
+    return () => { cancelled = true; window.removeEventListener("focus", refresh); if (interval !== null) window.clearInterval(interval); };
+  }, [firebaseUser, profile?.organizationId, profile?.role, activeTab, routeRequestId]);
 
   async function reviewJoinRequest(requestId: string, status: "accepted" | "rejected") {
     if (!firebaseUser || !profile?.organizationId) return;
@@ -226,7 +244,10 @@ export default function OrganizationPage() {
       await reviewOrganizationJoinRequest(firebaseUser, profile.organizationId, requestId, status);
       setJoinRequests((current) => current.filter((request) => request.id !== requestId));
       if (status === "accepted") setMembers(await getOrganizationMembers(firebaseUser, profile.organizationId));
-    } catch (reviewError) { setError(reviewError instanceof Error ? reviewError.message : "Unable to review this join request."); }
+    } catch (reviewError) {
+      showToast({ title: "Join request not reviewed", description: reviewError instanceof Error ? reviewError.message : "Unable to review this join request.", tone: "error" });
+      try { setJoinRequests(await getOrganizationJoinRequests(firebaseUser, profile.organizationId)); } catch { /* Retry through the regular refresh. */ }
+    }
     finally { setReviewingRequestId(""); }
   }
 
@@ -326,7 +347,8 @@ export default function OrganizationPage() {
   return (
     <DashboardLayout tutorialReady={!loading} activeNavId="organization" activities={[]} goals={[]} kpis={[]} navItems={getDashboardNavItems(profile.role)} notificationCount={0} onLogout={logout} user={user}>
       <section className="mx-auto w-full max-w-[1680px] text-[#12213a]">
-        <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-[21px] font-bold tracking-[-0.02em]">Organization</h1>{profile.role !== "Admin" && firebaseUser ? <button type="button" onClick={() => setAccessModalOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4 shrink-0" />{joinStatus.request ? "Organization options" : profile.role === "Student Leader" ? "Create or join" : "Join organization"}</button> : null}</div>
+        <Suspense fallback={null}><OrganizationRouteSync onTab={setActiveTab} onRequest={setRouteRequestId} /></Suspense>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-[21px] font-bold tracking-[-0.02em]">Organization</h1>{profile.role !== "Admin" && firebaseUser && !profile.organizationId?.trim() ? <button type="button" onClick={() => setAccessModalOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl bg-[#213f68] px-4 text-[12px] font-semibold text-white"><CirclePlus className="size-4 shrink-0" />{joinStatus.request ? "View join request" : profile.role === "Student Leader" ? "Create or join" : "Join organization"}</button> : null}</div>
         {!profile.organizationId?.trim() && profile.role !== "Admin" && <div className="mt-4"><OrganizationMembershipNotice {...joinStatus} onRetry={joinStatus.refresh} action={null} /></div>}
         <div className="mt-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-[#e8eef7] p-1.5">
           <TabButton tourId="overview-tab" active={activeTab === "overview"} icon={BriefcaseBusiness} label="Overview" onClick={() => handleChangeTab("overview")} />

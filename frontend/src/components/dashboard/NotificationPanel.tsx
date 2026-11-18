@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Bell, CheckCheck, Clock, Megaphone, Sparkles, X } from "lucide-react";
+import { AlertCircle, Bell, CheckCheck, Clock, Megaphone, Sparkles, UserPlus, X } from "lucide-react";
 import type { NotificationRecord } from "@/services/notifications.service";
 import { useAuthStore } from "@/store/authStore";
+import { membershipNotificationAction } from "@/utils/membershipNotifications";
 
 type NotificationPanelProps = {
   notifications: NotificationRecord[];
@@ -14,6 +16,7 @@ type NotificationPanelProps = {
 };
 
 export function NotificationPanel({ notifications, onClose, onRead, onReadAll }: NotificationPanelProps) {
+  const router = useRouter();
   const role = useAuthStore((state) => state.profile?.role);
   const isLeader = role === "Student Leader" || role === "Admin";
   const [tab, setTab] = useState<"all" | "unread">("all");
@@ -66,7 +69,9 @@ export function NotificationPanel({ notifications, onClose, onRead, onReadAll }:
           <div key={group.title}>
             <h3 className="px-2 pb-2 pt-3 text-sm font-bold">{group.title}</h3>
             {group.items.map((item) => {
-              const appearance = item.type === "announcement"
+              const appearance = item.joinRequestId
+                ? { Icon: UserPlus, color: "bg-blue-50 text-blue-600" }
+                : item.type === "announcement"
                 ? { Icon: isLeader ? Bell : Megaphone, color: "bg-violet-50 text-violet-600" }
                 : isLeader
                 ? { Icon: Sparkles, color: "bg-blue-50 text-blue-600" }
@@ -77,7 +82,14 @@ export function NotificationPanel({ notifications, onClose, onRead, onReadAll }:
                 : { Icon: Bell, color: "bg-blue-50 text-blue-600" };
               const Icon = appearance.Icon;
               return (
-                <button key={item.id} type="button" onClick={() => onRead(item.id)} aria-label={`${item.title}${item.unread ? ", unread. Mark as read" : ""}`} className="flex w-full items-start gap-2 rounded-xl px-2 py-3 text-left transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 sm:gap-3">
+                <button key={item.id} type="button" onClick={() => {
+                  onRead(item.id);
+                  const action = membershipNotificationAction(item, role);
+                  if (action) {
+                    onClose();
+                    router.push(action.href);
+                  }
+                }} aria-label={`${item.title}${item.unread ? ", unread. Mark as read" : ""}`} className="flex w-full items-start gap-2 rounded-xl px-2 py-3 text-left transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 sm:gap-3">
                   <span className={`flex size-9 shrink-0 items-center justify-center rounded-2xl sm:size-10 ${appearance.color}`}><Icon className="size-5" /></span>
                   <span className="min-w-0 flex-1 break-words">
                     <span className={`block text-sm leading-5 ${item.unread ? "font-bold" : "font-semibold"}`}>{item.title}</span>

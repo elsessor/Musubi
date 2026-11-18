@@ -17,7 +17,7 @@ export function ToastViewport() {
   return (
     <div
       aria-live="polite"
-      className="fixed right-4 top-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-3"
+      className="fixed right-4 top-[max(1rem,env(safe-area-inset-top))] z-[300] flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-sm flex-col gap-3 overflow-y-auto"
     >
       <AnimatePresence initial={false}>
         {toasts.map((toast) => (

@@ -29,6 +29,7 @@ import {
   getOrganizationRequests,
   getOrganizationsForAdmin,
   joinOrganization,
+  cancelOrganizationJoinRequest,
   loginWithFirebaseToken,
   reassignMemberForAdmin,
   reviewOrganizationJoinRequest,
@@ -309,6 +310,16 @@ export async function myOrganizationJoinRequestController(request: Request, resp
     if (!token) throw new AppError("Firebase ID token is required.", 400);
     const decoded = await firebaseAuth.verifyIdToken(token);
     response.status(200).json({ request: await getMyOrganizationJoinRequest(decoded.uid) });
+  } catch (error) { next(error); }
+}
+
+export async function cancelOrganizationJoinRequestController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(request);
+    if (!token) throw new AppError("Firebase ID token is required.", 400);
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    await cancelOrganizationJoinRequest(decoded.uid, request.params.requestId);
+    response.status(204).send();
   } catch (error) { next(error); }
 }
 

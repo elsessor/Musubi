@@ -28,7 +28,7 @@ export type AuditLogData = {
  * Fire-and-forget — errors are swallowed so a logging failure never breaks a
  * user-facing request.
  */
-export function writeAuditLog(data: AuditLogData): void {
+export function writeAuditLog(data: AuditLogData, options: { notify?: boolean } = {}): void {
   appCache.deletePrefix("audit_logs:");
 
   const cleanData = Object.fromEntries(
@@ -44,6 +44,8 @@ export function writeAuditLog(data: AuditLogData): void {
     .catch((err: unknown) => {
       console.error("[audit] Failed to write audit log:", err);
     });
+
+  if (options.notify === false) return;
 
   if (
     data.actionCategory === "Security & Access" ||
@@ -74,6 +76,7 @@ export function writeAuditLog(data: AuditLogData): void {
     .collection("notifications")
     .add({
       orgId: data.orgId ?? null,
+      recipientUID: null,
       title,
       description: data.targetName
         ? `${data.action} on '${data.targetName}' by ${data.actorName ?? "System"}`

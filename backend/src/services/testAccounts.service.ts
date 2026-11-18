@@ -32,6 +32,7 @@ export async function acceptTestOrganizationJoin(uid: string, organizationId: st
     const data = userSnapshot.data() ?? {};
     const account = provisionedTestAccount(uid, data);
     if (!account) return null;
+    if (data.organizationId && data.organizationId !== organizationId) throw new AppError("You already belong to an organization. You can only belong to one organization at a time.", 409);
     const organization = await transaction.get(orgRef);
     const org = organization.data() ?? {};
     const status = org.setupStatus ?? org.status;
@@ -40,10 +41,12 @@ export async function acceptTestOrganizationJoin(uid: string, organizationId: st
     }
     const previousRequest = await transaction.get(requestRef);
     const pending = await transaction.get(firestore.collection("organization_join_requests")
-      .where("organizationId", "==", organizationId).where("requestedByUID", "==", uid).where("status", "==", "pending"));
+      .where("requestedByUID", "==", uid).where("status", "==", "pending"));
+    if (pending.docs.some((request) => request.data().organizationId !== organizationId)) throw new AppError("You already have a pending request. Cancel it or wait for it to be declined before requesting another organization.", 409);
+    if (data.organizationId === organizationId) return { id: requestRef.id };
     const reviewedAt = firebaseAdmin.firestore.FieldValue.serverTimestamp();
     transaction.update(userRef, {
-      organizationId, organizationName: org.name || "Musubi Test Organization",
+      organizationId, organizationName: org.name || "Musubi Test Organization", pendingOrganizationJoinRequestId: null,
       committeeId: account.committeeId, committeeName: account.committeeName
     });
     transaction.set(requestRef, {
@@ -53,6 +56,11 @@ export async function acceptTestOrganizationJoin(uid: string, organizationId: st
       submittedAt: previousRequest.data()?.submittedAt ?? reviewedAt,
       reviewedAt, reviewedByUID: "test-account-auto-accept"
     }, { merge: true });
+    transaction.set(firestore.collection("notifications").doc(`org_join_result_${requestRef.id}_${uid}_${data.testAccountAuthTime || "current"}`), {
+      recipientUID: uid, orgId: organizationId, joinRequestId: requestRef.id, membershipEvent: "join-accepted",
+      title: "Your join request was accepted", description: `You are now a member of ${org.name || "Musubi Test Organization"}. Your organization's events, tasks, and updates are available.`,
+      type: "organization", read: false, readBy: [], createdAt: reviewedAt, updatedAt: reviewedAt
+    });
     for (const request of pending.docs) {
       if (request.ref.path !== requestRef.path) transaction.update(request.ref, {
         status: "accepted", reviewedAt, reviewedByUID: "test-account-auto-accept"
