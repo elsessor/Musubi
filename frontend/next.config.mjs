@@ -7,4 +7,8 @@ const nextConfig = {
   reactStrictMode: true
 };
 
-export default nextConfig;
+export default (phase) => ({
+  ...nextConfig,
+  // Keep production verification builds from replacing a running dev server's assets.
+  distDir: phase === 'phase-development-server' ? '.next-dev' : '.next'
+});

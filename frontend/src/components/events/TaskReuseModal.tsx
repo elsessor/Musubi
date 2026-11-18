@@ -329,7 +329,8 @@ export function TaskReuseModal({
                               {ev.title}
                             </span>
                             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${theme.badge}`}>
+                              <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${theme.badge}`}>
+                                <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${theme.dot}`} />
                                 {ev.status || "Planning"}
                               </span>
                               {ev.committee && (

@@ -14,6 +14,8 @@ import { isTaskScheduledOnDay } from "@/utils/calendarSchedule";
 import { CalendarView } from "./CalendarView";
 import { TaskDependencyBadge } from "./TaskDependencies";
 import { isBlockedTaskStatus } from "@/utils/taskDependencies";
+import { getTaskDeadline } from "@/utils/taskTiming";
+import { scheduleTime } from "@/utils/workspaceSort";
 
 type TaskCalendarViewProps = {
   readOnly?: boolean;
@@ -40,6 +42,7 @@ export function TaskCalendarView({ readOnly = false, tasks, onUpdateStatus, onUp
         getId={(task) => task.id}
         getTitle={(task) => task.title || task.description || "Untitled task"}
         getStatus={(task) => task.status}
+        getScheduledTime={(task) => getTaskDeadline(task)?.getTime() ?? scheduleTime(task.startDate)}
         getDescription={(task) => task.description}
         isScheduled={isTaskScheduledOnDay}
         onSelect={(task) => onSelectTask ? onSelectTask(task) : setSelectedTask(task)}

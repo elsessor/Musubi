@@ -328,7 +328,7 @@ export function MiniCalendarPicker({
         ref={buttonRef}
         type="button"
         onClick={handleToggleOpen}
-        className={`flex w-full items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800 transition hover:bg-white hover:border-blue-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${buttonClassName}`}
+        className={cn("flex w-full items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-[#f8fafc] px-3.5 py-2.5 text-xs font-semibold text-slate-800 transition hover:bg-white hover:border-blue-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60", buttonClassName)}
       >
         <div className="flex items-center gap-2 truncate">
           <CalendarIcon size={14} className="text-blue-500 shrink-0" />

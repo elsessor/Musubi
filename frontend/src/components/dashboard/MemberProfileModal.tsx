@@ -84,10 +84,6 @@ export function MemberProfileModal({
 
         {/* Content Area */}
         <div className="min-h-0 min-w-0 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
-          <details className="rounded-xl border border-blue-100 bg-blue-50 px-3 text-xs text-blue-900">
-            <summary className="flex min-h-11 cursor-pointer items-center font-semibold">How to read this profile</summary>
-            <p className="pb-3 leading-5">Review the member&apos;s committee, listed skills, availability, and recent sub-tasks. {canViewPerformance ? "Workload reflects unfinished assignments; reliability reflects recorded on-time delivery. Open the full profile for explanations of average match, leader ratings, monthly completions, and all assigned tasks." : "Private performance information is not shown. Open the full profile to review the member's permitted details and all assigned tasks."}</p>
-          </details>
           {/* Committee */}
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Committee</p>

@@ -1,4 +1,5 @@
 import { FeatureItem } from "@/components/auth/FeatureItem";
+import { MusubiLogo } from "@/components/brand/MusubiLogo";
 
 const features = [
   {
@@ -18,20 +19,6 @@ const features = [
   }
 ] as const;
 
-function LogoBolt() {
-  return (
-    <svg aria-hidden="true" className="size-6" fill="none" viewBox="0 0 24 24">
-      <path
-        d="M13 2L4 14h7l-1 8 10-13h-7l1-7z"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
 export function MarketingPanel() {
   return (
     <aside className="relative flex h-full min-h-[560px] overflow-hidden bg-brand px-8 py-8 text-white sm:px-12 lg:min-h-screen lg:px-14 xl:px-16">
@@ -41,9 +28,7 @@ export function MarketingPanel() {
 
       <div className="relative z-10 flex w-full flex-col">
         <div className="flex items-center gap-4">
-          <div className="flex size-11 items-center justify-center rounded-full bg-accent text-xl shadow-soft">
-            <LogoBolt />
-          </div>
+          <MusubiLogo size={44} className="size-11 shrink-0" decorative />
           <div>
             <p className="text-base font-bold leading-5">Musubi</p>
             <p className="mt-1 text-sm font-medium text-white/60">

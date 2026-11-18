@@ -374,7 +374,7 @@ export function TopHeader({
     `${(liveUser.name || "user").toLowerCase().replace(/\s+/g, "")}@university.edu.ph`;
 
   return (
-    <header className="sticky top-0 z-20 flex min-h-[64px] items-center justify-between gap-3 border-b border-slate-200/80 bg-[#f1f4f8]/95 px-4 py-3 backdrop-blur sm:px-6 lg:min-h-[80px] lg:px-9 lg:py-3">
+    <header className="sticky top-0 z-20 flex h-[var(--dashboard-header-height)] shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-[#f1f4f8]/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-9">
       <div className="flex min-w-0 items-center gap-3">
         <button
           data-tour="navigation-open"
@@ -389,7 +389,7 @@ export function TopHeader({
           <h1 className="truncate text-lg font-extrabold tracking-[-0.02em] text-slate-900 sm:text-[21px]">
             {liveUser.role === "Admin"
               ? "Admin Dashboard"
-              : `Welcome, ${liveUser.name}${liveUser.role === "Student Leader" ? " 👋" : ""}`}
+              : `Welcome, ${liveUser.name}`}
           </h1>
           <p className="mt-0.5 truncate text-xs font-semibold text-slate-500 sm:text-sm">
             {subtitle}

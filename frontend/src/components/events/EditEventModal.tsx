@@ -5,7 +5,7 @@ import { BookOpen, Archive, X } from "lucide-react";
 import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { EventStatusModal } from "./EventStatusModal";
-import { getStatusTheme, getEventStatusDescription } from "./statusUtils";
+import { getStatusTheme } from "./statusUtils";
 import type { Event } from "./types";
 import { getDateRangeError, parseScheduleDate } from "@/utils/dateRange";
 
@@ -94,8 +94,7 @@ export function EditEventModal({ event: initialEvent, committees, onClose, onSav
               <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Event status</p>
               <CustomSelect value={status} onChange={setStatus} disabled={saving} options={Array.from(new Set(["Active", "Planning", "Completed", "Cancelled", "Archived", ...(initialEvent.eventCustomStatuses || []).map((item) => item.name), initialEvent.status])).map((value) => {
                 const theme = getStatusTheme(value, initialEvent.eventCustomStatuses);
-                const descInfo = getEventStatusDescription(value);
-                return { value, label: value, description: descInfo.description, indicatorClass: theme.dot, selectedClass: theme.badge };
+                return { value, label: value, indicatorClass: theme.dot, selectedClass: theme.badge };
               })} buttonClassName="min-h-11 rounded-xl" dropdownClassName="[&_button]:min-h-11" multiline portal />
             </div>
             <div>

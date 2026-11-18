@@ -161,10 +161,11 @@ export default function NotificationsPage() {
           <button data-tour="notifications-all"
             type="button"
             onClick={() => setActiveTab("all")}
+            aria-pressed={activeTab === "all"}
             className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
               activeTab === "all"
                 ? "bg-[#1e3a5f] text-white shadow-2xs"
-                : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
             }`}
           >
             All <span className="ml-1 opacity-80">{notifications.length}</span>
@@ -175,10 +176,11 @@ export default function NotificationsPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("activity" as any)}
+                aria-pressed={activeTab === ("activity" as any)}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === ("activity" as any)
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
-                    : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
                 }`}
               >
                 Activity <span className="ml-1 opacity-80">{activityCount}</span>
@@ -187,10 +189,11 @@ export default function NotificationsPage() {
               <button data-tour="notifications-announcements"
                 type="button"
                 onClick={() => setActiveTab("announcements")}
+                aria-pressed={activeTab === "announcements"}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === "announcements"
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
-                    : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
                 }`}
               >
                 Announcements <span className="ml-1 opacity-80">{announcementsCount}</span>
@@ -201,10 +204,11 @@ export default function NotificationsPage() {
               <button data-tour="notifications-announcements"
                 type="button"
                 onClick={() => setActiveTab("announcements")}
+                aria-pressed={activeTab === "announcements"}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === "announcements"
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
-                    : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
                 }`}
               >
                 Announcements <span className="ml-1 opacity-80">{announcementsCount}</span>
@@ -213,10 +217,11 @@ export default function NotificationsPage() {
               <button data-tour="notifications-nudges"
                 type="button"
                 onClick={() => setActiveTab("nudges")}
+                aria-pressed={activeTab === "nudges"}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === "nudges"
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
-                    : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
                 }`}
               >
                 Nudges <span className="ml-1 opacity-80">{nudgesCount}</span>
@@ -225,10 +230,11 @@ export default function NotificationsPage() {
               <button data-tour="notifications-ratings"
                 type="button"
                 onClick={() => setActiveTab("ratings")}
+                aria-pressed={activeTab === "ratings"}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold transition sm:px-3.5 sm:text-xs ${
                   activeTab === "ratings"
                     ? "bg-[#1e3a5f] text-white shadow-2xs"
-                    : "bg-[#f0f4f8] text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
                 }`}
               >
                 Ratings <span className="ml-1 opacity-80">{ratingsCount}</span>
@@ -259,7 +265,7 @@ export default function NotificationsPage() {
                         handleMarkAsRead(notif.id);
                         setSelectedNotif(notif);
                       }}
-                      className="group flex min-w-0 cursor-pointer items-center justify-between rounded-2xl border border-slate-200/90 bg-white p-3 shadow-2xs transition hover:border-slate-300 hover:shadow-md sm:p-5"
+                      className="group flex min-w-0 cursor-pointer items-center justify-between rounded-2xl border border-slate-200/90 bg-white p-3 shadow-2xs transition hover:border-slate-300 hover:shadow-md dark:hover:!border-[#345988] dark:hover:bg-[#1e2d43] sm:p-5"
                     >
                       <div className="flex min-w-0 items-center gap-2.5 pr-2 sm:gap-4 sm:pr-4">
                         <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600 sm:size-10 sm:rounded-2xl">
@@ -290,7 +296,7 @@ export default function NotificationsPage() {
                           </p>
                         </div>
                       </div>
-                      <ChevronRight className="size-4 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition shrink-0" />
+                      <ChevronRight className="size-4 text-slate-300 group-hover:text-slate-500 dark:group-hover:text-blue-300 group-hover:translate-x-0.5 transition shrink-0" />
                     </div>
                   );
                 }
@@ -303,7 +309,7 @@ export default function NotificationsPage() {
                       handleMarkAsRead(notif.id);
                       setSelectedNotif(notif);
                     }}
-                    className="group flex min-w-0 cursor-pointer items-start gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-2xs transition hover:border-slate-300 hover:shadow-md sm:gap-4 sm:p-5"
+                    className="group flex min-w-0 cursor-pointer items-start gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-2xs transition hover:border-slate-300 hover:shadow-md dark:hover:!border-[#345988] dark:hover:bg-[#1e2d43] sm:gap-4 sm:p-5"
                   >
                     <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 sm:size-10 sm:rounded-2xl">
                       <Sparkles className="size-4 sm:size-5" />
@@ -349,24 +355,24 @@ export default function NotificationsPage() {
                     handleMarkAsRead(notif.id);
                     setSelectedNotif(notif);
                   }}
-                  className="group flex min-w-0 cursor-pointer items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all duration-200 hover:border-blue-200 hover:shadow-md sm:p-5"
+                  className="group flex min-w-0 cursor-pointer items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all duration-200 hover:border-blue-200 hover:shadow-md dark:hover:!border-[#345988] dark:hover:bg-[#1e2d43] sm:p-5"
                 >
                   <div className="flex min-w-0 flex-1 items-start gap-2.5 pr-2 sm:items-center sm:gap-4 sm:pr-3">
                     {/* Left Icon Badge */}
                     {isAnnouncement ? (
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-violet-100 bg-violet-50 text-violet-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-violet-100/80 sm:size-11 sm:rounded-2xl">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-violet-100 bg-violet-50 text-violet-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-violet-100/80 dark:border-[#654885] dark:group-hover:bg-[#3b2d54] sm:size-11 sm:rounded-2xl">
                         <Megaphone className="size-4 sm:size-5" />
                       </div>
                     ) : isDeadlineAlert ? (
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-rose-100/80 sm:size-11 sm:rounded-2xl">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-rose-100/80 dark:group-hover:bg-[#543043] sm:size-11 sm:rounded-2xl">
                         <AlertCircle className="size-4 sm:size-5" />
                       </div>
                     ) : isFollowup ? (
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-amber-100/80 sm:size-11 sm:rounded-2xl">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-amber-100/80 dark:group-hover:bg-[#4a381f] sm:size-11 sm:rounded-2xl">
                         <Clock className="size-4 sm:size-5" />
                       </div>
                     ) : (
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-blue-100/80 sm:size-11 sm:rounded-2xl">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600 shadow-2xs transition-all group-hover:scale-105 group-hover:bg-blue-100/80 dark:group-hover:bg-[#234266] sm:size-11 sm:rounded-2xl">
                         <Bell className="size-4 sm:size-5" />
                       </div>
                     )}
@@ -442,7 +448,7 @@ export default function NotificationsPage() {
                     </div>
                   </div>
 
-                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full border border-slate-100 bg-slate-50 transition-all group-hover:border-blue-100 group-hover:bg-blue-50 sm:size-8">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full border border-slate-100 bg-slate-50 transition-all group-hover:border-blue-100 group-hover:bg-blue-50 dark:group-hover:!border-[#345988] dark:group-hover:bg-[#234266] sm:size-8">
                     <ChevronRight className="size-3.5 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600 sm:size-4" />
                   </div>
                 </div>

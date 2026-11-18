@@ -17,7 +17,11 @@ export function validateEventStatusSettings(input: unknown) {
     const name = entry.name.trim();
     if (names.has(name.toLowerCase())) throw new AppError("Status names must be unique.", 400);
     names.add(name.toLowerCase());
-    return { name, color: entry.color as string };
+    if (entry.description !== undefined && (typeof entry.description !== "string" || entry.description.trim().length > 2000)) {
+      throw new AppError("Status descriptions must be text with up to 2,000 characters.", 400);
+    }
+    const description = typeof entry.description === "string" ? entry.description.trim() : "";
+    return { name, color: entry.color as string, ...(description ? { description } : {}) };
   });
   const allowed = [...DEFAULT_EVENT_STATUSES, ...statuses.map((entry) => entry.name)];
   if (statusOrder.some((entry) => typeof entry !== "string" || !allowed.includes(entry))) throw new AppError("Invalid status order.", 400);

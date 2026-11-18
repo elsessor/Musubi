@@ -16,7 +16,8 @@ import {
   SlidersHorizontal,
   Star,
   Table,
-  Users
+  Users,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTutorialView } from "@/hooks/useTutorialView";
@@ -36,7 +37,7 @@ import { TaskCalendarView } from "./TaskCalendarView";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { ConfirmArchiveModal } from "./ConfirmArchiveModal";
 
-import { canUpdateTaskStatus } from "@/utils/taskAssignment";
+import { canUpdateTaskStatus, isTaskAssignedToUser } from "@/utils/taskAssignment";
 import { getEventMemberCount } from "@/utils/eventMembers";
 import { getTaskDependencyError, isTaskArchived, withTaskDependencyState } from "@/utils/taskDependencies";
 import { TaskDependencyTasksContext } from "./TaskDependencies";
@@ -48,6 +49,11 @@ import { ConfirmTaskAssignmentModal } from "./ConfirmTaskAssignmentModal";
 import { getTaskClaimError } from "@/utils/taskClaims";
 import { TaskRatingModal } from "./TaskRatingModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { sortTasks, type TaskSortMode } from "@/utils/workspaceSort";
+import { useSortingClock } from "@/hooks/useSortingClock";
+import { WorkspaceSortSelect } from "./WorkspaceSortSelect";
+import { TaskAssigneeFilter, type TaskAssigneeScope } from "./TaskAssigneeFilter";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const DEFAULT_STATUSES: TaskStatus[] = ["To Do", "In Progress", "In Review", "Completed"];
 
@@ -96,8 +102,11 @@ export function KanbanBoard({
   const [dragOverColumnStatus, setDragOverColumnStatus] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
+  const [assigneeScope, setAssigneeScope] = useState<TaskAssigneeScope>("all");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [sortMode, setSortMode] = useState<TaskSortMode>("attention");
+  const sortingNow = useSortingClock();
   const tutorialViewRef = useTutorialView(setViewMode);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -593,11 +602,14 @@ export function KanbanBoard({
     ...statusOrder.filter((st) => st !== "Archived").map((st) => ({ label: st, key: st as TaskStatus })),
     { label: "Archived", key: "Archived" }
   ];
+  const tasksInScope = assigneeScope === "mine"
+    ? tasks.filter((task) => isTaskAssignedToUser(task, firebaseUser?.uid ?? profile?.uid, profile?.fullName || firebaseUser?.displayName || ""))
+    : tasks;
   function taskFilterCount(key: string) {
-    return key === "Archived" ? tasks.filter(isTaskArchived).length : key === "All" ? activeTasks.length : activeTasks.filter((task) => task.status === key).length;
+    return tasksInScope.filter((task) => key === "Archived" ? isTaskArchived(task) : !isTaskArchived(task) && (key === "All" || task.status === key)).length;
   }
 
-  const visibleTasks = tasks.filter((t) => {
+  const visibleTasks = sortTasks(tasksInScope.filter((t) => {
     const matchesStatus = statusFilter === "Archived" ? isTaskArchived(t) : !isTaskArchived(t) && (statusFilter === "All" || t.status === statusFilter);
     const matchesSearch =
       (t.title || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -606,13 +618,39 @@ export function KanbanBoard({
       selectedCommittee === "All" ||
       ((t as any).committee || currentEvent.committee || "").toLowerCase() === selectedCommittee.toLowerCase();
     return matchesStatus && matchesSearch && matchesCommittee;
-  });
+  }), sortMode, sortingNow);
 
   function getColumnTasks(status: TaskStatus) {
     return status === "Archived" ? visibleTasks : visibleTasks.filter((t) => t.status === status);
   }
 
   const completedCount = activeTasks.filter((t) => t.status === "Completed" || t.status === "Done").length;
+  const activeFilterCount = Number(statusFilter !== "All") + Number(selectedCommittee !== "All") + Number(assigneeScope !== "all");
+
+  function clearFilters() {
+    setSelectedCommittee("All");
+    setStatusFilter("All");
+    setAssigneeScope("all");
+    setSearch("");
+  }
+
+  function searchControl(mobile = false) {
+    return <div className={`relative min-w-0 ${mobile ? "w-full" : "basis-full xl:min-w-[200px] xl:flex-1 xl:basis-0"}`}>
+      <Search aria-hidden="true" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input
+        data-tour="task-search"
+        type="search"
+        aria-label="Search tasks"
+        placeholder="Search tasks..."
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-11 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:h-9 sm:text-xs [&::-webkit-search-cancel-button]:appearance-none"
+      />
+      {search && <button type="button" aria-label="Clear task search" onClick={(event) => {
+        setSearch(""); event.currentTarget.parentElement?.querySelector("input")?.focus();
+      }} className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-400 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 sm:w-9"><X aria-hidden="true" size={14} /></button>}
+    </div>;
+  }
 
   return (
     <TaskDependencyTasksContext.Provider value={tasks}>
@@ -634,6 +672,28 @@ export function KanbanBoard({
             </div>
 
 
+            {isLeader && currentEvent.status !== "Archived" ? (
+              <div data-tour="task-create-actions" className="hidden items-center gap-1.5 sm:flex">
+                <button
+                  type="button"
+                  onClick={() => setShowTaskReuseModal(true)}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                  title="Reuse tasks from a previous event"
+                >
+                  <Repeat size={13} className="text-blue-600" />
+                  <span>Reuse Tasks</span>
+                </button>
+                <button
+                  type="button"
+                  data-tour="add-task"
+                  onClick={() => setShowAddTaskModal(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition-colors"
+                >
+                  <Plus size={14} />
+                  <span>Add Task</span>
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {/* Leader Unrated Tasks Review Banner */}
@@ -670,9 +730,12 @@ export function KanbanBoard({
                       <Edit3 size={15} /> Edit
                     </button>
                   )}
-                  <span className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-extrabold ${getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).badge}`}>
+
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-extrabold ${getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).badge}`}>
+                    <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${getStatusTheme(currentEvent.status, currentEvent.eventCustomStatuses).dot}`} />
                     {currentEvent.status}
                   </span>
+
                   {currentEvent.committee && (
                     <span className={`${summaryExpanded ? "inline-flex" : "hidden sm:inline-flex"} rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600`}>
                       {currentEvent.committee} Committee
@@ -723,7 +786,7 @@ export function KanbanBoard({
           <div className="mb-4 space-y-3 sm:hidden">
             <div className="flex items-center gap-2">
               <button data-tour="task-filter-panel" type="button" onClick={() => setMobileFiltersOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold">
-                <Filter size={16} /> Filters{statusFilter !== "All" || selectedCommittee !== "All" ? ` (${Number(statusFilter !== "All") + Number(selectedCommittee !== "All")})` : ""}
+                <Filter size={16} /> Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
               </button>
               <div className="min-w-0 flex-1">
                 <CustomSelect tourId="task-view" value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[{ value: "grid", label: "Grid" }, { value: "table", label: "Table" }, { value: "expanded", label: "Expandable list" }, { value: "kanban", label: "Kanban" }, { value: "calendar", label: "Calendar" }]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11" portal />
@@ -745,13 +808,13 @@ export function KanbanBoard({
                 </div>
               )}
             </div>
-            <div className="relative">
-              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input data-tour="task-search" aria-label="Search tasks" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks..." className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" />
-            </div>
+            {searchControl(true)}
+            <WorkspaceSortSelect kind="tasks" value={sortMode} onChange={setSortMode} calendar={viewMode === "calendar"} />
           </div>
-          <div className="mb-4 hidden min-w-0 flex-wrap items-center justify-between gap-3 sm:flex">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="mb-4 hidden min-w-0 flex-col gap-3 sm:flex">
+            <div role="group" aria-label="Task filters and views" className="flex min-w-0 flex-wrap items-center gap-2">
+              {searchControl()}
+
               {/* Committee filter */}
               <CustomSelect
                 tourId="task-committee-filter"
@@ -771,8 +834,32 @@ export function KanbanBoard({
                 portal
               />
 
+              <TaskAssigneeFilter value={assigneeScope} onChange={setAssigneeScope} />
+
+              {/* 5 View Mode Icon Buttons */}
+              <WorkspaceSortSelect kind="tasks" value={sortMode} onChange={setSortMode} calendar={viewMode === "calendar"} />
+              <div data-tour="task-view" className="flex shrink-0 items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+                {VIEW_MODES.map(({ mode, title, icon: Icon }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    title={title}
+                    onClick={() => setViewMode(mode)}
+                    className={`rounded-lg p-2 transition-all ${viewMode === mode
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                      }`}
+                  >
+                    <Icon size={14} />
+                  </button>
+                ))}
+              </div>
+
+
+            </div>
+
               {/* Status filter pills */}
-              <div data-tour="task-status-filter" className="flex flex-wrap items-center gap-1">
+              <div data-tour="task-status-filter" role="group" aria-label="Filter tasks by status" className="flex min-w-0 flex-wrap items-center gap-2">
                 {allTaskFilters.map(({ label, key }) => {
                   const count = taskFilterCount(key);
                   const isActive = statusFilter === key;
@@ -782,6 +869,7 @@ export function KanbanBoard({
                   const isDragOverThis = dragOverStatusPill === key;
 
                   return (
+
                     <button
                       key={key}
                       type="button"
@@ -827,84 +915,35 @@ export function KanbanBoard({
                       {label}
                       <span className={`${isActive ? "text-white/80" : "text-slate-400"}`}>{count}</span>
                     </button>
+
                   );
                 })}
 
-                {/* + Add Custom Status Button for Leaders */}
-                {isLeader && (
+                {/* Status definitions remain readable without edit permission. */}
                   <button
                     data-tour="task-custom-status"
                     type="button"
                     onClick={() => setIsAddStatusModalOpen(true)}
                     className="flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
-                    title="Add an optional progress label, such as Waiting for Approval"
+                    title={isLeader && currentEvent.status !== "Archived" ? "Read descriptions and manage task statuses" : "Read task status descriptions"}
                   >
-                    <Plus size={13} />
-                    <span>Custom Status</span>
+                    {isLeader && currentEvent.status !== "Archived" && <Plus size={13} />}
+                    <span>{isLeader && currentEvent.status !== "Archived" ? "Custom Status" : "Status guide"}</span>
                   </button>
-                )}
               </div>
-            </div>
-
-            {/* Right side: Search, 5 View mode icon buttons & Add task */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Search */}
-              <div className="relative">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  data-tour="task-search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search tasks..."
-                  className="h-8 rounded-xl bg-white pl-8 pr-3 text-xs text-slate-700 shadow-sm ring-1 ring-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
-
-              {/* 5 View Mode Icon Buttons */}
-              <div data-tour="task-view" className="flex items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
-                {VIEW_MODES.map(({ mode, title, icon: Icon }) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    title={title}
-                    onClick={() => setViewMode(mode)}
-                    className={`rounded-lg p-2 transition-all ${viewMode === mode
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                      }`}
-                  >
-                    <Icon size={14} />
-                  </button>
-                ))}
-              </div>
-
-              {isLeader && currentEvent.status !== "Archived" ? (
-                <div data-tour="task-create-actions" className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setShowTaskReuseModal(true)}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                    title="Reuse tasks from a previous event"
-                  >
-                    <Repeat size={13} className="text-blue-600" />
-                    <span>Reuse Tasks</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-tour="add-task"
-                    onClick={() => setShowAddTaskModal(true)}
-                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus size={14} />
-                    <span>Add Task</span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
           </div>
 
           {/* Main View Area */}
           <div data-tour="event-task-workspace" className="min-w-0">
+            {assigneeScope === "mine" && visibleTasks.length === 0 ? (
+              <EmptyState
+                title="No tasks assigned to you match these filters"
+                description="Try another status, committee, or search, or show tasks for all assignees."
+                icon={Users}
+              >
+                <button type="button" onClick={clearFilters} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600 hover:underline">Show all tasks</button>
+              </EmptyState>
+            ) : <>
             {viewMode === "grid" && (
               <TaskGridView
                 readOnly={currentEvent.status === "Archived"}
@@ -1003,6 +1042,7 @@ export function KanbanBoard({
                 customStatuses={customStatuses}
               />
             )}
+            </>}
           </div>
 
           {/* Completion summary footer */}
@@ -1041,6 +1081,9 @@ export function KanbanBoard({
                 <button data-tour="task-filter-done" type="button" onClick={() => setMobileFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
               </div>
               <div className="space-y-4">
+                <div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Assignee</p>
+                  <TaskAssigneeFilter value={assigneeScope} onChange={setAssigneeScope} mobile />
+                </div>
                 <div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Committee</p>
                   <CustomSelect value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white" dropdownClassName="[&_button]:min-h-11" />
                 </div>
@@ -1048,8 +1091,8 @@ export function KanbanBoard({
                   <CustomSelect value={statusFilter} onChange={setStatusFilter} options={allTaskFilters.map(({ key, label }) => ({ value: key, label: `${label} (${taskFilterCount(key)})`, indicatorClass: key === "All" ? undefined : getStatusTheme(key, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white" dropdownClassName="[&_button]:min-h-11" />
                 </div>
                 <div className="flex flex-wrap justify-between gap-2">
-                  <button type="button" onClick={() => { setSelectedCommittee("All"); setStatusFilter("All"); setSearch(""); }} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
-                  {isLeader && <button data-tour="task-custom-status" type="button" onClick={() => { setMobileFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600">Manage statuses</button>}
+                  <button type="button" onClick={clearFilters} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
+                  <button data-tour="task-custom-status" type="button" onClick={() => { setMobileFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600">{isLeader && currentEvent.status !== "Archived" ? "Manage statuses" : "Status guide"}</button>
                 </div>
               </div>
             </dialog>
@@ -1126,6 +1169,7 @@ export function KanbanBoard({
           {/* Add & Manage Custom Task Status Modal */}
           <AddCustomStatusModal
             isOpen={isAddStatusModalOpen}
+            readOnly={!isLeader || currentEvent.status === "Archived"}
             onClose={() => setIsAddStatusModalOpen(false)}
             type="task"
             customStatuses={customStatuses}

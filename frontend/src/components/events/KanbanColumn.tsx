@@ -1,9 +1,9 @@
 "use client";
 
-import { GripVertical, Info, Plus } from "lucide-react";
+import { GripVertical, Plus } from "lucide-react";
 import type { Task, TaskStatus } from "./types";
 import { TaskCard } from "./TaskCard";
-import { getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 
 type KanbanColumnProps = {
   readOnly?: boolean;
@@ -51,7 +51,6 @@ export function KanbanColumn({
   onTaskDragOver
 }: KanbanColumnProps) {
   const theme = getStatusTheme(status, customStatuses);
-  const statusInfo = getTaskStatusDescription(status, customStatuses);
   const isDraggableColumn = !readOnly && Boolean(isLeader && onColumnDragStart);
   const isTaskOverTarget = Boolean(draggedTaskId) && dragOverColumnStatus === status;
 
@@ -106,32 +105,13 @@ export function KanbanColumn({
           )}
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${theme.dot}`} />
           <span title={status} className={`min-w-0 flex-1 break-words text-sm font-semibold ${theme.text}`}>{status}</span>
-          
-          <div className="group relative flex items-center">
-            <span
-              tabIndex={0}
-              role="note"
-              aria-label={`About ${status} status: ${statusInfo.meaning}`}
-              className="cursor-help rounded-full p-0.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200/80 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-400"
-            >
-              <Info size={13} />
-            </span>
-            <div className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 -translate-x-1/2 hidden w-52 rounded-xl bg-slate-900/95 p-2.5 text-xs font-normal text-slate-100 shadow-xl backdrop-blur-sm group-hover:block group-focus-within:block transition-all">
-              <p className="font-semibold text-white mb-0.5">{status}</p>
-              <p className="text-slate-300 leading-snug">{statusInfo.description}</p>
-              <p className="mt-1.5 text-[11px] text-slate-400 border-t border-slate-700/60 pt-1.5">
-                <strong className="text-slate-300">State:</strong> {statusInfo.meaning}
-              </p>
-            </div>
-          </div>
+
+
 
           <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 px-1 text-xs font-medium text-slate-600">
             {tasks.length}
           </span>
         </div>
-        <p className="mt-1 text-[11px] leading-tight text-slate-500 line-clamp-1" title={statusInfo.description}>
-          {statusInfo.description}
-        </p>
       </div>
 
       {/* Task list */}

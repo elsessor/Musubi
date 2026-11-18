@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Calendar, ChevronLeft, Columns3, Edit3, Filter, LayoutGrid, Plus, Repeat, Rows, Search, SlidersHorizontal, Table, Users } from "lucide-react";
+import { Calendar, ChevronLeft, Columns3, Edit3, Filter, LayoutGrid, Plus, Repeat, Rows, Search, SlidersHorizontal, Table, Users, X } from "lucide-react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useTutorialView } from "@/hooks/useTutorialView";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
@@ -9,6 +9,9 @@ import { CalendarView } from "./CalendarView";
 import { getStatusTheme } from "./statusUtils";
 import { useTutorialPlaceholders } from "@/components/onboarding/TutorialPreviewContext";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { WorkspaceSortSelect } from "./WorkspaceSortSelect";
+import { TaskAssigneeFilter, type TaskAssigneeScope } from "./TaskAssigneeFilter";
+import type { TaskSortMode } from "@/utils/workspaceSort";
 
 const views = [
   { value: "grid", label: "Grid", icon: LayoutGrid },
@@ -28,9 +31,11 @@ const card = "min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs
 export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean; onBack: () => void }) {
   const teaching = useTutorialPlaceholders();
   const [view, setView] = useState("grid");
+  const [sortMode, setSortMode] = useState<TaskSortMode>("attention");
   const tutorialViewRef = useTutorialView(setView);
   const [status, setStatus] = useState("All");
   const [committee, setCommittee] = useState("All");
+  const [assigneeScope, setAssigneeScope] = useState<TaskAssigneeScope>("all");
   const [query, setQuery] = useState("");
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
@@ -58,9 +63,12 @@ export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean;
   </div>;
 
   function searchInput(mobile = false) {
-    return <div className={`relative ${mobile ? "w-full" : "w-44 max-w-full"}`}>
-      <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-      <input data-tour="task-search" aria-label="Search tasks" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-9 sm:text-xs" />
+    return <div className={`relative min-w-0 ${mobile ? "w-full" : "basis-full xl:min-w-[200px] xl:flex-1 xl:basis-0"}`}>
+      <Search aria-hidden="true" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input data-tour="task-search" type="search" aria-label="Search tasks" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks..." className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-11 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:h-9 sm:text-xs [&::-webkit-search-cancel-button]:appearance-none" />
+      {query && <button type="button" aria-label="Clear task search" onClick={(event) => {
+        setQuery(""); event.currentTarget.parentElement?.querySelector("input")?.focus();
+      }} className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-400 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 sm:w-9"><X aria-hidden="true" size={14} /></button>}
     </div>;
   }
 
@@ -91,10 +99,11 @@ export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean;
     </article>;
   }
 
-  const filtered = query.trim() || status !== "All" || committee !== "All";
+  const filtered = query.trim() || status !== "All" || committee !== "All" || assigneeScope === "mine";
+  const activeFilterCount = Number(status !== "All") + Number(committee !== "All") + Number(assigneeScope !== "all");
   return <div ref={tutorialViewRef} data-tour-view-scope="tasks" data-tour-view={view} data-tour="event-workspace" data-event-id="workspace-preview" className="flex min-h-full min-w-0 flex-col">
     <nav aria-label="Event breadcrumb" className="mb-4 flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-slate-500">
-      <button type="button" onClick={onBack} aria-label="Back to events" className={`inline-flex min-h-9 items-center gap-1 font-bold text-slate-700 hover:text-blue-600 ${focus}`}><ChevronLeft aria-hidden="true" className="size-4" />Events &amp; Tasks</button><span aria-hidden="true">/</span><span className="truncate font-semibold text-slate-900">Event name</span>
+      <button type="button" onClick={onBack} aria-label="Back to events" className={`inline-flex min-h-9 items-center gap-1 font-bold text-slate-700 hover:text-blue-600 ${focus}`}><ChevronLeft aria-hidden="true" className="size-4" />Events &amp; Tasks</button><span aria-hidden="true">/</span><span className="truncate font-semibold text-slate-900">Event name</span><div className="ml-auto hidden sm:block">{createActions()}</div>
     </nav>
     <p className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">Event workspace preview. This layout follows the organization workspace. Placeholders show where event details and tasks will appear after you join.</p>
     <section data-tour="event-summary" className="mb-3 min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs sm:mb-5 sm:p-6">
@@ -116,20 +125,22 @@ export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean;
     </section>
 
     <div className="mb-4 space-y-3 sm:hidden">
-      <div className="flex flex-wrap items-center gap-2"><button data-tour="task-filter-panel" type="button" onClick={() => setFiltersOpen(true)} className={`inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold ${focus}`}><Filter aria-hidden="true" className="size-4" />Filters</button><div className="min-w-28 flex-1"><CustomSelect tourId="task-view" value={view} onChange={setView} options={views} buttonClassName="min-h-11 rounded-xl bg-white text-sm" portal /></div>{createActions(true)}</div>
+      <div className="flex flex-wrap items-center gap-2"><button data-tour="task-filter-panel" type="button" onClick={() => setFiltersOpen(true)} className={`inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold ${focus}`}><Filter aria-hidden="true" className="size-4" />Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}</button><div className="min-w-28 flex-1"><CustomSelect tourId="task-view" value={view} onChange={setView} options={views} buttonClassName="min-h-11 rounded-xl bg-white text-sm" portal /></div>{createActions(true)}</div>
       {searchInput(true)}
+      <WorkspaceSortSelect kind="tasks" value={sortMode} onChange={setSortMode} calendar={view === "calendar"} />
     </div>
-    <div className="mb-4 hidden min-w-0 flex-wrap items-center justify-between gap-3 sm:flex">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className="mb-4 hidden min-w-0 flex-col gap-3 sm:flex">
+      <div role="group" aria-label="Task filters and views" className="flex min-w-0 flex-wrap items-center gap-2">
+        {searchInput()}
         <CustomSelect tourId="task-committee-filter" value={committee} onChange={setCommittee} options={committeeOptions} icon={<SlidersHorizontal aria-hidden="true" className="size-3.5 text-slate-400" />} containerClassName="w-auto min-w-[150px]" buttonClassName="min-h-9 rounded-xl bg-white text-xs font-semibold" portal />
-        <div data-tour="task-status-filter" role="group" aria-label="Filter tasks by status" className="flex flex-wrap items-center gap-1">
+        <TaskAssigneeFilter value={assigneeScope} onChange={setAssigneeScope} />
+        <WorkspaceSortSelect kind="tasks" value={sortMode} onChange={setSortMode} calendar={view === "calendar"} />
+        <div data-tour="task-view" role="group" aria-label="Task views" className="flex shrink-0 items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">{views.map(({ value, label, icon: Icon }) => <button key={value} type="button" title={`${label} view`} aria-label={`${label} view`} aria-pressed={view === value} onClick={() => setView(value)} className={`rounded-lg p-2 ${focus} ${view === value ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}><Icon aria-hidden="true" className="size-3.5" /></button>)}</div>
+      </div>
+        <div data-tour="task-status-filter" role="group" aria-label="Filter tasks by status" className="flex min-w-0 flex-wrap items-center gap-2">
           {statusOptions.map(({ value, label }) => { const active = status === value; const theme = getStatusTheme(value); return <button key={value} type="button" aria-pressed={active} onClick={() => setStatus(value)} className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium ${focus} ${active ? value === "All" ? "bg-slate-900 text-white shadow-sm" : theme.active : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>{value !== "All" && <span aria-hidden="true" className={`size-1.5 rounded-full ${theme.dot}`} />}{label}<span aria-label="Count unavailable" className="opacity-60">—</span></button>; })}
           {customStatusButton()}
         </div>
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        {searchInput()}<div data-tour="task-view" role="group" aria-label="Task views" className="flex items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">{views.map(({ value, label, icon: Icon }) => <button key={value} type="button" title={`${label} view`} aria-label={`${label} view`} aria-pressed={view === value} onClick={() => setView(value)} className={`rounded-lg p-2 ${focus} ${view === value ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}><Icon aria-hidden="true" className="size-3.5" /></button>)}</div>{createActions()}
-      </div>
     </div>
 
     <section data-tour="event-task-workspace" aria-label="Task layout preview" className="min-w-0">
@@ -144,7 +155,7 @@ export function EventWorkspacePreview({ isLeader, onBack }: { isLeader: boolean;
 
     {filtersOpen && <dialog ref={filtersRef} onCancel={() => setFiltersOpen(false)} aria-labelledby="preview-task-filters-title" className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl backdrop:bg-slate-950/40 sm:hidden">
       <div className="mb-5 flex items-center justify-between"><h2 id="preview-task-filters-title" className="text-lg font-bold">Filter tasks</h2><button data-tour="task-filter-done" type="button" onClick={() => setFiltersOpen(false)} className={`min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600 ${focus}`}>Done</button></div>
-      <div className="space-y-4"><div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Committee</p><CustomSelect tourId="task-committee-filter" value={committee} onChange={setCommittee} options={committeeOptions} buttonClassName="min-h-11 rounded-xl bg-white" /></div><div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Status</p><CustomSelect tourId="task-status-filter" value={status} onChange={setStatus} options={statusOptions} buttonClassName="min-h-11 rounded-xl bg-white" /></div><div className="flex flex-wrap justify-between gap-2"><button type="button" onClick={() => { setStatus("All"); setCommittee("All"); setQuery(""); }} className={`min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold ${focus}`}>Clear filters</button>{customStatusButton(true)}</div></div>
+      <div className="space-y-4"><div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Assignee</p><TaskAssigneeFilter value={assigneeScope} onChange={setAssigneeScope} mobile /></div><div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Committee</p><CustomSelect tourId="task-committee-filter" value={committee} onChange={setCommittee} options={committeeOptions} buttonClassName="min-h-11 rounded-xl bg-white" /></div><div className="space-y-2"><p className="text-sm font-semibold text-slate-600">Status</p><CustomSelect tourId="task-status-filter" value={status} onChange={setStatus} options={statusOptions} buttonClassName="min-h-11 rounded-xl bg-white" /></div><div className="flex flex-wrap justify-between gap-2"><button type="button" onClick={() => { setStatus("All"); setCommittee("All"); setAssigneeScope("all"); setQuery(""); }} className={`min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold ${focus}`}>Clear filters</button>{customStatusButton(true)}</div></div>
     </dialog>}
     {isLeader && <AddCustomStatusModal isOpen={statusModalOpen} preview type="task" onClose={() => setStatusModalOpen(false)} statusOrder={statuses} defaultStatuses={statuses} onAddStatus={() => {}} onReorderStatusOrder={() => {}} />}
   </div>;

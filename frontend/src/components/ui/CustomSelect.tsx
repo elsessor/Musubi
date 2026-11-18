@@ -21,6 +21,7 @@ export type CustomSelectOption = {
 };
 
 export type CustomSelectProps = {
+  ariaLabel?: string;
   tourId?: string;
   value: string;
   onChange: (value: string) => void;
@@ -37,6 +38,7 @@ export type CustomSelectProps = {
 };
 
 export function CustomSelect({
+  ariaLabel,
   tourId,
   value,
   onChange,
@@ -148,6 +150,7 @@ export function CustomSelect({
   return (
     <div ref={containerRef} className={cn("relative w-full", containerClassName)}>
       <button
+        aria-label={ariaLabel}
         data-tour={tourId}
         type="button"
         onClick={handleToggle}

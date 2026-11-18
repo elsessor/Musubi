@@ -5,7 +5,7 @@ import type { Task, TaskPriority, TaskStatus } from "./types";
 import { OverdueBadge } from "./overdue";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getOrderedTaskStatuses, getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
@@ -178,10 +178,10 @@ export function TaskTableView({ readOnly = false, tasks, onUpdateStatus, onUpdat
 
                   {/* Status Dropdown Trigger */}
                   <td className="px-4 py-3.5">
+
                     {canEditStatus(task) ? (
                     <button
                       type="button"
-                      title={`${task.status}: ${getTaskStatusDescription(task.status, customStatuses).description}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleToggleDropdown(task.id, e);
@@ -193,7 +193,8 @@ export function TaskTableView({ readOnly = false, tasks, onUpdateStatus, onUpdat
                       {task.status}
                       <ChevronDown size={12} className={`transition-transform opacity-60 ${isStatusOpen ? "rotate-180" : ""}`} />
                     </button>
-                    ) : <span onClick={(event) => event.stopPropagation()} title={`${task.status}: ${getTaskStatusDescription(task.status, customStatuses).description}`} className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold ${theme.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />{task.status}</span>}
+                    ) : <span onClick={(event) => event.stopPropagation()} className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold ${theme.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />{task.status}</span>}
+
                   </td>
 
                   {/* Priority Dropdown Trigger */}
@@ -308,7 +309,6 @@ export function TaskTableView({ readOnly = false, tasks, onUpdateStatus, onUpdat
               <div className="space-y-0.5">
                 {allStatuses.map((st) => {
                   const stTheme = getStatusTheme(st, customStatuses);
-                  const stDesc = getTaskStatusDescription(st, customStatuses);
                   const isSelected = activeTask?.status === st;
                   return (
                     <button
@@ -330,9 +330,6 @@ export function TaskTableView({ readOnly = false, tasks, onUpdateStatus, onUpdat
                           <span className={`h-2 w-2 shrink-0 rounded-full ${stTheme.dot}`} />
                           <span className="min-w-0 break-words font-semibold">{st}</span>
                         </div>
-                        <p className="mt-0.5 text-[10px] text-slate-500 font-normal leading-tight">
-                          {stDesc.description}
-                        </p>
                       </div>
                       {isSelected && <Check size={13} className="ml-2 shrink-0 text-current mt-0.5" />}
                     </button>

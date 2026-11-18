@@ -22,7 +22,7 @@ function find(node: any, predicate: (node: Node) => boolean): Node | undefined {
 function provider(t: TestContext, role: "Admin" | "Student Leader" | "Organization Member" = "Student Leader", options: {
   pathname?: string; organizationId?: string | null; onboardingCompleted?: boolean; saved?: tutorial.TutorialStatus | null; loading?: boolean;
 } = {}) {
-  let eventId: string | null = null, memberProfileId: string | null = null, cursor = 0, dirty = false;
+  let eventId: string | null = null, memberProfileId: string | null = null, atomizerOpen = false, cursor = 0, dirty = false;
   let pathname = options.pathname ?? "/dashboard/events";
   let blocking = false, ready = true;
   let hiddenTargets: string[] = [];
@@ -66,7 +66,7 @@ function provider(t: TestContext, role: "Admin" | "Student Leader" | "Organizati
   };
   const workspace = {
     getAttribute: (name: string) => name === "data-tutorial-role" ? role : String(ready),
-    querySelector: (selector: string) => selector.includes('member-profile-page') ? memberProfileId ? { getAttribute: () => memberProfileId } : null : eventId ? { getAttribute: () => eventId } : null
+    querySelector: (selector: string) => selector.includes('data-events-tab') ? { getAttribute: () => atomizerOpen ? "atomizer" : "events" } : selector.includes('member-profile-page') ? memberProfileId ? { getAttribute: () => memberProfileId } : null : eventId ? { getAttribute: () => eventId } : null
   };
   const values = {
     window: { innerWidth: 375, innerHeight: 700 },
@@ -109,6 +109,7 @@ function provider(t: TestContext, role: "Admin" | "Student Leader" | "Organizati
     setReady(value: boolean) { ready = value; for (const observer of observers) observer(); },
     setRoute(route: string) { pathname = route; },
     setEvent(id: string | null) { eventId = id; for (const observer of observers) observer(); },
+    setAtomizer(value: boolean) { atomizerOpen = value; for (const observer of observers) observer(); },
     setMemberProfile(id: string | null) { memberProfileId = id; for (const observer of observers) observer(); },
     async settle() {
       for (let attempts = 0; attempts < 20; attempts++) {
@@ -138,6 +139,65 @@ test("selecting an event opens a separate guide without changing the URL or inte
   assert.equal(app.writes.at(-1)?.tour, "page-event-details");
   assert.deepEqual(app.writes.at(-1)?.seenPages, ["page-events"]);
   assert.equal(app.writes.at(-1)?.onboarding?.modules?.["page-event-details"]?.status, "in_progress");
+});
+
+test("the AI tab automatically explains its fields and records completion separately", async (t) => {
+  const app = provider(t);
+  await app.settle();
+  app.setAtomizer(true);
+  let guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
+  assert.ok(guide);
+  assert.equal(guide.props.steps[0].id, "ai-planning-setup");
+  assert.equal(guide.props.steps.length, 3);
+  assert.deepEqual(guide.props.steps.flatMap((step: tutorial.TourStep) => step.highlightTargets), ["ai-target", "ai-create-description", "ai-status", "ai-date", "ai-members", "ai-description", "ai-generate"]);
+  assert.ok(guide.props.steps.every((step: tutorial.TourStep) => !step.openOnNext && step.reveal?.every((target) => target === "ai-tab")));
+  guide.props.onStep(2);
+  guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
+  guide.props.onExit(true);
+  await app.settle();
+  assert.equal(app.writes.at(-1)?.onboarding?.modules?.["page-ai-atomizer"]?.status, "completed");
+  assert.ok(app.writes.at(-1)?.seenPages?.includes("page-events"));
+  app.setAtomizer(false); await app.settle(); app.setAtomizer(true);
+  assert.equal(find(await app.settle(), (node) => node.type === "GuidedTour"), undefined);
+});
+
+test("finishing Events hands off to AI instructions after opening the AI tab", async (t) => {
+  const app = provider(t, "Student Leader", { saved: { version: 1, status: "in_progress", step: 0, tour: "page-events", acknowledged: true, updatedAt: "2026-11-10T00:00:00Z" } });
+  let guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
+  guide.props.onStep(guide.props.steps.length - 1);
+  await app.settle(); app.setAtomizer(true);
+  guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
+  assert.equal(guide.props.steps[guide.props.index].id, "events-ai");
+  guide.props.onExit(true);
+  guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
+  assert.equal(guide.props.steps[0].id, "ai-planning-setup");
+  assert.equal(guide.props.index, 0);
+  assert.equal(app.writes.at(-1)?.onboarding?.modules?.["page-events"]?.status, "completed");
+  assert.equal(app.writes.at(-1)?.onboarding?.modules?.["page-ai-atomizer"]?.status, "in_progress");
+});
+
+test("skipping the Events introduction does not immediately open the AI introduction", async (t) => {
+  const app = provider(t, "Student Leader", { saved: { version: 1, status: "in_progress", step: 0, tour: "page-events", acknowledged: true, updatedAt: "2026-11-10T00:00:00Z" } });
+  let guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
+  guide.props.onStep(guide.props.steps.length - 1);
+  await app.settle(); app.setAtomizer(true);
+  guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
+  guide.props.onExit(false);
+  assert.equal(find(await app.settle(), (node) => node.type === "GuidedTour"), undefined);
+  assert.equal(app.writes.at(-1)?.onboarding?.modules?.["page-ai-atomizer"], undefined);
+});
+
+test("the AI introduction works before joining and remains limited to leaders", async (t) => {
+  const app = provider(t, "Student Leader", { organizationId: null });
+  await app.settle(); app.setAtomizer(true);
+  const guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
+  assert.equal(guide.props.steps[0].id, "ai-planning-setup");
+  assert.match(guide.props.steps[0].description, /before joining/);
+  assert.match(guide.props.steps.at(-1).description, /after joining/);
+  for (const role of ["Admin", "Organization Member"] as const) {
+    assert.equal(pages.getPageTourForRoute(role, "/dashboard/events", "ai"), undefined);
+    assert.deepEqual(tutorial.getTourSteps(role, "page-ai-atomizer"), []);
+  }
 });
 
 test("leaving an event pauses its introduction; explicitly dismissing it prevents repeat introductions", async (t) => {
@@ -579,6 +639,7 @@ test("every permitted module supports automatic introductions without organizati
     await t.test(`${role}: ${page.id}`, async (t) => {
       const app = provider(t, role, { pathname: page.route, organizationId: null, onboardingCompleted: false, saved: { version: 1, tour: "features", status: "completed", step: 0, updatedAt: stamp, onboarding: { version: 1, preference: { mode: "guided", source: "user", updatedAt: stamp }, sidebar: { status: "completed", step: 0, updatedAt: stamp } } } });
       if (page.id === "page-event-details") app.setEvent("workspace-preview");
+      if (page.id === "page-ai-atomizer") app.setAtomizer(true);
       const guide = find(await app.settle(), (node) => node.type === "GuidedTour")!;
       assert.ok(guide, "A page introduction starts before joining an organization");
       assert.equal(app.writes.at(-1)?.tour, page.id);

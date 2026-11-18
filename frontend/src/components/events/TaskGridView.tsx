@@ -4,7 +4,7 @@ import { Calendar, CheckCircle2, ShieldAlert, Sparkles, ChevronDown, Check } fro
 import type { Task, TaskPriority, TaskStatus } from "./types";
 import { OverdueBadge } from "./overdue";
 import { useState } from "react";
-import { getOrderedTaskStatuses, getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { ALL_PRIORITIES, PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus, canUseTaskPriorityControl } from "@/utils/taskAssignment";
@@ -63,9 +63,11 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
                 <span title={pCfg.label} className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1.5 text-[10px] font-semibold leading-4 ring-1 ring-inset ${pCfg.classes}`}>
                   <span className="size-1.5 shrink-0 rounded-full bg-current" /><span className="truncate">{pCfg.label}</span>
                 </span>
+
                 <span title={task.status} className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1.5 text-[10px] font-semibold leading-4 ring-1 ring-inset ${theme.badge}`}>
                   <span className={`size-1.5 shrink-0 rounded-full ${theme.dot}`} /><span className="truncate">{task.status}</span>
                 </span>
+
               </div>
               <div className="hidden flex-wrap items-start justify-between gap-2 pb-3 sm:flex">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -136,10 +138,10 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
 
                 {/* Status Dropdown */}
                 <div className="relative">
+
                   {canEditStatus(task) ? (
                   <button
                     type="button"
-                    title={`${task.status}: ${getTaskStatusDescription(task.status, customStatuses).description}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setOpenPriorityDropdownId(null);
@@ -151,7 +153,8 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
                     {task.status}
                     <ChevronDown size={12} className="opacity-60" />
                   </button>
-                  ) : <span onClick={(event) => event.stopPropagation()} title={`${task.status}: ${getTaskStatusDescription(task.status, customStatuses).description}`} className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold ${theme.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />{task.status}</span>}
+                  ) : <span onClick={(event) => event.stopPropagation()} className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold ${theme.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />{task.status}</span>}
+
 
                   {canEditStatus(task) && openDropdownId === task.id && (
                     <div
@@ -160,7 +163,6 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
                     >
                       {allStatuses.map((st) => {
                         const stTheme = getStatusTheme(st, customStatuses);
-                        const stDesc = getTaskStatusDescription(st, customStatuses);
                         return (
                           <button
                             key={st}
@@ -180,9 +182,6 @@ export function TaskGridView({ readOnly = false, tasks, onUpdateStatus, onUpdate
                                 <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${stTheme.dot}`} />
                                 <span className="min-w-0 break-words font-semibold">{st}</span>
                               </div>
-                              <p className="mt-0.5 text-[10px] text-slate-500 font-normal leading-tight">
-                                {stDesc.description}
-                              </p>
                             </div>
                             {task.status === st && <Check size={12} className="shrink-0 text-current mt-0.5" />}
                           </button>

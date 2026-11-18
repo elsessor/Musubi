@@ -2,7 +2,7 @@
 
 import { Calendar, Plus, Users } from "lucide-react";
 import type { Event } from "./types";
-import { getStatusTheme, getEventStatusDescription, type CustomStatusConfig } from "./statusUtils";
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { getEventMemberCount } from "@/utils/eventMembers";
 import { isTaskArchived } from "@/utils/taskDependencies";
 
@@ -18,9 +18,7 @@ export function EventCard({ event, onClick, customStatuses, compact = false }: E
   const taskCount = event.tasks.filter((task) => !isTaskArchived(task)).length;
 
   return (
-    <button data-tour="event-card"
-      type="button"
-      onClick={() => onClick(event)}
+    <button data-tour="event-card" type="button" onClick={() => onClick(event)}
       className={`group flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-3 ${compact ? "sm:p-4" : "sm:p-5"} text-left shadow-sm ring-1 ring-slate-100 transition-all hover:-translate-y-0.5 hover:shadow-md hover:ring-blue-200 focus-visible:outline-2 focus-visible:outline-blue-500`}
     >
       {/* Top row: icon + committee badge + status badge */}
@@ -37,12 +35,14 @@ export function EventCard({ event, onClick, customStatuses, compact = false }: E
               {event.committee}
             </span>
           )}
+
           <span
-            title={`${event.status}: ${getEventStatusDescription(event.status).description}`}
-            className={`inline-flex max-w-full items-center break-words rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset sm:px-2.5 sm:text-xs ${theme.badge}`}
+            className={`inline-flex max-w-full items-center gap-1.5 break-words rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset sm:px-2.5 sm:text-xs ${theme.badge}`}
           >
+            <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${theme.dot}`} />
             {event.status}
           </span>
+
         </div>
       </div>
 
@@ -90,7 +90,7 @@ export function CreateEventCard({ onClick }: CreateEventCardProps) {
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-white/50 p-8 text-slate-400 transition-all hover:border-blue-300 hover:bg-blue-50/40 hover:text-blue-500 focus-visible:outline-2 focus-visible:outline-blue-500"
+      className="group flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-white/50 p-8 text-slate-500 transition-all hover:border-blue-300 hover:bg-blue-50/40 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-blue-500"
     >
       <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-dashed border-current transition-transform group-hover:scale-110">
         <Plus size={20} />

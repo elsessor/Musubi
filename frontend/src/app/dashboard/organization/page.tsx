@@ -751,7 +751,6 @@ function OrganizationDetailsCard({
         </p>
       </div>
 
-      <DetailRow label="Org UID" value={organization.id} />
       <DetailRow label="Type" value={organization.type || "Governing"} />
       <DetailRow label="Setup status" value={setupStatus} />
       <DetailRow label="Created at" value={formatDate(organization.createdAt)} />

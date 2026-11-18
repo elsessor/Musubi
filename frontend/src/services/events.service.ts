@@ -54,6 +54,8 @@ async function getValidToken(user: User | null): Promise<string> {
 export function normalizeEvent(id: string, data: Record<string, any>): Event {
   return {
     id,
+    createdAt: typeof data.createdAt === "string" ? data.createdAt : null,
+    updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : null,
     orgId: typeof data.orgId === "string" ? data.orgId : null,
     archivedAt: typeof data.archivedAt === "string" ? data.archivedAt : null,
     archivedByUID: typeof data.archivedByUID === "string" ? data.archivedByUID : null,

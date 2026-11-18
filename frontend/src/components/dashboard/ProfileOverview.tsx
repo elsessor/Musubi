@@ -130,14 +130,14 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">Leader reviews &amp; performance</p>
                 <h3 id="performance-heading" className="mt-1.5 text-sm font-semibold">Performance Rating</h3>
               </div>
-              <span className="rounded-xl border border-amber-300 bg-amber-50 p-2 text-amber-500"><Star size={16} /></span>
+              <span className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-amber-600"><Star size={16} className="fill-current" aria-hidden="true" /></span>
             </div>
             <div className="mt-4 flex items-baseline gap-2">
               <span className="text-[32px] font-bold leading-none">{ready && metrics.rating !== null ? metrics.rating.toFixed(1) : "—"}</span>
               <span className="text-xs text-slate-400">/ 5.0</span>
             </div>
             <div className="mt-4 flex items-center gap-1" aria-label={ready && metrics.rating !== null ? `${metrics.rating.toFixed(1)} out of 5 stars` : "No ratings"}>
-              {[1, 2, 3, 4, 5].map((star) => <Star key={star} size={16} className={ready && metrics.rating !== null && star <= Math.round(metrics.rating) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />)}
+              {[1, 2, 3, 4, 5].map((star) => <Star key={star} size={16} aria-hidden="true" className={ready && metrics.rating !== null && star <= Math.round(metrics.rating) ? "fill-current text-amber-600" : "text-slate-300 dark:text-slate-500"} />)}
               <span className="ml-2 text-[10px] text-slate-400">{ready ? `(${metrics.ratingCount} ${metrics.ratingCount === 1 ? "rating" : "ratings"})` : "Loading…"}</span>
             </div>
             <div className={`mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[10px] font-medium ${ready && topPerformer ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
@@ -158,7 +158,7 @@ export function ProfileOverview({ user, tasks, loading, tasksLoading, profileErr
           <section data-tour="profile-skills" aria-labelledby="skills-heading" className={`${cardClass} p-5`}>
             <h3 id="skills-heading" className={labelClass}>Skill keywords</h3>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {user.skills.length ? user.skills.map((skill) => <span key={skill} className="rounded-full bg-[#f0f4f8] px-3 py-1 text-[10px]">{skill}</span>) : <p className="text-xs text-slate-500">{onEdit ? "No skills added yet. Edit your profile to add skills." : "No skills listed."}</p>}
+              {user.skills.length ? user.skills.map((skill) => <span key={skill} className="rounded-full bg-[#f0f4f8] px-3 py-1 text-[10px] text-slate-700">{skill}</span>) : <p className="text-xs text-slate-500">{onEdit ? "No skills added yet. Edit your profile to add skills." : "No skills listed."}</p>}
             </div>
           </section>
         </div>

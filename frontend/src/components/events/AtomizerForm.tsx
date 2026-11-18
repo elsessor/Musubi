@@ -6,7 +6,7 @@ import { MiniCalendarPicker } from "./MiniCalendarPicker";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { SubtaskReviewScreen } from "./SubtaskReviewScreen";
 import type { Event, GoalDraft, Subtask, Task, TaskStatus } from "./types";
-import { getStatusTheme, getTaskStatusDescription, getEventStatusDescription, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
+import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
 import { atomizeGoal } from "@/services/auth.service";
 import { delegateSubtasksHeuristically, inferSkillsFromTask } from "@/utils/heuristicDelegation";
 import type { OrganizationMember } from "@/services/auth.service";
@@ -71,7 +71,6 @@ function ModernStatusDropdown({
         <div className="absolute left-0 top-full z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200/90 bg-white/95 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-md transition-all divide-y divide-slate-100/80">
           {options.map((status) => {
             const badge = getStatusBadge(status);
-            const statusInfo = getTaskStatusDescription(status, customStatuses);
             const isSelected = value === status;
             return (
               <button
@@ -94,9 +93,6 @@ function ModernStatusDropdown({
                       {status}
                     </span>
                   </div>
-                  <p className="text-[11px] font-normal text-slate-500 leading-tight">
-                    {statusInfo.description}
-                  </p>
                 </div>
                 {isSelected && <Check className="size-4 shrink-0 text-blue-600 mt-1" />}
               </button>
@@ -165,7 +161,6 @@ function ModernEventDropdown({
           {events.map((ev) => {
             const isSelected = value === ev.id;
             const evStatus = ev.status || "Planning";
-            const evDesc = getEventStatusDescription(evStatus);
             return (
               <button
                 key={ev.id}
@@ -183,13 +178,11 @@ function ModernEventDropdown({
                 <div className="flex flex-col gap-0.5 min-w-0 pr-2">
                   <div className="flex items-center gap-2 truncate">
                     <span className="truncate">{ev.title}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${getStatusTheme(evStatus, ev.eventCustomStatuses).badge}`}>
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ${getStatusTheme(evStatus, ev.eventCustomStatuses).badge}`}>
+                      <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${getStatusTheme(evStatus, ev.eventCustomStatuses).dot}`} />
                       {evStatus}
                     </span>
                   </div>
-                  <p className="text-[11px] font-normal text-slate-500 leading-tight">
-                    <span className="font-semibold text-slate-600">{evStatus}:</span> {evDesc.description}
-                  </p>
                 </div>
                 {isSelected && <Check className="size-4 shrink-0 text-blue-600 mt-1" />}
               </button>
@@ -571,7 +564,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
               disabled={isAtomizingActive}
               onChange={(value) => setDraftField("eventDate", value)}
               placeholder="Select event date"
-              buttonClassName="h-11 !bg-[#F0F4F8] !px-4 !text-sm shadow-xs hover:!bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              buttonClassName="h-11 bg-[#F0F4F8] px-4 text-sm shadow-xs hover:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
           <div>

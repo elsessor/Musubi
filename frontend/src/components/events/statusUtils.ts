@@ -90,12 +90,16 @@ export function getTaskStatusDescription(
   };
 }
 
-export function getEventStatusDescription(status: string): StatusDescriptionInfo {
+export function getEventStatusDescription(status: string, customStatuses?: readonly CustomStatusConfig[]): StatusDescriptionInfo {
   const normalized = status.trim().toLowerCase();
   for (const [key, val] of Object.entries(EVENT_STATUS_DESCRIPTIONS)) {
     if (key.toLowerCase() === normalized) {
       return val;
     }
+  }
+  const custom = customStatuses?.find((item) => item.name.trim().toLowerCase() === normalized);
+  if (custom?.description?.trim()) {
+    return { status, description: custom.description, meaning: custom.description };
   }
   return {
     status,

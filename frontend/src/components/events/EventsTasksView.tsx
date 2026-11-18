@@ -262,7 +262,7 @@ function OrganizationEventsTasksView({ organizationId }: { organizationId?: stri
 
   return (
     <TaskAssigneeMembersContext.Provider value={members}>
-    <div className="flex min-h-full min-w-0 flex-col">
+    <div data-events-tab={currentTab} className="flex min-h-full min-w-0 flex-col">
       {!effectiveOrgId && <div className="mb-4"><OrganizationMembershipNotice {...joinStatus} onRetry={joinStatus.refresh} />{teaching && <p className="mt-3 text-xs leading-5 text-slate-500">Explore the tabs, views, and form fields during this guide. Sample cards explain where your organization’s information will appear.</p>}</div>}
       {/* Tab navigation */}
       <div className="mb-5 flex items-center gap-1 border-b border-slate-200">
@@ -488,7 +488,7 @@ function TabButton({ icon, label, badge, active, onClick, tourId }: TabButtonPro
       type="button"
       onClick={onClick}
       data-tour={tourId}
-      className={`relative flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 px-2 pb-3 pt-1 text-xs font-medium transition-colors sm:flex-none sm:gap-1.5 sm:px-4 sm:text-sm ${
+      className={`relative flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 px-2 py-3 text-xs font-medium transition-colors sm:flex-none sm:gap-1.5 sm:px-4 sm:text-sm ${
         active
           ? "text-blue-600"
           : "text-slate-500 hover:text-slate-800"

@@ -29,6 +29,7 @@
 @layer base {
   :root {
     color-scheme: light;
+    --dashboard-header-height: 72px;
     --theme-page: #f5f7fa;
     --theme-brand-soft: #e8eef7;
     --theme-text: #111827;
@@ -39,6 +40,14 @@
     --theme-page: #0b1220;
     --theme-brand-soft: #223550;
     --theme-text: #e2e8f0;
+  }
+
+  @media (min-width: 640px) {
+    :root { --dashboard-header-height: 76px; }
+  }
+
+  @media (min-width: 1024px) {
+    :root { --dashboard-header-height: 80px; }
   }
 
   * {
@@ -98,13 +107,13 @@
 /* The existing screens use light utility colors. Keep their shared surfaces
    readable in dark mode while preserving filled brand buttons and status dots. */
 @layer utilities {
-  .dark :is(.bg-white, [class~="bg-white/70"], [class~="bg-white/80"], [class~="bg-white/85"], [class~="bg-white/90"], [class~="bg-white/95"]) {
+  .dark :is(.bg-white, [class~="bg-white/40"], [class~="bg-white/50"], [class~="bg-white/60"], [class~="bg-white/70"], [class~="bg-white/80"], [class~="bg-white/85"], [class~="bg-white/90"], [class~="bg-white/95"]) {
     background-color: #162235;
   }
 
   .dark :is(.bg-slate-50, .bg-gray-50, .bg-slate-100, .bg-gray-100,
     [class^="bg-slate-50/"], [class*=" bg-slate-50/"], [class^="bg-slate-100/"], [class*=" bg-slate-100/"],
-    [class~="bg-[#F0F4F8]"], [class~="bg-[#f8fafc]"], [class~="bg-[#f1f5f9]"]) {
+    [class~="bg-[#F0F4F8]"], [class~="bg-[#f0f4f8]"], [class~="bg-[#f8fafc]"], [class~="bg-[#f1f5f9]"]) {
     background-color: #1e2d43;
   }
 
@@ -139,13 +148,25 @@
     [class^="border-slate-200/"], [class*=" border-slate-200/"], [class~="border-[#cbd5e1]"],
     [class~="border-[#d8e0eb]"], [class~="border-[#d9e1ec]"], [class~="border-[#dce3ed]"],
     [class~="border-[#dfe5ee]"], [class~="border-[#e0e5ed]"], [class~="border-[#e2e8f0]"], [class~="border-[#e5eaf1]"]) { border-color: #34445d; }
-  .dark :is(.divide-slate-100, .divide-slate-200) > :not([hidden]) ~ :not([hidden]) { border-color: #34445d; }
-  .dark :is([class^="ring-slate-200/"], [class*=" ring-slate-200/"], .ring-slate-200) { --tw-ring-color: #34445d; }
+  .dark :is(.divide-slate-100, .divide-slate-200,
+    [class~="divide-[#dce3ed]"], [class~="divide-[#e5eaf1]"]) > :not([hidden]) ~ :not([hidden]) { border-color: #34445d; }
+  .dark :is([class^="ring-slate-200/"], [class*=" ring-slate-200/"], .ring-slate-100, .ring-slate-200) { --tw-ring-color: #34445d; }
+  .dark .hover\:ring-blue-200:hover { --tw-ring-color: #345988; }
 
   .dark :is(.hover\:bg-white:hover, .hover\:bg-slate-50:hover, .hover\:bg-slate-100:hover, .hover\:bg-slate-200:hover,
     .focus\:bg-slate-50:focus, .focus\:bg-white:focus, .disabled\:bg-slate-100:disabled) { background-color: #293b54; }
+  .dark :is([class*="hover:bg-slate-50/"], [class*="hover:bg-slate-100/"], [class*="hover:bg-slate-200/"]):hover {
+    background-color: #293b54;
+  }
+  .dark :is(.hover\:bg-blue-50:hover, .hover\:bg-blue-100:hover,
+    [class*="hover:bg-blue-50/"]:hover, [class*="hover:bg-blue-100/"]:hover,
+    .focus-visible\:bg-blue-50:focus-visible, [class*="active:bg-blue-100/"]:active) { background-color: #172f50; }
   .dark :is(.hover\:text-slate-900:hover, .hover\:text-slate-800:hover, .hover\:text-slate-700:hover, .hover\:text-slate-600:hover),
   .dark .group:hover :is(.group-hover\:text-slate-800, .group-hover\:text-slate-900) { color: #f1f5f9; }
+  .dark :is(.hover\:text-blue-600:hover, .hover\:text-blue-700:hover, .hover\:text-blue-800:hover),
+  .dark .group:hover :is(.group-hover\:text-blue-600, .group-hover\:text-blue-700),
+  .dark .group:focus-visible .group-focus-visible\:text-blue-700,
+  .dark [class~="group/card"]:hover [class~="group-hover/card:text-blue-600"] { color: #93c5fd; }
   .dark :is(.placeholder\:text-slate-400, .placeholder\:text-slate-500)::placeholder { color: #94a3b8; }
 
   .dark :is(.bg-blue-50, .bg-blue-100, .bg-indigo-50, .bg-indigo-100, .bg-sky-50, .bg-sky-100, .bg-cyan-50, .bg-cyan-100,
@@ -158,7 +179,7 @@
 
   .dark :is(.bg-amber-50, .bg-amber-100, .bg-orange-50, .bg-orange-100, .bg-yellow-50, .bg-yellow-100,
     [class^="bg-amber-50/"], [class*=" bg-amber-50/"], [class^="bg-amber-100/"], [class*=" bg-amber-100/"], [class~="bg-[#fef3c7]"]) { background-color: #392b18; }
-  .dark :is(.text-amber-600, .text-amber-700, .text-amber-800, .text-amber-900, .text-orange-600, .text-orange-700, .text-orange-800, .text-orange-900, .text-yellow-600, .text-yellow-700, .text-yellow-800, .text-yellow-900, [class~="text-[#d97706]"]) { color: #fcd34d; }
+  .dark :is(.text-amber-600, .text-amber-700, .text-amber-800, .text-amber-900, .text-amber-950, .text-orange-600, .text-orange-700, .text-orange-800, .text-orange-900, .text-yellow-600, .text-yellow-700, .text-yellow-800, .text-yellow-900, [class~="text-[#d97706]"]) { color: #fcd34d; }
   .dark :is(.border-amber-100, .border-amber-200, .border-orange-200, .border-yellow-200,
     [class^="border-amber-200/"], [class*=" border-amber-200/"]) { border-color: #725122; }
 

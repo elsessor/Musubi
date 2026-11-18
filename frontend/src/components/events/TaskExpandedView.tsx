@@ -4,7 +4,7 @@ import { Bell, Calendar, CheckCircle, ChevronDown, ChevronUp, ShieldAlert, Spark
 import { useId, useState } from "react";
 import type { Task, TaskStatus } from "./types";
 import { OverdueBadge } from "./overdue";
-import { getOrderedTaskStatuses, getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { PRIORITY_CONFIG as priorityConfig } from "./priorityUtils";
 import { useAuthStore } from "@/store/authStore";
 import { canUpdateTaskStatus } from "@/utils/taskAssignment";
@@ -33,11 +33,9 @@ export function TaskExpandedView({ readOnly = false, tasks, onUpdateStatus, onSe
   const allStatuses = getOrderedTaskStatuses(statusOrder, customStatuses, tasks.map((task) => task.status));
   const statusOptions = allStatuses.map((value) => {
     const theme = getStatusTheme(value, customStatuses);
-    const descInfo = getTaskStatusDescription(value, customStatuses);
     return {
       value,
       label: value,
-      description: descInfo.description,
       indicatorClass: theme.dot,
       selectedClass: theme.badge
     };
@@ -102,6 +100,7 @@ export function TaskExpandedView({ readOnly = false, tasks, onUpdateStatus, onSe
 
               <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5">
                 <div className="min-w-0 flex-1 basis-36 sm:max-w-48">
+
                   {canEditStatus(task) ? (
                     <CustomSelect
                       value={task.status}
@@ -112,6 +111,7 @@ export function TaskExpandedView({ readOnly = false, tasks, onUpdateStatus, onSe
                       portal
                     />
                   ) : <span className={`inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold ring-1 ring-inset ${theme.badge}`}><span className={`size-2 shrink-0 rounded-full ${theme.dot}`} /><span className="min-w-0 break-words">{task.status}</span></span>}
+
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {onSelectTask ? <button type="button" onClick={() => onSelectTask(task)} className="min-h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 sm:flex-none">View Details</button> : null}

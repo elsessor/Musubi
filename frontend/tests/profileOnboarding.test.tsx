@@ -41,16 +41,15 @@ test("visiting profiles explain only the cards allowed for the viewer and keep p
   }
 });
 
-test("quick member profiles explain their visible information without exposing private scores", (t) => {
+test("quick member profiles omit inline instructions and preserve private score permissions", (t) => {
   const snapshot = useAuthStore.getInitialState();
   const previous = snapshot.profile;
   t.after(() => { snapshot.profile = previous; });
   for (const role of ["Organization Member", "Student Leader"] as const) {
     snapshot.profile = { uid: "viewer", fullName: "Viewer", role } as AuthUserProfile;
     const html = renderToStaticMarkup(createElement(MemberProfileModal, { member: { id: "other", initials: "ES", name: user.fullName, role: "Member", committee: "Events", skills: ["Design"], workload: 40, reliability: "100%", availability: "Available", assignedTasks: tasks }, onClose: () => {} }));
-    assert.match(html, /How to read this profile/);
+    assert.doesNotMatch(html, /How to read this profile/);
     assert.match(html, /View full profile/);
     assert.equal(html.includes("Leader performance rating:"), role === "Student Leader");
-    assert.equal(html.includes("Private performance information is not shown"), role === "Organization Member");
   }
 });

@@ -12,6 +12,7 @@ import {
   MapPin,
   Plus,
   Rows,
+  Search,
   SlidersHorizontal,
   Table,
   Users,
@@ -21,7 +22,11 @@ import { useEffect, useRef, useState } from "react";
 import type { Event, EventStatus } from "./types";
 import { isEventScheduledOnDay } from "@/utils/calendarSchedule";
 import { getEventMemberCount } from "@/utils/eventMembers";
+import { matchesEventSearch } from "@/utils/eventSearch";
 import { isTaskArchived } from "@/utils/taskDependencies";
+import { eventStartTime, matchesEventSchedule, sortEvents, type EventScheduleFilter, type EventSortMode } from "@/utils/workspaceSort";
+import { useSortingClock } from "@/hooks/useSortingClock";
+import { WorkspaceSortSelect } from "./WorkspaceSortSelect";
 import { CreateEventCard, EventCard } from "./EventCard";
 import { AddCustomStatusModal } from "./AddCustomStatusModal";
 import { getStatusTheme, type CustomStatusConfig, type StatusThemeColor } from "./statusUtils";
@@ -81,8 +86,12 @@ export function EventsDashboard({
   const pendingSaves = useRef(0);
   function onSelectEvent(event: Event) { selectEvent({ ...event, eventCustomStatuses: customStatuses }); }
   const [filter, setFilter] = useState<StatusFilter>("All");
+  const [search, setSearch] = useState("");
+  const [scheduleFilter, setScheduleFilter] = useState<EventScheduleFilter>("all");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [sortMode, setSortMode] = useState<EventSortMode>("upcoming");
+  const sortingNow = useSortingClock();
   const tutorialViewRef = useTutorialView(setViewMode);
   const [smallScreen, setSmallScreen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -417,14 +426,58 @@ export function EventsDashboard({
     ...statusOrder.map((st) => ({ label: st, key: st as EventStatus }))
   ];
 
-  const visible = events.filter((e) => {
-    const matchesStatus = filter === "All" ? e.status !== "Archived" : e.status === filter;
+  const eventsInScope = events.filter((e) => {
     const matchesCommittee =
       selectedCommittee === "All" ||
       (e.committee || "").toLowerCase() === selectedCommittee.toLowerCase();
-    return matchesStatus && matchesCommittee;
+    return matchesCommittee && matchesEventSchedule(e, scheduleFilter, sortingNow) && matchesEventSearch(e, search);
   });
-  const showViewContent = visible.length > 0 || teaching || (viewMode === "calendar" && googleEvents.length > 0);
+  const visible = sortEvents(eventsInScope.filter((e) => filter === "All" || e.status === filter), sortMode, sortingNow);
+  const visibleGoogleEvents = googleEvents.filter((event) => matchesEventSchedule(event, scheduleFilter, sortingNow) && matchesEventSearch(event, search));
+  const showViewContent = visible.length > 0 || teaching || (viewMode === "calendar" && visibleGoogleEvents.length > 0);
+  const activeFilterCount = Number(filter !== "All") + Number(selectedCommittee !== "All") + Number(scheduleFilter !== "all");
+
+  function clearFilters() {
+    setFilter("All"); setSelectedCommittee("All"); setScheduleFilter("all");
+  }
+
+  function searchControl(mobile = false) {
+    return <div className={`relative min-w-0 ${mobile ? "w-full" : "basis-full xl:min-w-[200px] xl:flex-1 xl:basis-0"}`}>
+      <Search aria-hidden="true" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input
+        data-tour="event-search"
+        type="search"
+        aria-label="Search events"
+        placeholder="Search events..."
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-11 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:h-9 sm:text-xs [&::-webkit-search-cancel-button]:appearance-none"
+      />
+      {search && <button type="button" aria-label="Clear event search" onClick={(event) => {
+        setSearch(""); event.currentTarget.parentElement?.querySelector("input")?.focus();
+      }} className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-400 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 sm:w-9"><X aria-hidden="true" size={14} /></button>}
+    </div>;
+  }
+
+  function scheduleFilterControl(mobile = false) {
+    return <CustomSelect
+      tourId="event-schedule-filter"
+      ariaLabel="Filter events by schedule"
+      value={scheduleFilter}
+      onChange={(value) => setScheduleFilter(value as EventScheduleFilter)}
+      options={[
+        { value: "all", label: "All event dates" },
+        { value: "upcoming", label: "Upcoming" },
+        { value: "ongoing", label: "Ongoing" },
+        { value: "past", label: "Past events" }
+      ]}
+      icon={<Calendar aria-hidden="true" size={13} className="text-slate-400" />}
+      containerClassName={mobile ? "" : "w-auto min-w-[160px]"}
+      buttonClassName="min-h-11 rounded-xl bg-white px-3 text-xs text-slate-700 sm:min-h-9"
+      dropdownClassName="[&_button]:min-h-11"
+      portal={!mobile}
+    />;
+  }
 
   return (
     <div ref={tutorialViewRef} data-tour-view-scope="events" data-tour-view={viewMode} className="flex min-w-0 flex-col gap-4">
@@ -435,7 +488,7 @@ export function EventsDashboard({
           <p className="text-sm font-semibold text-slate-600">{events.length} events · {activeCount} active</p>
           <div className="flex items-center gap-2">
             <button data-tour="event-filter-panel" type="button" onClick={() => setFiltersOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold">
-              <SlidersHorizontal size={16} /> Filters{filter !== "All" || selectedCommittee !== "All" ? ` (${Number(filter !== "All") + Number(selectedCommittee !== "All")})` : ""}
+              <SlidersHorizontal size={16} /> Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
             </button>
             <div className="min-w-0 flex-1">
               <CustomSelect tourId="event-view" value={viewMode} onChange={(value) => setViewMode(value as ViewMode)} options={[
@@ -446,6 +499,8 @@ export function EventsDashboard({
             </div>
             {isLeader && <button data-tour="create-event" type="button" onClick={() => onNewEvent()} className="flex min-h-11 items-center gap-1 rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white"><Plus size={16} /> New</button>}
           </div>
+          {searchControl(true)}
+          <WorkspaceSortSelect kind="events" value={sortMode} onChange={setSortMode} calendar={viewMode === "calendar"} />
         </>
       )}
       <div className={`${compactMobile ? "hidden" : "flex"} flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm`}>
@@ -482,9 +537,11 @@ export function EventsDashboard({
       </div>
 
       {/* Filter bar & View toggles */}
-      <div className={`${compactMobile ? "hidden" : "flex"} flex-wrap items-center justify-between gap-2`}>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className={`${compactMobile ? "hidden" : "flex"} min-w-0 flex-col gap-3`}>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {searchControl()}
           {/* Committee filter */}
+          {scheduleFilterControl()}
           <CustomSelect tourId="event-committee-filter"
             value={selectedCommittee}
             onChange={setSelectedCommittee}
@@ -502,10 +559,26 @@ export function EventsDashboard({
             portal
           />
 
+          <WorkspaceSortSelect kind="events" value={sortMode} onChange={setSortMode} calendar={viewMode === "calendar"} />
+          <div data-tour="event-view" className="flex shrink-0 items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+            {VIEW_MODES.map(({ mode, title, icon: Icon }) => (
+              <button
+                key={mode}
+                type="button"
+                title={title}
+                onClick={() => setViewMode(mode)}
+                className={`rounded-lg p-2 transition-all ${viewMode === mode ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`}
+              >
+                <Icon size={14} />
+              </button>
+            ))}
+          </div>
+        </div>
+
           {/* Status filter pills */}
-          <div className="flex flex-wrap items-center gap-1">
+          <div role="group" aria-label="Filter events by workflow status" className="flex min-w-0 flex-wrap items-center gap-2">
             {allStatusFilters.map(({ label, key }) => {
-              const count = key === "All" ? events.filter((e) => e.status !== "Archived").length : events.filter((e) => e.status === key).length;
+              const count = key === "All" ? eventsInScope.length : eventsInScope.filter((e) => e.status === key).length;
               const isActive = filter === key;
               const theme = getStatusTheme(key, customStatuses);
               const isPillDraggable = isLeader && settingsReady && key !== "All";
@@ -513,6 +586,7 @@ export function EventsDashboard({
               const isDragOverThis = dragOverStatusPill === key;
 
               return (
+
                 <button data-tour="event-status-filter"
                   key={key}
                   type="button"
@@ -560,43 +634,22 @@ export function EventsDashboard({
                   {label}
                   <span className={`${isActive ? "text-white/80" : "text-slate-400"}`}>{count}</span>
                 </button>
+
               );
             })}
 
-            {/* + Add / Manage Custom Status Button for Leaders */}
-            {isLeader && (
+            {/* Status definitions are available to every member. */}
               <button data-tour="event-custom-status"
                 type="button"
                 disabled={!preview && !settingsReady}
                 onClick={() => setIsAddStatusModalOpen(true)}
                 className="flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
-                title="Add or rearrange custom event statuses"
+                title={isLeader ? "Read descriptions and manage event statuses" : "Read event status descriptions"}
               >
-                <Plus size={13} />
-                <span>Custom Status</span>
+                {isLeader && <Plus size={13} />}
+                <span>{isLeader ? "Custom Status" : "Status guide"}</span>
               </button>
-            )}
           </div>
-        </div>
-
-        {/* 5 View Mode Toggles */}
-        <div data-tour="event-view" className="flex items-center gap-0.5 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
-          {VIEW_MODES.map(({ mode, title, icon: Icon }) => (
-            <button
-              key={mode}
-              type="button"
-              title={title}
-              onClick={() => setViewMode(mode)}
-              className={`rounded-lg p-2 transition-all ${
-                viewMode === mode
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-              }`}
-            >
-              <Icon size={14} />
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* 1. Grid View */}
@@ -648,11 +701,14 @@ export function EventsDashboard({
                       </span>
                     </td>
                     <td className="px-4 py-4">
+
                       <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${theme.badge}`}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${theme.badge}`}
                       >
+                        <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${theme.dot}`} />
                         {event.status}
                       </span>
+
                     </td>
                     <td className="px-4 py-4 min-w-[140px]">
                       <div className="flex items-center gap-2">
@@ -709,11 +765,14 @@ export function EventsDashboard({
                         {event.committee}
                       </span>
                     )}
+
                     <span
-                      className={`rounded-full px-3 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${theme.badge}`}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${theme.badge}`}
                     >
+                      <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${theme.dot}`} />
                       {event.status}
                     </span>
+
                   </div>
                 </div>
 
@@ -744,7 +803,7 @@ export function EventsDashboard({
       {showViewContent && viewMode === "kanban" && compactMobile && (
         <div className="space-y-2 text-sm font-semibold text-slate-600">
           <p>Column</p>
-          <CustomSelect value={filter !== "All" ? filter : statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]} onChange={(status) => { setKanbanStatus(status); setFilter(status); }} options={statusOrder.map((status) => ({ value: status, label: `${status} (${events.filter((event) => event.status === status).length})`, indicatorClass: getStatusTheme(status, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
+          <CustomSelect value={filter !== "All" ? filter : statusOrder.includes(kanbanStatus) ? kanbanStatus : statusOrder[0]} onChange={(status) => { setKanbanStatus(status); setFilter(status); }} options={statusOrder.map((status) => ({ value: status, label: `${status} (${eventsInScope.filter((event) => event.status === status).length})`, indicatorClass: getStatusTheme(status, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" portal />
         </div>
       )}
       {showViewContent && viewMode === "kanban" && (
@@ -813,6 +872,7 @@ export function EventsDashboard({
                     )}
                     <span className={`h-2 w-2 rounded-full shrink-0 ${theme.dot}`} />
                     <span className="truncate uppercase tracking-wider">{status}</span>
+
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold text-slate-700 shadow-2xs">
@@ -947,7 +1007,7 @@ export function EventsDashboard({
                       className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-9 px-3 text-center transition-all ${
                         isCardOverThisCol
                           ? "border-blue-400 bg-blue-100/50 text-blue-600 font-semibold text-xs"
-                          : "border-slate-200/90 bg-white/40 text-slate-400 text-xs"
+                          : "border-slate-200/90 bg-white/40 text-slate-500 text-xs"
                       }`}
                     >
                       {isCardOverThisCol ? "Drop event here" : "No events"}
@@ -990,11 +1050,12 @@ export function EventsDashboard({
       {/* Calendar view is available to leaders and organization members. */}
       {showViewContent && viewMode === "calendar" && (
         <CalendarView
-          items={[...visible, ...googleEvents]}
+          items={[...visible, ...visibleGoogleEvents]}
           itemLabel="events"
           getId={(event) => event.id}
           getTitle={(event) => event.title}
           getStatus={(event) => event.status}
+          getScheduledTime={eventStartTime}
           getDescription={(event) => event.description}
           isScheduled={isEventScheduledOnDay}
           onSelect={(event) => {
@@ -1013,13 +1074,13 @@ export function EventsDashboard({
         />
       )}
 
-      {visible.length === 0 && !teaching && !(viewMode === "calendar" && googleEvents.length > 0) && (
+      {visible.length === 0 && !teaching && !(viewMode === "calendar" && visibleGoogleEvents.length > 0) && (
         <EmptyState
           icon={Calendar}
-          title={events.length ? "No events match these filters" : preview ? "No events to display yet" : "No events created yet"}
-          description={events.length ? "Try clearing the status and committee filters to find your events." : preview ? "Events and assigned tasks will appear once your organization membership is active." : isLeader ? "Create your first event to start planning work with your organization." : "Your organization's events will appear here once they are created."}
+          title={search.trim() ? "No events match your search" : events.length ? "No events match these filters" : preview ? "No events to display yet" : "No events created yet"}
+          description={search.trim() ? "Try another event name, description, or committee, or clear the search and filters." : events.length ? "Try clearing the event date, workflow status, or committee filters to find your events." : preview ? "Events and assigned tasks will appear once your organization membership is active." : isLeader ? "Create your first event to start planning work with your organization." : "Your organization's events will appear here once they are created."}
         >
-          {events.length > 0 && <button type="button" onClick={() => { setFilter("All"); setSelectedCommittee("All"); }} className="min-h-11 rounded-lg px-3 text-xs font-semibold text-blue-600 hover:underline">Clear filters</button>}
+          {(events.length > 0 || search.trim()) && <button type="button" onClick={() => { clearFilters(); setSearch(""); }} className="min-h-11 rounded-lg px-3 text-xs font-semibold text-blue-600 hover:underline">{search.trim() ? "Clear search and filters" : "Clear filters"}</button>}
         </EmptyState>
       )}
 
@@ -1033,15 +1094,18 @@ export function EventsDashboard({
             <button data-tour="event-filter-done" type="button" onClick={() => setFiltersOpen(false)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-blue-600">Done</button>
           </div>
           <div className="space-y-4">
+            <div className="space-y-2 text-sm font-semibold text-slate-600"><p>Event dates</p>
+              {scheduleFilterControl(true)}
+            </div>
             <div className="space-y-2 text-sm font-semibold text-slate-600"><p>Committee</p>
               <CustomSelect tourId="event-committee-filter" value={selectedCommittee} onChange={setSelectedCommittee} options={[{ value: "All", label: "All Committees" }, ...allCommitteeNames.map((name) => ({ value: name, label: name }))]} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" />
             </div>
-            <div className="space-y-2 text-sm font-semibold text-slate-600"><p>Status</p>
-              <CustomSelect value={filter} onChange={setFilter} options={allStatusFilters.map(({ key, label }) => ({ value: key, label, indicatorClass: key === "All" ? undefined : getStatusTheme(key, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" />
+            <div className="space-y-2 text-sm font-semibold text-slate-600"><p>Workflow status</p>
+              <CustomSelect tourId="event-status-filter" ariaLabel="Filter events by workflow status" value={filter} onChange={setFilter} options={allStatusFilters.map(({ key, label }) => ({ value: key, label, indicatorClass: key === "All" ? undefined : getStatusTheme(key, customStatuses).dot }))} buttonClassName="min-h-11 rounded-xl bg-white text-sm" dropdownClassName="[&_button]:min-h-11 [&_button]:text-sm" />
             </div>
             <div className="flex flex-wrap justify-between gap-2">
-              <button type="button" onClick={() => { setFilter("All"); setSelectedCommittee("All"); }} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
-              {isLeader && <button data-tour="event-custom-status" type="button" disabled={!preview && !settingsReady} onClick={() => { setFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600 disabled:opacity-50">Manage statuses</button>}
+              <button type="button" onClick={clearFilters} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-semibold">Clear filters</button>
+              <button data-tour="event-custom-status" type="button" disabled={!preview && !settingsReady} onClick={() => { setFiltersOpen(false); setIsAddStatusModalOpen(true); }} className="min-h-11 rounded-xl bg-blue-50 px-4 text-sm font-semibold text-blue-600 disabled:opacity-50">{isLeader ? "Manage statuses" : "Status guide"}</button>
             </div>
           </div>
         </dialog>
@@ -1049,6 +1113,7 @@ export function EventsDashboard({
       <AddCustomStatusModal
         isOpen={isAddStatusModalOpen}
         preview={preview}
+        readOnly={!isLeader}
         onClose={() => setIsAddStatusModalOpen(false)}
         type="event"
         customStatuses={customStatuses}

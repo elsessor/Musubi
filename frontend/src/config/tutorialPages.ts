@@ -4,8 +4,9 @@ import { getViewTourSteps } from "./tutorialViews";
 import { getCalendarConnectionSteps } from "./tutorialCalendar";
 import { getCustomStatusStep } from "./tutorialStatuses";
 import { getProfileTourSteps } from "./tutorialProfiles";
+import { getWorkflowTours } from "./tutorialWorkflows";
 
-export const PAGE_TOUR_IDS = ["page-dashboard", "page-events", "page-organization", "page-notifications", "page-settings", "page-analytics", "page-audit", "page-requests", "page-organizations", "page-members", "page-profile", "page-event-details", "page-member-profile"] as const;
+export const PAGE_TOUR_IDS = ["page-dashboard", "page-events", "page-organization", "page-notifications", "page-settings", "page-analytics", "page-audit", "page-requests", "page-organizations", "page-members", "page-profile", "page-event-details", "page-member-profile", "page-ai-atomizer"] as const;
 export type PageTourId = typeof PAGE_TOUR_IDS[number];
 export type PageTour = { id: PageTourId; title: string; route: string; steps: TourStep[] };
 
@@ -23,6 +24,11 @@ export function getPageTours(role: UserRole): PageTour[] {
   const organizationStep = (id: string, title: string, description: string, tab: string): Omit<TourStep, "route"> => ({
     ...step(id, title, description, `organization-${tab}-panel`),
     tabTarget: `${tab}-tab`, reveal: [`${tab}-tab`]
+  });
+  const planningInstructions = getWorkflowTours(role).find((workflow) => workflow.id === "ai-delegation")?.steps ?? [];
+  const planningStep = (id: string, title: string, description: string, targets: string[]): Omit<TourStep, "route"> => ({
+    ...step(id, title, description, targets[0]), reveal: ["ai-tab"], highlightTargets: targets,
+    details: planningInstructions.filter((instruction) => targets.includes(instruction.target)).map(({ title, description }) => ({ title, description }))
   });
 
   return [
@@ -49,10 +55,15 @@ export function getPageTours(role: UserRole): PageTour[] {
         ...getViewTourSteps("events", "/dashboard/events"),
         ...(leader ? [step("events-ai", "Plan with AI, then review", "AI Task Atomizer proposes tasks from your goal. Review task details, member skills, availability, and workload before confirming assignments and publishing.", "ai-tab")] : [])
       ]),
+      ...(leader ? [tour("page-ai-atomizer", "AI Task Atomizer introduction", "/dashboard/events", [
+        planningStep("ai-planning-setup", "Choose the event and starting status", "Select an existing event, or choose Create from Description for a new event. Choose the starting status for the proposed tasks. These selections do not publish changes.", ["ai-target", "ai-create-description", "ai-status"]),
+        planningStep("ai-planning-context", "Describe the plan and available resources", "Set the event date, enter the number of participating members, and describe the goal, requirements, and constraints. These details guide the proposed tasks and deadlines.", ["ai-date", "ai-members", "ai-description"]),
+        planningStep("ai-planning-generate", "Generate, review, then publish", "Close this guide and select Atomize Event with AI when the required fields are complete. Review the generated tasks, schedules, and suggested assignments before publishing. This guide does not generate or publish anything.", ["ai-generate"])
+      ])] : []),
       tour("page-event-details", "Event workspace introduction", "/dashboard/events", [
         step("event-details-summary", "Event details and progress", "Review the event's status, schedule, and overall task progress. On small screens, use Show event details to view the complete summary.", "event-summary"),
-        { ...step("event-details-tools", "Find and organize tasks", "Search tasks and filter by committee or status. On small screens, open Filters. Choose a grid, table, list, board, or calendar view.", "task-view"),
-          highlightTargets: ["task-filter-panel", "task-committee-filter", "task-status-filter", "task-search", "task-view"] },
+        { ...step("event-details-tools", "Find and organize tasks", "Choose My tasks to see work assigned to you. Search or filter by committee and status. On phones, open Filters. Switch views to review tasks and schedules.", "task-view"),
+          highlightTargets: ["task-filter-panel", "task-committee-filter", "task-assignee-filter", "task-status-filter", "task-search", "task-view"] },
         getCustomStatusStep("tasks", leader),
         ...getViewTourSteps("tasks", "/dashboard/events"),
         { ...step("event-details-tasks", leader ? "Review and plan event tasks" : "Review your responsibilities", leader
@@ -112,8 +123,8 @@ export function getPageTours(role: UserRole): PageTour[] {
   ];
 }
 
-export function getPageTourForRoute(role: UserRole, route: string, context?: "event"): PageTour | undefined {
-  return getPageTours(role).find((tour) => tour.route === route && (context === "event" ? tour.id === "page-event-details" : tour.id !== "page-event-details"));
+export function getPageTourForRoute(role: UserRole, route: string, context?: "event" | "ai"): PageTour | undefined {
+  return getPageTours(role).find((tour) => tour.route === route && (context === "event" ? tour.id === "page-event-details" : context === "ai" ? tour.id === "page-ai-atomizer" : tour.id !== "page-event-details" && tour.id !== "page-ai-atomizer"));
 }
 
 export function shouldShowPageTour(status: TutorialStatus | null, id: PageTourId): boolean {

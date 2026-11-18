@@ -5,6 +5,7 @@ import { addCalendarDays, getCalendarDates, isCalendarItemVisible, isCalendarWee
 import { isSameCalendarDay } from "@/utils/calendarSchedule";
 import { CalendarHeader } from "./CalendarHeader";
 import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
+import { sortCalendarItems } from "@/utils/workspaceSort";
 
 type CalendarViewProps<T> = {
   items: T[];
@@ -12,6 +13,7 @@ type CalendarViewProps<T> = {
   getId: (item: T) => string;
   getTitle: (item: T) => string;
   getStatus: (item: T) => string;
+  getScheduledTime?: (item: T) => number | null;
   getDescription?: (item: T) => string | undefined;
   isScheduled: (item: T, date: Date) => boolean;
   onSelect: (item: T) => void;
@@ -24,12 +26,12 @@ type CalendarViewProps<T> = {
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const dateKey = (date: Date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 
-export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, getDescription, isScheduled, onSelect, renderDetails, renderActions, renderCompactIndicator, customStatuses }: CalendarViewProps<T>) {
+export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, getScheduledTime = () => null, getDescription, isScheduled, onSelect, renderDetails, renderActions, renderCompactIndicator, customStatuses }: CalendarViewProps<T>) {
   const [date, setDate] = useState(() => new Date());
   const [period, setPeriod] = useState<CalendarPeriod>("month");
   const [options, setOptions] = useState<CalendarDisplayOptions>({ showWeekends: true, showCancelled: true, showCompleted: true, showGoogleCalendar: true });
   const today = new Date();
-  const visibleItems = items.filter((item) => isCalendarItemVisible(getStatus(item), options));
+  const visibleItems = sortCalendarItems(items.filter((item) => isCalendarItemVisible(getStatus(item), options)), getScheduledTime, getTitle, getId);
   const dates = getCalendarDates(date, period, options.showWeekends);
   const weekdays = WEEKDAYS.filter((_, index) => options.showWeekends || (index !== 0 && index !== 6));
   const entriesFor = (day: Date) => visibleItems.filter((item) => isScheduled(item, day));
@@ -73,7 +75,7 @@ export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, 
           <span className="break-words text-sm font-semibold text-slate-900">{getTitle(item)}</span>
           {getDescription?.(item) ? <span className="line-clamp-2 break-words text-xs leading-5 text-slate-500">{getDescription(item)}</span> : null}
           <span className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${theme.badge}`}>{status}</span>
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${theme.badge}`}><span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${theme.dot}`} />{status}</span>
             {renderDetails?.(item)}
           </span>
         </button>
@@ -98,7 +100,7 @@ export function CalendarView<T>({ items, itemLabel, getId, getTitle, getStatus, 
 
       {period === "month" ? (
         <>
-          <div className="grid text-center text-xs font-semibold uppercase text-slate-400 sm:border-b sm:border-slate-200 sm:bg-slate-50/50 sm:py-2.5 sm:text-[11px] sm:text-slate-500" style={{ gridTemplateColumns: `repeat(${weekdays.length}, minmax(0, 1fr))` }}>
+          <div className="grid text-center text-xs font-semibold uppercase text-slate-500 sm:border-b sm:border-slate-200 sm:bg-slate-50/50 sm:py-2.5 sm:text-[11px] dark:sm:bg-[#1e2d43]" style={{ gridTemplateColumns: `repeat(${weekdays.length}, minmax(0, 1fr))` }}>
             {weekdays.map((weekday) => <div key={weekday} className="py-1 sm:py-0"><span className="sm:hidden" aria-label={weekday}>{weekday[0]}</span><span className="hidden sm:inline">{weekday}</span></div>)}
           </div>
           <div className="grid gap-1 sm:hidden" style={{ gridTemplateColumns: `repeat(${weekdays.length}, minmax(0, 1fr))` }}>

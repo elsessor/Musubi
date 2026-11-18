@@ -87,6 +87,8 @@ export type Task = {
 };
 
 export type Event = {
+  createdAt?: string | null;
+  updatedAt?: string | null;
   orgId?: string | null;
   archivedAt?: string | null;
   archivedByUID?: string | null;

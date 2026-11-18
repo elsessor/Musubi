@@ -1809,6 +1809,8 @@ export async function getEventsForUser(uid: string, orgId?: string) {
   return rawEvents.map((data) => {
     return {
       id: data.id,
+      createdAt: typeof data.createdAt === "string" ? data.createdAt : asIsoString(data.createdAt),
+      updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : asIsoString(data.updatedAt),
       title: typeof data.title === "string" ? data.title : "Untitled Event",
       description: typeof data.description === "string" ? data.description : "",
       status: typeof data.status === "string" && data.status.trim()

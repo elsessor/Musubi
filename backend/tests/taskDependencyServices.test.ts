@@ -146,10 +146,29 @@ test("event loading retains prerequisite IDs and recomputes stale blocked counts
   const service = loadFunctions("../../../frontend/src/services/events.service.ts", ["normalizeEvent"], { getEventMemberCount, withTaskDependencyState });
   const tasks = initialTasks();
   tasks[0].status = "Completed";
-  const normalized = service.normalizeEvent("event", { tasks });
+  const normalized = service.normalizeEvent("event", { tasks, createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-18T00:00:00Z" });
+  assert.equal(normalized.createdAt, "2026-11-01T00:00:00Z");
+  assert.equal(normalized.updatedAt, "2026-11-18T00:00:00Z");
   assert.deepEqual(normalized.tasks[1].dependsOnTaskIds, ["budget"]);
   assert.equal(normalized.tasks[1].blockedBy, 0);
   assert.equal(normalized.tasks[2].blockedBy, 1);
+});
+
+test("event loading exposes stored timestamps for recent sorting without inventing missing metadata", async () => {
+  const timestamp = { toDate: () => new Date("2026-11-01T00:00:00Z") };
+  const events = [{ id: "timestamp", createdAt: timestamp, updatedAt: timestamp }, { id: "iso", createdAt: "2026-11-18T00:00:00Z" }, { id: "legacy" }];
+  const service = loadFunctions("auth.service.ts", ["getEventsForUser", "asIsoString"], {
+    getCurrentUser: async () => ({ uid: "viewer", role: "Organization Member", organizationId: "org" }),
+    assertEventAccess: () => {}, getEventMemberCount,
+    taskForViewer: (_user: unknown, task: unknown) => task,
+    appCache: { get: (key: string) => key.startsWith("events_raw:") ? events : {} }
+  });
+  const loaded = await service.getEventsForUser("viewer", "org");
+  assert.equal(loaded[0].createdAt, "2026-11-01T00:00:00.000Z");
+  assert.equal(loaded[0].updatedAt, "2026-11-01T00:00:00.000Z");
+  assert.equal(loaded[1].createdAt, "2026-11-18T00:00:00Z");
+  assert.equal(loaded[1].updatedAt, null);
+  assert.equal(loaded[2].createdAt, null);
 });
 
 test("event writes cannot fall back to direct database writes when authentication expires", async () => {

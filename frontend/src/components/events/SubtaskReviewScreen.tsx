@@ -40,7 +40,7 @@ import { useToastStore } from "@/store/toastStore";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { MemberAvatar } from "@/components/dashboard/MemberAvatar";
 
-import { getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
+import { getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { AtomizedTaskEditModal } from "./AtomizedTaskEditModal";
 import { parseScheduleDate } from "@/utils/dateRange";
 import { resolveSubtaskAssignee, uniqueOrganizationMembers } from "@/utils/subtaskAssignment";
@@ -795,21 +795,16 @@ function OldTaskCard({
       {/* Status Box */}
       {(() => {
         const subtaskStatus = subtask.status || "To Do";
-        const statusInfo = getTaskStatusDescription(subtaskStatus, customStatuses);
         return (
           <div className="mt-3 rounded-xl bg-[#f1f5f9] px-3 py-2.5 text-xs">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <span className="font-semibold text-slate-500">Status:</span>
               <span
-                title={statusInfo.meaning}
                 className={`rounded-full px-2 py-0.5 font-bold ${getStatusTheme(subtaskStatus, customStatuses).badge}`}
               >
                 {subtaskStatus}
               </span>
             </div>
-            <p className="mt-1 text-[11px] font-normal text-slate-500 leading-tight">
-              {statusInfo.description}
-            </p>
           </div>
         );
       })()}

@@ -13,8 +13,7 @@ import {
   Settings,
   ShieldCheck,
   Target,
-  Users,
-  Zap
+  Users
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -22,6 +21,7 @@ import Image from "next/image";
 import type { DashboardNavItem } from "@/types/dashboard";
 import { cn } from "@/utils/cn";
 import { useNavigationLoading } from "@/app/navigationLoading";
+import { MusubiLogo } from "@/components/brand/MusubiLogo";
 
 type SidebarProps = {
   userName: string;
@@ -56,7 +56,7 @@ function AvatarFallback({ name, role, profilePicture }: { name: string; role: Si
   return (
     <div className={cn(
       "relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-extrabold text-white",
-      role === "Admin" ? "bg-[#ef2360]" : "bg-[#385779]"
+      role === "Admin" ? "bg-[#ef2360]" : "bg-[#385779] dark:bg-[#244164]"
     )}>
       {initial || "?"}
       {profilePicture ? <Image unoptimized width={40} height={40} src={profilePicture} alt="" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 size-full rounded-full object-cover" /> : null}
@@ -86,7 +86,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex -translate-x-full flex-col bg-[#213f68] text-white shadow-xl transition-all duration-300 md:z-30 md:translate-x-0 md:shadow-none",
+        "fixed inset-y-0 left-0 z-40 flex -translate-x-full flex-col bg-[#213f68] text-white shadow-xl transition-all duration-300 dark:bg-[#101c2e] md:z-30 md:translate-x-0 md:shadow-none",
         mobileOpen && "translate-x-0",
         collapsed ? "w-20 md:w-20" : "w-72 max-w-[85vw] md:w-64 md:max-w-none"
       )}
@@ -111,21 +111,17 @@ export function Sidebar({
 
       {/* Top Header Logo */}
       <div className={cn(
-        "flex min-h-[88px] shrink-0 items-center border-b border-white/10 py-4",
+        "flex h-[var(--dashboard-header-height)] shrink-0 items-center border-b border-white/10 dark:border-[#2b3d55]",
         collapsed ? "justify-center px-2" : "px-4"
       )}>
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#2868ed] shadow-[0_10px_24px_rgba(20,80,192,0.3)]">
-            <Zap className="size-5 text-white" strokeWidth={2.25} />
-          </div>
+          <MusubiLogo size={40} className="size-10 shrink-0" decorative={!collapsed} />
           {!collapsed ? (
             <div className="min-w-0">
-              <p className="truncate text-base font-extrabold leading-tight tracking-[-0.02em]">
-                {role === "Admin" ? "AI Workflow & Task Orchestr" : "Musubi"}
+              <p className={cn("truncate font-extrabold leading-tight tracking-[-0.02em]", role === "Admin" ? "text-base" : "text-2xl")}>
+                {role === "Admin" ? "AI Workflow & Task Orchestr" : "Musubi."}
               </p>
-              <p className="mt-1 text-xs font-semibold leading-tight text-[#aebdd0]">
-                {role === "Admin" ? "Admin Panel" : "Campus Organizations"}
-              </p>
+              {role === "Admin" && <p className="mt-1 text-xs font-semibold leading-tight text-[#aebdd0] dark:text-[#9cafc8]">Admin Panel</p>}
             </div>
           ) : null}
         </div>
@@ -133,7 +129,7 @@ export function Sidebar({
 
       {/* User Profile Header */}
       <div className={cn(
-        "flex min-h-[88px] shrink-0 items-center border-b border-white/10 py-4",
+        "flex min-h-[88px] shrink-0 items-center border-b border-white/10 py-4 dark:border-[#2b3d55]",
         collapsed ? "justify-center px-2" : "px-4"
       )}>
         <Link
@@ -141,14 +137,14 @@ export function Sidebar({
           href="/dashboard/profile"
           onClick={onNavigate}
           aria-label={`View and edit profile for ${userName}`}
-          className={cn("flex min-h-14 w-full min-w-0 items-center gap-3 rounded-xl px-2 py-2 outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-white/70", collapsed && "justify-center")}
+          className={cn("flex min-h-14 w-full min-w-0 items-center gap-3 rounded-xl px-2 py-2 outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-white/70 dark:hover:bg-[#1e2d43] dark:focus-visible:ring-blue-300", collapsed && "justify-center")}
           title={collapsed ? `${userName} · View profile` : undefined}
         >
           <AvatarFallback name={userName} role={role} profilePicture={profilePicture} />
           {!collapsed ? (
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-extrabold leading-tight">{userName}</p>
-              <p className="mt-1 truncate text-xs font-semibold leading-tight text-[#aebdd0]">{roleLabel}</p>
+              <p className="mt-1 truncate text-xs font-semibold leading-tight text-[#aebdd0] dark:text-[#9cafc8]">{roleLabel}</p>
             </div>
           ) : null}
         </Link>
@@ -167,10 +163,10 @@ export function Sidebar({
                   data-tour={`nav-${item.id}`}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "group relative flex h-11 items-center gap-3 rounded-xl text-sm font-semibold transition",
+                    "group relative flex h-11 items-center gap-3 rounded-xl text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-white/70 dark:focus-visible:ring-blue-300",
                     active
-                      ? "bg-[#385779] text-white"
-                      : "text-[#b4c1d3] hover:bg-white/[0.07] hover:text-white",
+                      ? "bg-[#385779] text-white dark:bg-[#244164]"
+                      : "text-[#b4c1d3] hover:bg-white/[0.07] hover:text-white dark:text-[#b7c7db] dark:hover:bg-[#1e2d43] dark:hover:text-white",
                     collapsed ? "justify-center px-0" : "px-3"
                   )}
                   href={item.href}
@@ -180,7 +176,7 @@ export function Sidebar({
                   }}
                   title={collapsed ? item.label : undefined}
                 >
-                  <Icon className={cn("size-5 shrink-0", active ? "text-white" : "text-[#afbed0]")} strokeWidth={1.8} />
+                  <Icon className={cn("size-5 shrink-0", active ? "text-white" : "text-[#afbed0] group-hover:text-white dark:text-[#aabbd2] dark:group-hover:text-white")} strokeWidth={1.8} />
                   {!collapsed ? <span className="flex-1 truncate">{item.label}</span> : null}
 
                   {item.badge ? (
@@ -201,10 +197,10 @@ export function Sidebar({
       </nav>
 
       {/* Logout Footer */}
-      <div className="shrink-0 border-t border-white/10 px-3 py-3">
+      <div className="shrink-0 border-t border-white/10 px-3 py-3 dark:border-[#2b3d55]">
         <button
           className={cn(
-            "flex h-11 w-full items-center gap-3 rounded-xl text-sm font-semibold text-[#b4c1d3] transition hover:bg-white/[0.07] hover:text-white",
+            "flex h-11 w-full items-center gap-3 rounded-xl text-sm font-semibold text-[#b4c1d3] outline-none transition hover:bg-white/[0.07] hover:text-white focus-visible:ring-2 focus-visible:ring-white/70 dark:text-[#b7c7db] dark:hover:bg-[#1e2d43] dark:hover:text-white dark:focus-visible:ring-blue-300",
             collapsed ? "justify-center px-0" : "px-3"
           )}
           onClick={onLogout}

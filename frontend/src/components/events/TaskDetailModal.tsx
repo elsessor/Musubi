@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useId, useState } from "react";
 import type { Task, TaskPriority, TaskStatus } from "./types";
-import { getOrderedTaskStatuses, getStatusTheme, getTaskStatusDescription, type CustomStatusConfig } from "./statusUtils";
+import { getOrderedTaskStatuses, getStatusTheme, type CustomStatusConfig } from "./statusUtils";
 import { type OrgMemberItem } from "./AddTaskModal";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
@@ -307,6 +307,7 @@ export function TaskDetailModal({
               <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4">
                 <div data-tour="task-status">
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600">Status</label>
+
                   {canEdit ? <CustomSelect
                     value={status}
                     onChange={(value) => setStatus(value as TaskStatus)}
@@ -316,6 +317,7 @@ export function TaskDetailModal({
                   /> : <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold ${getStatusTheme(task.status, customStatuses).badge}`}>
                     <span className={`size-1.5 rounded-full ${getStatusTheme(task.status, customStatuses).dot}`} />{task.status}
                   </span>}
+
                 </div>
 
                 <div data-tour="task-priority">
@@ -323,7 +325,7 @@ export function TaskDetailModal({
                   {isLeader ? (
                     <CustomSelect value={priority} onChange={(value) => setPriority(value as TaskPriority)} options={priorityOptions} buttonClassName="py-2 text-xs" disabled={!canEdit} />
                   ) : (
-                    <p className={`flex h-9 items-center rounded-xl border px-3 text-xs font-semibold ${PRIORITY_CONFIG[task.priority || "Medium"].classes}`}>{task.priority || "Medium"}</p>
+                    <p className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold ${PRIORITY_CONFIG[task.priority || "Medium"].classes}`}><span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${PRIORITY_CONFIG[task.priority || "Medium"].dot}`} />{task.priority || "Medium"}</p>
                   )}
                 </div>
               </div>

@@ -12,6 +12,8 @@ import * as eventMembers from "../../frontend/src/utils/eventMembers.js";
 import * as claims from "../../frontend/src/utils/taskClaims.js";
 import * as calendarViews from "../../frontend/src/utils/calendarViews.js";
 import * as calendarSchedule from "../../frontend/src/utils/calendarSchedule.js";
+import * as workspaceSort from "../../frontend/src/utils/workspaceSort.js";
+import * as eventSearch from "../../frontend/src/utils/eventSearch.js";
 
 type Node = { type: any; props: Record<string, any> };
 function children(node: any): Node[] {
@@ -44,6 +46,9 @@ function ui(file: string, role = "Student Leader", extraMocks: Record<string, an
     "@/utils/taskDependencies": dependencies, "@/utils/taskAssignment": assignment, "@/utils/dateRange": dates,
     "@/utils/eventMembers": eventMembers, "@/utils/taskTiming": timing,
     "@/utils/taskClaims": claims,
+    "@/utils/workspaceSort": workspaceSort,
+    "@/utils/eventSearch": eventSearch,
+    "@/hooks/useSortingClock": { useSortingClock: () => Date.parse("2026-11-18T00:00:00Z") },
     "@/store/authStore": { useAuthStore }, "@/store/toastStore": { useToastStore },
     "./priorityUtils": { ALL_PRIORITIES: ["Low", "Medium", "High", "Critical"], PRIORITY_CONFIG: new Proxy({}, { get: (_target, name) => ({ label: name, classes: "", dot: "" }) }) },
     "./statusUtils": { ...statusUtils, getStatusTheme: () => ({ badge: "", dot: "", border: "" }), getOrderedTaskStatuses: () => ["To Do", "In Progress", "In Review", "Completed"] }
@@ -60,6 +65,73 @@ const allTasks = () => dependencies.withTaskDependencyState([
   { id: "b", title: "Purchase materials", status: "To Do", assignee: { initials: "M", color: "bg-blue-600" }, priority: "Medium", dueDate: "", assignedMemberUID: "member", dependsOnTaskIds: ["a"] }
 ]);
 const find = (tree: Node, predicate: (node: Node) => boolean) => children(tree).find(predicate)!;
+
+test("My tasks filters every view for members and leaders using assignment identity", () => {
+  for (const role of ["Student Leader", "Organization Member"]) {
+    let selectView = (_mode: string) => {};
+    const app = ui("KanbanBoard.tsx", role, {
+      "@/hooks/useTutorialView": { useTutorialView: (select: (mode: string) => void) => { selectView = select; return { current: null }; } }
+    });
+    const base = allTasks()[0];
+    const tasks = [
+      { ...base, id: "mine", title: "My assigned task", committee: "Events" },
+      { ...base, id: "other", title: "Same name, different account", assignedMemberUID: "other", assignedMemberName: "Member" },
+      { ...base, id: "legacy", title: "Legacy task", assignedMemberUID: null, assignedMemberName: " MEMBER " },
+      { ...base, id: "unassigned", title: "Unassigned task", assignedMemberUID: null },
+      { ...base, id: "archive", archivedAt: "2026-11-17T00:00:00Z" }
+    ];
+    const event = { id: "event", title: "Event", status: "Active", tasks, progress: 0 };
+    const original = structuredClone(event);
+    const props = { event, isLeader: role === "Student Leader", onBack: () => {}, onUpdateEvent: () => assert.fail("Filtering must not save") };
+    let tree = app.render("KanbanBoard", props);
+    find(tree, n => n.type === "TaskAssigneeFilter").props.onChange("mine");
+    for (const [mode, component] of Object.entries({ grid: "TaskGridView", table: "TaskTableView", expanded: "TaskExpandedView", kanban: "KanbanColumn", calendar: "TaskCalendarView" })) {
+      selectView(mode);
+      tree = app.render("KanbanBoard", props);
+      const shown = children(tree).filter(n => n.type === component).flatMap(n => n.props.tasks.map((task: any) => task.id));
+      assert.deepEqual(shown.sort(), ["legacy", "mine"], `${role}: ${mode}`);
+    }
+    const pill = (label: string) => find(tree, n => n.type === "button" && Array.isArray(n.props.children) && n.props.children.includes(label));
+    assert.equal(pill("All Tasks").props.children.at(-1).props.children, 2);
+    assert.equal(pill("Archived").props.children.at(-1).props.children, 1);
+    selectView("grid");
+    pill("Archived").props.onClick();
+    tree = app.render("KanbanBoard", props);
+    assert.deepEqual(find(tree, n => n.type === "TaskGridView").props.tasks.map((t: any) => t.id), ["archive"]);
+    find(tree, n => n.type === "TaskAssigneeFilter").props.onChange("all");
+    tree = app.render("KanbanBoard", props);
+    pill("All Tasks").props.onClick();
+    tree = app.render("KanbanBoard", props);
+    assert.equal(find(tree, n => n.type === "TaskGridView").props.tasks.length, 4);
+    assert.deepEqual(event, original);
+  }
+});
+
+test("My tasks combines with search and committee filters and can be cleared on phones", () => {
+  const app = ui("KanbanBoard.tsx", "Organization Member");
+  const base = allTasks()[0];
+  const props = { event: { id: "event", title: "Event", status: "Active", progress: 0, tasks: [
+    { ...base, id: "a", title: "Prepare invitations", committee: "Events" },
+    { ...base, id: "b", title: "Prepare budget", committee: "Finance" },
+    { ...base, id: "c", title: "Prepare posters", committee: "Events", assignedMemberUID: "other" }
+  ] }, isLeader: false, onBack: () => {} };
+  let tree = app.render("KanbanBoard", props);
+  find(tree, n => n.type === "TaskAssigneeFilter").props.onChange("mine");
+  find(tree, n => n.props.tourId === "task-committee-filter").props.onChange("Events");
+  find(tree, n => n.props["aria-label"] === "Search tasks").props.onChange({ target: { value: "Prepare" } });
+  tree = app.render("KanbanBoard", props);
+  assert.deepEqual(find(tree, n => n.type === "TaskGridView").props.tasks.map((t: any) => t.id), ["a"]);
+  find(tree, n => n.props["aria-label"] === "Search tasks").props.onChange({ target: { value: "No match" } });
+  tree = app.render("KanbanBoard", props);
+  assert.match(find(tree, n => n.type === "EmptyState").props.title, /No tasks assigned to you/);
+  find(tree, n => n.props["data-tour"] === "task-filter-panel").props.onClick();
+  tree = app.render("KanbanBoard", props);
+  assert.equal(find(tree, n => n.type === "TaskAssigneeFilter" && n.props.mobile).props.value, "mine");
+  find(tree, n => n.type === "button" && n.props.children === "Clear filters").props.onClick();
+  tree = app.render("KanbanBoard", props);
+  assert.equal(find(tree, n => n.type === "TaskAssigneeFilter").props.value, "all");
+  assert.equal(find(tree, n => n.type === "TaskGridView").props.tasks.length, 3);
+});
 
 test("teaching examples disappear when a guide closes, return on replay, and never replace real events", () => {
   let teaching = true;

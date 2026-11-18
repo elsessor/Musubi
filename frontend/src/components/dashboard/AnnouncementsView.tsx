@@ -58,7 +58,7 @@ export function AnnouncementsView({
             <div
               key={ann.id}
               onClick={() => setSelectedAnnouncement(ann)}
-              className="group flex items-center justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs transition hover:border-slate-300 hover:shadow-md cursor-pointer"
+              className="group flex items-center justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs transition hover:border-slate-300 hover:shadow-md dark:hover:!border-[#345988] dark:hover:bg-[#1e2d43] cursor-pointer"
             >
               <div className="space-y-1.5 min-w-0 pr-4">
                 {/* Badges */}
@@ -90,7 +90,7 @@ export function AnnouncementsView({
                 </p>
               </div>
 
-              <ChevronRight className="size-4 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition shrink-0" />
+              <ChevronRight className="size-4 text-slate-300 group-hover:text-slate-500 dark:group-hover:text-blue-300 group-hover:translate-x-0.5 transition shrink-0" />
             </div>
           ))}
         </div>
