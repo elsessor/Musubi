@@ -15,6 +15,7 @@ test("deadline notifications are personal and durable, and reading one does not 
       updateDoc: async (_doc: any, update: any) => updates.push(update)
     },
     "../firebase/config": { getFirebaseDb: () => ({}) },
+    "./auth.service": { readNotificationRecords: async () => { throw new Error("Exercise SDK fallback"); } },
     "./announcements.service": { subscribeAnnouncementsFirestore: () => () => {} },
     "@/store/authStore": { useAuthStore: { getState: () => ({ profile: { uid: "member", role: "Organization Member", organizationId: "org" } }) } }
   };
@@ -31,6 +32,7 @@ test("deadline notifications are personal and durable, and reading one does not 
     { id: "leader-only", data: () => ({ ...notice, recipientUID: "leader" }) },
     { id: "broadcast", data: () => ({ orgId: "org", type: "system", title: "General update" }) }
   ] });
+  callbacks[1]({ docs: [{ id: "broadcast", data: () => ({ orgId: "org", type: "system", title: "General update" }) }] });
   assert.deepEqual(rows.map(row => row.id).sort(), ["broadcast", "first", "other-task"]);
   assert.equal(rows[0].nudgeCategory, "deadline");
   await service.markNotificationAsRead({ uid: "member" }, "first");

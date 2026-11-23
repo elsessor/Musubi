@@ -321,11 +321,14 @@ function startNotificationStream(
   });
 
   let stopped = false, refreshing = false, refreshAgain = false;
+  let lastRefreshAt: number | null = null;
   let fallbackInterval: number | undefined;
   let controller: AbortController | undefined;
-  const refreshBackend = async () => {
+  const refreshBackend = async (force = false) => {
     if (stopped || typeof window === "undefined" || document.hidden || !user) return;
-    if (refreshing) { refreshAgain = true; return; }
+    if (refreshing) { if (force) refreshAgain = true; return; }
+    if (!force && lastRefreshAt !== null && Date.now() - lastRefreshAt < 30000) return;
+    lastRefreshAt = Date.now();
     refreshing = true;
     controller = new AbortController();
     const timeout = window.setTimeout(() => controller?.abort(), 15000);
@@ -342,14 +345,14 @@ function startNotificationStream(
       if (!stopped && fallbackInterval) console.warn("Notification refresh failed; retrying shortly.", error);
     } finally {
       window.clearTimeout(timeout); refreshing = false;
-      if (refreshAgain && !stopped) { refreshAgain = false; void refreshBackend(); }
+      if (refreshAgain && !stopped) { refreshAgain = false; void refreshBackend(true); }
     }
   };
   const startApiFallback = () => {
     if (typeof window === "undefined" || fallbackInterval) return;
     console.warn("Live notification access is unavailable; using authenticated notification refresh.");
-    fallbackInterval = window.setInterval(() => { void refreshBackend(); }, 10000);
-    void refreshBackend();
+    fallbackInterval = window.setInterval(() => { void refreshBackend(true); }, 60000);
+    void refreshBackend(true);
   };
   // Personal updates remain available before joining, after rejection, and after switching organizations.
   const unsubPersonal = db ? onSnapshot(query(collection(db, "notifications"), where("recipientUID", "==", currentUid)), (snapshot) => {

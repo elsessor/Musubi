@@ -107,10 +107,11 @@ test("toasts cover live membership decisions once, defer hidden-tab alerts, and 
 });
 
 test("client streams share one subscription, preserve personal alerts across organizations, and use API fallback after permission errors", async (t) => {
+  const intervalDelays: number[] = [];
   const intervals = new Set<() => void>(), listeners = new Map<string, Set<() => void>>(), storage = new Map<string, string>();
   const globals: Record<string, any> = {
     window: { addEventListener: (name: string, fn: () => void) => { const set = listeners.get(name) ?? new Set(); set.add(fn); listeners.set(name, set); }, removeEventListener: (name: string, fn: () => void) => listeners.get(name)?.delete(fn),
-      setTimeout: () => 1, clearTimeout: () => {}, setInterval: (fn: () => void) => { intervals.add(fn); return fn; }, clearInterval: (fn: () => void) => intervals.delete(fn) },
+      setTimeout: () => 1, clearTimeout: () => {}, setInterval: (fn: () => void, delay: number) => { intervalDelays.push(delay); intervals.add(fn); return fn; }, clearInterval: (fn: () => void) => intervals.delete(fn) },
     document: { hidden: false, addEventListener: () => {}, removeEventListener: () => {} },
     localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) }
   };
@@ -138,6 +139,11 @@ test("client streams share one subscription, preserve personal alerts across org
   assert.equal(feed[0].id, "personal");
   assert.equal(feed[0].unread, true);
   assert.deepEqual(feed, mirror);
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  const callsBeforeFocus = apiCalls;
+  for (let i = 0; i < 10; i++) for (const callback of listeners.get("focus") || []) callback();
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.equal(apiCalls, callsBeforeFocus, "Repeated tab focus must not re-read the notification history");
   apiRecords = [{ ...notice, id: "api-only", joinRequestId: "request" }];
   snapshots[0].error({ code: "permission-denied" });
   snapshots[1].error({ code: "permission-denied" });
@@ -146,6 +152,7 @@ test("client streams share one subscription, preserve personal alerts across org
   for (let i = 0; i < 8; i++) await Promise.resolve();
   assert.ok(feed.some(item => item.id === "api-only"));
   assert.ok(apiCalls >= 2);
+  assert.deepEqual(intervalDelays, [60000], "Both listener errors share a single one-minute fallback");
   stopMirror(); assert.equal(stopped, 0);
   stop(); assert.equal(stopped, 3); assert.equal(intervals.size, 0);
 });

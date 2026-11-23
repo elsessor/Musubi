@@ -1327,6 +1327,8 @@ function asIsoString(value: unknown): string | null {
 }
 
 async function buildAdminMemberDirectory(): Promise<AdminMemberDirectory> {
+  const cached = appCache.get<AdminMemberDirectory>("admin_member_directory");
+  if (cached) return cached;
   const [usersSnap, orgsSnap, joinRequestsSnap] = await Promise.all([
     firestore.collection("users").get(),
     firestore.collection("organizations").where("status", "==", "active").get(),
@@ -1382,7 +1384,9 @@ async function buildAdminMemberDirectory(): Promise<AdminMemberDirectory> {
     };
   });
 
-  return { members, organizations, committees };
+  const directory = { members, organizations, committees };
+  appCache.set("admin_member_directory", directory, 60_000);
+  return directory;
 }
 
 export async function getAdminMemberDirectory(uid: string): Promise<AdminMemberDirectory> {
@@ -1402,6 +1406,8 @@ export async function watchAdminMemberDirectory(
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const trigger = () => {
     if (!active) return;
+    // A live update must invalidate the shared directory before rebuilding it.
+    appCache.delete("admin_member_directory");
     const currentGeneration = ++generation;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
@@ -1677,7 +1683,7 @@ export async function createEventForUser(uid: string, input: { orgId?: string; t
     });
 
     // Run due nudges check immediately to dispatch any 3-day or 1-day nudges right away
-    runDueNudgesCheck().catch((nudgeErr) => console.warn("[Auto-Nudge] Post-event due check warning:", nudgeErr));
+    runDueNudgesCheck({ organizationId: targetOrgId }).catch((nudgeErr) => console.warn("[Auto-Nudge] Post-event due check warning:", nudgeErr));
   } catch (emailErr) {
     console.warn("[Email Notification] Non-blocking event publication email warning:", emailErr);
   }
