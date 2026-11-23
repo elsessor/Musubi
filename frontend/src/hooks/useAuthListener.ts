@@ -60,10 +60,10 @@ export function useAuthListener() {
       try {
         const session = await exchangeFirebaseSession(firebaseUser, firebaseUser.displayName || undefined);
         setProfile(session.user);
-      } catch {
+      } catch (error) {
         showToast({
           title: "Session sync failed",
-          description: "You are signed in with Firebase, but the backend session could not start.",
+          description: error instanceof Error ? error.message : "You are signed in with Firebase, but the backend session could not start.",
           tone: "error"
         });
       }

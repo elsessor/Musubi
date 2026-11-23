@@ -135,7 +135,20 @@ function normalizeAdminAccountStatus(value: unknown): AdminMemberRecord["account
 
 // ── Session / auth ────────────────────────────────────────────────────────────
 
-export async function exchangeFirebaseSession(user: User, fullName?: string): Promise<BackendLoginResponse> {
+const sessionRequests = new Map<string, Promise<BackendLoginResponse>>();
+
+export function exchangeFirebaseSession(user: User, fullName?: string): Promise<BackendLoginResponse> {
+  const key = JSON.stringify([user.uid, (fullName && fullName.trim()) || user.displayName || ""]);
+  const pending = sessionRequests.get(key);
+  if (pending) return pending;
+  const request = requestFirebaseSession(user, fullName);
+  sessionRequests.set(key, request);
+  const cleanup = () => { if (sessionRequests.get(key) === request) sessionRequests.delete(key); };
+  void request.then(cleanup, cleanup);
+  return request;
+}
+
+async function requestFirebaseSession(user: User, fullName?: string): Promise<BackendLoginResponse> {
   const idToken = await user.getIdToken();
   const displayName = (fullName && fullName.trim()) || user.displayName || undefined;
 
@@ -149,7 +162,14 @@ export async function exchangeFirebaseSession(user: User, fullName?: string): Pr
   });
 
   if (!response.ok) {
-    throw new Error("Unable to start a secure app session. Please try again.");
+    const failure = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+    if (failure?.code === "DATABASE_QUOTA_EXCEEDED") {
+      throw new Error("Sign-in could not finish because the database has reached its usage limit. Please try again after the quota resets or contact the project administrator.");
+    }
+    if (failure?.message && typeof failure.message === "string") throw new Error(failure.message);
+    if (response.status === 401) throw new Error("Your sign-in session expired. Please sign in again.");
+    if (response.status === 429) throw new Error("Too many sign-in requests. Please wait a moment and try again.");
+    throw new Error("The authentication server could not load your account. Please try again later.");
   }
 
   const data: unknown = await response.json();
