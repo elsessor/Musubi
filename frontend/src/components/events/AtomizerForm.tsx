@@ -382,7 +382,7 @@ export function AtomizerForm({ events, members = [], onPublishGoalTasks }: Atomi
       console.error("[Atomizer] Error running Genkit flow:", err);
       const rawMsg = err instanceof Error ? err.message : "Failed to atomize event using Genkit AI.";
       if (rawMsg.includes("429") || rawMsg.includes("quota") || rawMsg.includes("Too Many Requests")) {
-        setErrorMsg("Gemini API rate limit reached (5 requests/min on Free Tier). Please wait ~30 seconds before trying again.");
+        setErrorMsg("Task generation reached a service usage limit. Please try again later; if it persists, ask your administrator to check the service quota.");
       } else {
         setErrorMsg(rawMsg);
       }

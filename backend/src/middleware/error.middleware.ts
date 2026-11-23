@@ -31,11 +31,21 @@ export function errorMiddleware(
   }
 
   const message = error instanceof Error ? error.message : "Internal server error.";
-  const isRateLimit = message.includes("429 Too Many Requests") || message.includes("Quota exceeded");
+  const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+  const isQuotaError = code === 8 || code === "RESOURCE_EXHAUSTED"
+    || /quota exceeded|resource[_ ]exhausted|429|too many requests/i.test(message);
+  const isAiError = /genkit|gemini|generativelanguage|googleai/i.test(message);
 
-  response.status(isRateLimit ? 429 : 500).json({
-    message: isRateLimit
-      ? "Gemini AI API rate limit exceeded (Free Tier limit is 5 requests/min). Please wait ~30 seconds before trying again, or upgrade your API key billing."
-      : message
-  });
+  if (isQuotaError) {
+    response.status(isAiError ? 429 : 503).json({
+      code: isAiError ? "AI_QUOTA_EXCEEDED" : "DATABASE_QUOTA_EXCEEDED",
+      message: isAiError
+        ? "AI generation has reached a service usage limit. Please try again later. If it persists, check the AI project's quota."
+        : "The database has reached a usage or capacity limit. Please try again later. The project administrator should check Cloud Firestore usage and quotas."
+    });
+    return;
+  }
+
+  response.status(500).json({ message });
+
 }
