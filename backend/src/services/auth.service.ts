@@ -432,6 +432,8 @@ export async function reviewOrganizationRequest(uid: string, requestId: string, 
       status: "active", requestedByUID: typeof request.requestedBy?.uid === "string" ? request.requestedBy.uid : null,
       organizationConfig: {}, createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(), updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
+    appCache.delete("admin_organizations");
+    appCache.delete("admin_member_directory");
     appCache.delete("org_record:" + request.organizationId);
     appCache.delete("org_doc:" + request.organizationId);
     if (typeof request.requestedBy?.uid === "string") {
@@ -511,6 +513,7 @@ export async function joinOrganization(uid: string, organizationId: string) {
     invalidateUserCache(uid);
     appCache.deletePrefix("members:");
     appCache.delete("admin_member_directory");
+    appCache.delete("admin_organizations");
     const user = await getCurrentUser(uid);
     writeAuditLog({ actorUID: uid, actorName: user.fullName, actorRole: user.role,
       action: "Test organization membership accepted automatically", actionCategory: "Organization",
@@ -640,6 +643,7 @@ export async function reviewOrganizationJoinRequest(uid: string, organizationId:
   if (status === "accepted") {
     appCache.deletePrefix("members:");
     appCache.delete("admin_member_directory");
+    appCache.delete("admin_organizations");
   }
   writeAuditLog({
     actorUID: uid,
@@ -679,6 +683,8 @@ export async function createOrganization(uid: string, input: { name: string; typ
   });
   invalidateUserCache(uid);
   appCache.deletePrefix("members:");
+  appCache.delete("admin_organizations");
+  appCache.delete("admin_member_directory");
   writeAuditLog({
     actorUID: uid,
     actorName: user.fullName,
@@ -750,6 +756,7 @@ export async function removeOrganizationMember(uid: string, organizationId: stri
   invalidateUserCache(memberId);
   appCache.deletePrefix("members:");
   appCache.delete("admin_member_directory");
+  appCache.delete("admin_organizations");
 
   const memberName = typeof member.fullName === "string" ? member.fullName : "Organization member";
   writeAuditLog({
@@ -942,6 +949,8 @@ async function requireAdmin(uid: string) {
 
 export async function getOrganizationsForAdmin(uid: string) {
   await requireAdmin(uid);
+  const cached = appCache.get<ReturnType<typeof normalizeOrganization>[]>("admin_organizations");
+  if (cached) return cached;
   let snapshot = await firestore.collection("organizations").get();
 
   if (snapshot.empty) {
@@ -986,14 +995,18 @@ export async function getOrganizationsForAdmin(uid: string) {
     snapshot = await firestore.collection("organizations").get();
   }
 
-  return Promise.all(snapshot.docs.map(async (document) => {
+  const organizations = await Promise.all(snapshot.docs.map(async (document) => {
     const [members, memberRecords, committees] = await Promise.all([
-      firestore.collection("users").where("organizationId", "==", document.id).get(),
-      document.ref.collection("members").get(),
-      document.ref.collection("committees").get()
+      firestore.collection("users").where("organizationId", "==", document.id).count().get(),
+      document.ref.collection("members").count().get(),
+      document.ref.collection("committees").count().get()
     ]);
-    return { ...normalizeOrganization(document.id, document.data()), memberCount: memberRecords.size || members.size, committeeCount: committees.size };
+    return { ...normalizeOrganization(document.id, document.data()),
+      memberCount: memberRecords.data().count || members.data().count,
+      committeeCount: committees.data().count };
   }));
+  appCache.set("admin_organizations", organizations, 60_000);
+  return organizations;
 }
 
 export async function getOrganizationManagementDetail(uid: string, organizationId: string) {
@@ -1068,6 +1081,7 @@ export async function updateOrganizationForAdmin(uid: string, organizationId: st
   if (input.description !== undefined) update.description = input.description.trim();
   if (input.setupStatus !== undefined) update.setupStatus = input.setupStatus;
   await ref.update(update);
+  appCache.delete("admin_organizations");
   const updated = await ref.get();
   const orgName = typeof before.data()?.name === "string" ? before.data()!.name : organizationId;
   if (input.setupStatus !== undefined) {
@@ -1257,6 +1271,7 @@ export async function updateMemberRoleForAdmin(uid: string, targetUid: string, i
   invalidateUserCache(targetUid);
   appCache.deletePrefix("members:");
   appCache.delete("admin_member_directory");
+  appCache.delete("admin_organizations");
 
   writeAuditLog({
     actorUID: uid,
@@ -1285,6 +1300,7 @@ export async function reassignMemberForAdmin(uid: string, targetUid: string, inp
   invalidateUserCache(targetUid);
   appCache.deletePrefix("members:");
   appCache.delete("admin_member_directory");
+  appCache.delete("admin_organizations");
 
   writeAuditLog({
     actorUID: uid,
@@ -1408,6 +1424,7 @@ export async function watchAdminMemberDirectory(
     if (!active) return;
     // A live update must invalidate the shared directory before rebuilding it.
     appCache.delete("admin_member_directory");
+    appCache.delete("admin_organizations");
     const currentGeneration = ++generation;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
@@ -1464,6 +1481,7 @@ export async function updateMemberForAdmin(
   invalidateUserCache(memberId);
   appCache.deletePrefix("members:");
   appCache.delete("admin_member_directory");
+  appCache.delete("admin_organizations");
 
   const memberName = typeof before.data()?.fullName === "string" ? before.data()!.fullName : memberId;
   const beforeData = before.data() ?? {};
@@ -1517,6 +1535,7 @@ export async function bulkUpdateMemberRolesForAdmin(
   }
   appCache.deletePrefix("members:");
   appCache.delete("admin_member_directory");
+  appCache.delete("admin_organizations");
 
   writeAuditLog({
     actorUID: uid,

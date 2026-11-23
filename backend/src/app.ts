@@ -34,7 +34,7 @@ app.get("/", (_request: express.Request, response: express.Response) => {
 });
 
 app.get("/health", (_request: express.Request, response: express.Response) => {
-  response.status(200).json({ status: "ok", capabilities: { testAccountOnboarding: true, testOrganizationAutoJoin: true } });
+  response.status(200).json({ status: "ok", revision: process.env.RENDER_GIT_COMMIT || null, capabilities: { testAccountOnboarding: true, testOrganizationAutoJoin: true } });
 });
 
 app.use("/auth", authRouter);
